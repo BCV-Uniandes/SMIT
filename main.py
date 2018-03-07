@@ -41,7 +41,7 @@ def main(config):
                                          img_size, config.batch_size, 'au01_fold0', config.mode)        
 
     # Solver
-    if config.DENSENET:
+    if config.CLS:
         from solver_cls import Solver
     else:
         from solver import Solver        
@@ -89,6 +89,7 @@ if __name__ == '__main__':
     parser.add_argument('--JUST_REAL', action='store_true', default=False)
     parser.add_argument('--FAKE_CLS', action='store_true', default=False)
     parser.add_argument('--DENSENET', action='store_true', default=False)
+    parser.add_argument('--CLS', action='store_true', default=False)
 
     # Training LSTM
     parser.add_argument('--LSTM', action='store_true', default=False)
@@ -153,6 +154,16 @@ if __name__ == '__main__':
         config.model_save_path =os.path.join(config.model_save_path, 'FAKE_CLS')
         config.result_path = os.path.join(config.result_path, 'FAKE_CLS')    
 
+    if config.CLS:
+        config.pretrained_model_generator = sorted(glob.glob(os.path.join(config.model_save_path, '*_G.pth')))[-1]
+        config.pretrained_model_discriminator = sorted(glob.glob(os.path.join(config.model_save_path, '*_D.pth')))[-1]
+
+        config.log_path = config.log_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
+        config.sample_path = config.sample_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
+        config.model_save_path = config.model_save_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
+        config.result_path = config.result_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
+        
+
     if config.DENSENET:
         config.log_path = os.path.join(config.log_path, 'DENSENET')
         config.sample_path = os.path.join(config.sample_path, 'DENSENET')
@@ -168,14 +179,6 @@ if __name__ == '__main__':
 
     config.g_repeat_num = int(math.log(config.image_size,2)-1)
     config.d_repeat_num = int(math.log(config.image_size,2)-1)
-
-    if config.multi_binary:
-        config.pretrained_model_generator = sorted(glob.glob(os.path.join(config.model_save_path, '*_G.pth')))[-1]
-
-        config.log_path = os.path.join(config.log_path.replace('MultiLabelAU', 'MultiLabelAU_CLS'), config.au_model, 'AU'+str(config.au).zfill(2))
-        config.sample_path = os.path.join(config.sample_path.replace('MultiLabelAU', 'MultiLabelAU_CLS'), config.au_model, 'AU'+str(config.au).zfill(2))
-        config.model_save_path = os.path.join(config.model_save_path.replace('MultiLabelAU', 'MultiLabelAU_CLS'), config.au_model, 'AU'+str(config.au).zfill(2))
-        config.result_path = os.path.join(config.result_path.replace('MultiLabelAU', 'MultiLabelAU_CLS'), config.au_model, 'AU'+str(config.au).zfill(2))
 
     if config.pretrained_model is None:
         if config.LSTM:
@@ -197,8 +200,6 @@ if __name__ == '__main__':
     except:
         config.test_model = ''
 
-    config.au_model = os.path.join('models/pretrained', config.au_model, 'vgg16',\
-                      config.mode_data, 'fold_'+config.fold, 'AU'+str(config.au).zfill(2))            
 
     print(config)
     main(config)

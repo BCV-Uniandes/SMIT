@@ -80,9 +80,10 @@ class Discriminator(nn.Module):
         self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
         self.conv2 = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
 
-    def forward(self, x):
+    def forward(self, x, lstm=False):
         h = self.main(x)
         # ipdb.set_trace()
         out_real = self.conv1(h)
         out_aux = self.conv2(h)
-        return out_real.squeeze(), out_aux.squeeze()
+        if lstm: return out_real.squeeze(), out_aux.squeeze(), h
+        else: return out_real.squeeze(), out_aux.squeeze()

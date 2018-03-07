@@ -95,10 +95,12 @@ class Solver(object):
 
     def build_model(self):
         # Define a generator and a discriminator
-        if self.dataset == 'Both':
-            self.G = Generator(self.g_conv_dim, self.c_dim+self.c2_dim+2, self.g_repeat_num)   # 2 for mask vector
-            self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim+self.c2_dim, self.d_repeat_num)
+        if self.DENSENET:
+            from models.densenet import Generator, densenet121 as Discriminator
+            self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
+            self.D = Discriminator(num_classes = self.c_dim) 
         else:
+            from model import Generator, Discriminator
             self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
             self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim, self.d_repeat_num) 
 
@@ -220,13 +222,16 @@ class Solver(object):
         # ipdb.set_trace()
         save_image(self.denorm(fake_images.data.cpu()[:shape0,:,:,self.image_size:]), 'tmp_fake.jpg',nrow=1, padding=0)
         save_image(self.denorm(fake_images.data.cpu()[:shape0,:,:,:self.image_size]), 'tmp_real.jpg',nrow=1, padding=0)
+        save_image(self.denorm(fake_images.data.cpu()[:shape0]), 'tmp_all.jpg',nrow=1, padding=0)
         print("Real Label: \n"+str(real_label.data.cpu()[:shape0].numpy()))
         for fl in fake_label:
             print("Fake Label: \n"+str(fl.data.cpu()[:shape0].numpy()))        
         os.system('eog tmp_real.jpg')
         os.system('eog tmp_fake.jpg')
+        os.system('eog tmp_all.jpg')        
         os.remove('tmp_real.jpg')
         os.remove('tmp_fake.jpg')
+        os.remove('tmp_all.jpg')
 
     def train(self):
         """Train StarGAN within a single dataset."""
@@ -242,7 +247,7 @@ class Solver(object):
 
         fixed_x = []
         real_c = []
-        for i, (images, labels) in enumerate(self.data_loader):
+        for i, (images, labels, files) in enumerate(self.data_loader):
             fixed_x.append(images)
             real_c.append(labels)
             if i == 1:
@@ -281,7 +286,7 @@ class Solver(object):
         start_time = time.time()
         for e in range(start, self.num_epochs):
             E = str(e+1).zfill(2)
-            for i, (real_x, real_label) in enumerate(self.data_loader):
+            for i, (real_x, real_label, files) in enumerate(self.data_loader):
                 
                 # Generat fake labels randomly (target domain labels)
                 rand_idx = torch.randperm(real_label.size(0))
@@ -331,16 +336,33 @@ class Solver(object):
                 # fake_list = []
                 # fake_c=real_label.clone()*0
                 # fake_list.append(fake_c.clone())
+                # fake_c[:,0]=-1
+                # fake_list.append(fake_c.clone())
+                # fake_c[:,1]=-1
+                # fake_list.append(fake_c.clone())                
+                # fake_c[:,6]=-1
+                # fake_list.append(fake_c.clone())
+                # fake_c[:,-1]=-1
+                # fake_list.append(fake_c.clone())
+                # fake_c[:]=-1
+                # fake_list.append(fake_c.clone())
+                # fake_c=real_label.clone()*0
+                # fake_list.append(fake_c.clone())
+                # for i in range(12):
+                #     fake_c[:,i]=1
+                #     fake_list.append(fake_c.clone())
                 # fake_c[:,0]=1
                 # fake_list.append(fake_c.clone())
+                # fake_c[:,1]=1
+                # fake_list.append(fake_c.clone())                
                 # fake_c[:,6]=1
                 # fake_list.append(fake_c.clone())
                 # fake_c[:,-1]=1
                 # fake_list.append(fake_c.clone())
-                # fake_c[:]=1
-                # fake_list.append(fake_c.clone())                
-                # ipdb.set_trace()
+                # fake_c[:]=1    
+                # fake_list.append(fake_c.clone())  
                 # self.show_img(real_x, real_c, fake_list)
+                # ipdb.set_trace()
                 fake_x = Variable(fake_x.data)
                 out_src, out_cls = self.D(fake_x)
                 d_loss_fake = torch.mean(out_src)
@@ -415,8 +437,8 @@ class Solver(object):
                     elapsed = time.time() - start_time
                     elapsed = str(datetime.timedelta(seconds=elapsed))
 
-                    log = "Elapsed [{}], Epoch [{}/{}], Iter [{}/{}]".format(
-                        elapsed, E, self.num_epochs, i+1, iters_per_epoch)
+                    log = "Elapsed [{}], Epoch [{}/{}], Iter [{}/{}] [fold{}] [{}]".format(
+                        elapsed, E, self.num_epochs, i+1, iters_per_epoch, self.fold, self.image_size)                    
 
                     for tag, value in loss.items():
                         log += ", {}: {:.4f}".format(tag, value)
@@ -466,7 +488,7 @@ class Solver(object):
         elif dataset == 'au01_fold0':
             data_loader = self.au_loader            
 
-        for i, (real_x, org_c) in enumerate(data_loader):
+        for i, (real_x, org_c, files) in enumerate(data_loader):
             real_x = self.to_var(real_x, volatile=True)
             if self.dataset == 'CelebA':
                 target_c_list = self.make_celeb_labels(org_c)

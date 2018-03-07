@@ -69,6 +69,7 @@ class Solver(object):
         self.au = config.au
         self.multi_binary = config.multi_binary
         self.pretrained_model_generator = config.pretrained_model_generator
+        self.pretrained_model_discriminator = config.pretrained_model_discriminator
 
         # Test settings
         self.test_model = config.test_model
@@ -98,15 +99,16 @@ class Solver(object):
 
     def build_model(self):
         # Define a generator and a discriminator
-        if self.DENSENET:
-            from models.densenet import Discriminator
-        else:
-            from model import Discriminator
 
         from model import Generator
-
         self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
-        self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim, self.d_repeat_num) 
+
+        if self.DENSENET:
+            from models.densenet import Generator, densenet121 as Discriminator
+            self.D = Discriminator(num_classes = self.c_dim) 
+        else:
+            from model import Discriminator
+            self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim, self.d_repeat_num) 
 
 
         # Optimizers
@@ -172,16 +174,14 @@ class Solver(object):
         return rgb
 
     def compute_accuracy(self, x, y, dataset):
-        if dataset == 'CelebA':# or dataset=='MultiLabelAU':
+        if dataset == 'CelebA' or dataset=='MultiLabelAU':
             x = F.sigmoid(x)
             predicted = self.threshold(x)
-            correct = (predicted == y.long).float()
+            correct = (predicted == y).float()
             accuracy = torch.mean(correct, dim=0) * 100.0
         else:
-            x = F.softmax(x)
             _, predicted = torch.max(x, dim=1)
-            # ipdb.set_trace()
-            correct = (predicted.long() == y.long()).float()
+            correct = (predicted == y).float()
             accuracy = torch.mean(correct) * 100.0
         return accuracy
 
@@ -205,36 +205,14 @@ class Solver(object):
         # The number of iterations per epoch
         iters_per_epoch = len(self.data_loader)
         
-        print("Loading Generator from "+self.pretrained_model_generator)
+        print(" [!] Loading Generator from "+self.pretrained_model_generator)
         self.G.load_state_dict(torch.load(self.pretrained_model_generator))
-        self.G.eval()
-            # ipdb.set_trace()
-        au_pos = np.where(np.array(cfg.AUs)==int(self.au))[0][0]
 
-        fixed_x = []
-        real_c = []
-        for i, (images, labels) in enumerate(self.data_loader):
-            fixed_x.append(images)
-            real_c.append(labels)
-            if i == 1:
-                break
-
-        # Fixed inputs and target domain labels for debugging
-        fixed_x = torch.cat(fixed_x, dim=0)
-        fixed_x = self.to_var(fixed_x, volatile=True)
-        real_c = torch.cat(real_c, dim=0)
-        # ipdb.set_trace()
-        if self.dataset == 'CelebA':
-            fixed_c_list = self.make_celeb_labels(real_c)
-        # elif self.dataset == 'MultiLabelAU':
-        #     fixed_c_list = [self.to_var(torch.FloatTensor(np.random.randint(0,2,[self.batch_size*4,self.c_dim])), volatile=True)]*4
-        elif self.dataset == 'RaFD' or self.dataset=='au01_fold0' or self.dataset == 'MultiLabelAU':
-            fixed_c_list = []
-            for i in range(self.c_dim):
-                # ipdb.set_trace()
-                fixed_c = self.one_hot(torch.ones(fixed_x.size(0)) * i, self.c_dim)
-                fixed_c_list.append(self.to_var(fixed_c, volatile=True))
-
+        try:
+            self.D.load_state_dict(torch.load(self.pretrained_model_discriminator))
+            print(" [!] Loading Discriminator from "+self.pretrained_model_discriminator)
+        except:
+            pass
 
         # lr cache for decaying
         g_lr = self.g_lr
@@ -253,27 +231,29 @@ class Solver(object):
         log_fake = 'N/A'
         fake_iters = 1
         fake_rate = 1
-        real_rate = 9999
+        real_rate = 1
         start_time = time.time()
+
+        last_model_step = len(self.data_loader)
+
         for e in range(start, self.num_epochs):
             E = str(e+1).zfill(2)
-            for i, (real_x, real_label) in enumerate(self.data_loader):
+            for i, (real_x, real_label, files) in enumerate(self.data_loader):
                 
-                real_x = self.to_var(real_x)
-                real_c = real_label.clone()
+                if (i+1)%real_rate==0:
+                    real_c = real_label.clone()
+                    # Convert tensor to variable
+                    real_x_var = self.to_var(real_x)
+                    real_label_var = self.to_var(real_label)   # this is same as real_c if dataset == 'CelebA'
 
-                # Convert tensor to variable
-                real_x = self.to_var(real_x)
-                real_label = self.to_var(real_label)   # this is same as real_c if dataset == 'CelebA'
+                    _, real_out_cls = self.D(real_x_var)
 
-                _, out_cls = self.D(real_x)
+                    real_loss_cls = F.binary_cross_entropy_with_logits(
+                        real_out_cls, real_label_var, size_average=False) / real_x_var.size(0)
 
-                real_loss_cls = F.binary_cross_entropy_with_logits(
-                    out_cls, real_label, size_average=False) / real_x.size(0)
-
-                self.reset_grad()
-                real_loss_cls.backward()
-                self.d_optimizer.step()
+                    self.reset_grad()
+                    real_loss_cls.backward()
+                    self.d_optimizer.step()
 
                 #if e>=1 and i%fake_rate:
                 if (i+1)%fake_rate==0:
@@ -282,19 +262,30 @@ class Solver(object):
                     # # Compute loss with fake images
                     for _ in range(fake_iters):
                         # ipdb.set_trace()
-                        real_label_ = real_label
-                        rand_idx = torch.randperm(real_label_.size(0))
-                        fake_label = real_label_[rand_idx]
+                        real_label_ = real_label.clone()
+                        luck = np.random.randint(0,2)
+                        if luck:
+                            rand_idx = torch.randperm(real_label_.size(0))
+                            fake_label = real_label_[rand_idx]
+                        else:
+                            fake_label = torch.from_numpy(np.random.randint(0,2,[real_label_.size(0),real_label_.size(1)]).astype(np.float32))
+                            if torch.cuda.is_available():
+                                fake_label = fake_label.cuda()
+
+                        # ipdb.set_trace()
 
                         fake_c = fake_label.clone()
-                        fake_c = self.to_var(fake_c)                   
+                        fake_c_var = self.to_var(fake_c)                   
                                              
-                        fake_x = self.G(real_x, fake_c)
-                        fake_x = Variable(fake_x.data)
-                        _, fake_out_cls = self.D(fake_x)
+                        fake_x = self.G(real_x_var, fake_c_var)
+                        fake_x_var = Variable(fake_x.data)
+                        _, fake_out_cls = self.D(fake_x_var)
 
+
+                        # fake_label = torch.clamp(torch.add(real_label, fake_label), max=1)##TRICK
+                        fake_label_var = self.to_var(fake_label)
                         fake_loss_cls = F.binary_cross_entropy_with_logits(
-                               fake_out_cls, fake_label, size_average=False) / fake_x.size(0)
+                               fake_out_cls, fake_label_var, size_average=False) / fake_x.size(0)
 
                         # # Backward + Optimize
                         self.reset_grad()
@@ -307,13 +298,13 @@ class Solver(object):
                 # Compute classification accuracy of the classifier
                 if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
                     if real_loss_cls is not None:
-                        accuracies = self.compute_accuracy(real_out_cls, real_label_cls, self.dataset)
+                        accuracies = self.compute_accuracy(real_out_cls, real_label_var, self.dataset)
                         log_real = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
                     if fake_loss_cls is not None:
-                        accuracies = self.compute_accuracy(fake_out_cls, fake_label_cls, self.dataset)
+                        accuracies = self.compute_accuracy(fake_out_cls, fake_label_var, self.dataset)
                         log_fake = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
                     # ipdb.set_trace()
-                    print('Classification Acc (AU): %s || %s'%(log_real, log_fake))
+                    print('Classification Acc (AU): \n Real: %s \n Fake: %s'%(log_real, log_fake))
 
 
                 # Logging
@@ -326,8 +317,14 @@ class Solver(object):
                     elapsed = time.time() - start_time
                     elapsed = str(datetime.timedelta(seconds=elapsed))
 
-                    log = "Elapsed [{}], Epoch [{}/{}], Iter [{}/{}]".format(
-                        elapsed, E, self.num_epochs, i+1, iters_per_epoch)
+                    log = "Elapsed [{}], Epoch [{}/{}], Iter [{}/{}] [!CLS] [fold{}] [{}]".format(
+                        elapsed, E, self.num_epochs, i+1, iters_per_epoch, self.fold, self.image_size)                    
+
+
+                    if self.FOCAL_LOSS: log += ' [*FL]'
+                    if self.DENSENET: log += ' [*DENSENET]'
+                    if self.FAKE_CLS: log += ' [*FAKE_CLS]'
+
 
                     for tag, value in loss.items():
                         log += ", {}: {:.4f}".format(tag, value)

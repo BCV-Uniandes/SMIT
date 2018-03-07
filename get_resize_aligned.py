@@ -40,7 +40,7 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='Txt file with path_to_image and 12 different AUs to LMDB')
-    parser.add_argument('--mode', type=str, default='Training', help='Mode: Training/Test (default: Training)')
+    parser.add_argument('--mode', type=str, default='train', help='Mode: Training/Test (default: Training)')
     parser.add_argument('--img_size', type=int, default=256, help='size of the image to resize')
     parser.add_argument('--fold', type=str, default='all', help='fold crossvalidation')
     parser.add_argument('--aligned', action='store_true', default=False)

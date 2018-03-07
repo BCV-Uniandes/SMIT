@@ -148,7 +148,7 @@ class MultiLabelAU(Dataset):
         image = Image.open(self.filenames[index])
         label = self.labels[index]
 
-        return self.transform(image), torch.FloatTensor(label)
+        return self.transform(image), torch.FloatTensor(label), self.filenames[index]
 
     def __len__(self):
         return self.num_data
@@ -158,14 +158,14 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, dataset='CelebA
 
     if mode == 'train':
         transform = transforms.Compose([
-            transforms.CenterCrop(crop_size),
+            # transforms.CenterCrop(crop_size),
             transforms.Resize(image_size, interpolation=Image.ANTIALIAS),
             # transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     else:
         transform = transforms.Compose([
-            transforms.CenterCrop(crop_size),
+            # transforms.CenterCrop(crop_size),
             transforms.Scale(image_size, interpolation=Image.ANTIALIAS),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
