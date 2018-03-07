@@ -41,10 +41,10 @@ def main(config):
                                          img_size, config.batch_size, 'au01_fold0', config.mode)        
 
     # Solver
-    if config.multi_binary:
+    if config.DENSENET:
         from solver_cls import Solver
     else:
-        from solver import Solver
+        from solver import Solver        
     solver = Solver(MultiLabelAU_loader, au_loader, config)
 
     if config.mode == 'train':

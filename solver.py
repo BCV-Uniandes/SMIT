@@ -346,6 +346,7 @@ class Solver(object):
                 d_loss_fake = torch.mean(out_src)
 
                 # Backward + Optimize
+                
                 d_loss = d_loss_real + d_loss_fake + self.lambda_cls * d_loss_cls
                 self.reset_grad()
                 d_loss.backward()
