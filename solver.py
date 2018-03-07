@@ -1,3 +1,4 @@
+import tensorflow as tf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -54,6 +55,11 @@ class Solver(object):
         self.batch_size = config.batch_size
         self.use_tensorboard = config.use_tensorboard
         self.pretrained_model = config.pretrained_model
+
+        self.FOCAL_LOSS = config.FOCAL_LOSS
+        self.JUST_REAL = config.JUST_REAL
+        self.FAKE_CLS = config.FAKE_CLS
+        self.DENSENET = config.DENSENET        
 
         #Training Binary Classifier Settings
         self.au_model = config.au_model
@@ -124,6 +130,7 @@ class Solver(object):
         print('loaded trained models (step: {})..!'.format(self.pretrained_model))
 
     def build_tensorboard(self):
+        # ipdb.set_trace()
         from logger import Logger
         self.logger = Logger(self.log_path)
 
@@ -171,6 +178,56 @@ class Solver(object):
         out[np.arange(batch_size), labels.long()] = 1
         return out
 
+    def get_fixed_c_list(self):
+        fixed_x = []
+        real_c = []
+        if self.image_size==512:
+            n = 0
+        else:
+            n = 1
+        for i, (images, labels, _) in enumerate(self.data_loader):
+            fixed_x.append(images)
+            real_c.append(labels)
+            if i == n:
+                break
+
+        # Fixed inputs and target domain labels for debugging
+        fixed_x = torch.cat(fixed_x, dim=0)
+        fixed_x = self.to_var(fixed_x, volatile=True)
+        real_c = torch.cat(real_c, dim=0)
+        # ipdb.set_trace()
+        if self.dataset == 'CelebA':
+            fixed_c_list = self.make_celeb_labels(real_c)
+        # elif self.dataset == 'MultiLabelAU':
+        #     fixed_c_list = [self.to_var(torch.FloatTensor(np.random.randint(0,2,[self.batch_size*4,self.c_dim])), volatile=True)]*4
+        elif self.dataset == 'RaFD' or self.dataset=='au01_fold0' or self.dataset == 'MultiLabelAU':
+            fixed_c_list = []
+            for i in range(self.c_dim):
+                # ipdb.set_trace()
+                fixed_c = self.one_hot(torch.ones(fixed_x.size(0)) * i, self.c_dim)
+                fixed_c_list.append(self.to_var(fixed_c, volatile=True))
+        return fixed_x, fixed_c_list  
+
+    def show_img(self, img, real_label, fake_label):                  
+        import matplotlib.pyplot as plt
+        fake_image_list=[img]
+
+        for fl in fake_label:
+            # ipdb.set_trace()
+            fake_image_list.append(self.G(img, self.to_var(fl.data, volatile=True)))
+        fake_images = torch.cat(fake_image_list, dim=3)        
+        shape0 = min(8, fake_images.data.cpu().shape[0])
+        # ipdb.set_trace()
+        save_image(self.denorm(fake_images.data.cpu()[:shape0,:,:,self.image_size:]), 'tmp_fake.jpg',nrow=1, padding=0)
+        save_image(self.denorm(fake_images.data.cpu()[:shape0,:,:,:self.image_size]), 'tmp_real.jpg',nrow=1, padding=0)
+        print("Real Label: \n"+str(real_label.data.cpu()[:shape0].numpy()))
+        for fl in fake_label:
+            print("Fake Label: \n"+str(fl.data.cpu()[:shape0].numpy()))        
+        os.system('eog tmp_real.jpg')
+        os.system('eog tmp_fake.jpg')
+        os.remove('tmp_real.jpg')
+        os.remove('tmp_fake.jpg')
+
     def train(self):
         """Train StarGAN within a single dataset."""
 
@@ -188,7 +245,7 @@ class Solver(object):
         for i, (images, labels) in enumerate(self.data_loader):
             fixed_x.append(images)
             real_c.append(labels)
-            if i == 3:
+            if i == 1:
                 break
 
         # Fixed inputs and target domain labels for debugging
@@ -217,6 +274,8 @@ class Solver(object):
             start = int(self.pretrained_model.split('_')[0])
         else:
             start = 0
+
+        last_model_step = len(self.data_loader)
 
         # Start training
         start_time = time.time()
@@ -268,6 +327,20 @@ class Solver(object):
 
                 # Compute loss with fake images
                 fake_x = self.G(real_x, fake_c)
+                
+                # fake_list = []
+                # fake_c=real_label.clone()*0
+                # fake_list.append(fake_c.clone())
+                # fake_c[:,0]=1
+                # fake_list.append(fake_c.clone())
+                # fake_c[:,6]=1
+                # fake_list.append(fake_c.clone())
+                # fake_c[:,-1]=1
+                # fake_list.append(fake_c.clone())
+                # fake_c[:]=1
+                # fake_list.append(fake_c.clone())                
+                # ipdb.set_trace()
+                # self.show_img(real_x, real_c, fake_list)
                 fake_x = Variable(fake_x.data)
                 out_src, out_cls = self.D(fake_x)
                 d_loss_fake = torch.mean(out_src)
@@ -337,7 +410,7 @@ class Solver(object):
                     loss['G/loss_cls'] = g_loss_cls.data[0]
 
                 # Print out log info
-                if (i+1) % self.log_step == 0:
+                if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
                     elapsed = time.time() - start_time
                     elapsed = str(datetime.timedelta(seconds=elapsed))
 
@@ -349,11 +422,12 @@ class Solver(object):
                     print(log)
 
                     if self.use_tensorboard:
+                        print("Log path: "+self.log_path)
                         for tag, value in loss.items():
                             self.logger.scalar_summary(tag, value, e * iters_per_epoch + i + 1)
 
                 # Translate fixed images for debugging
-                if (i+1) % self.sample_step == 0:
+                if (i+1) % self.sample_step == 0 or (i+1)==last_model_step:
                     fake_image_list = [fixed_x]
                     # ipdb.set_trace()
                     for fixed_c in fixed_c_list:
@@ -366,7 +440,7 @@ class Solver(object):
                     print('Translated images and saved into {}..!'.format(self.sample_path))
 
                 # Save model checkpoints
-                if (i+1) % self.model_save_step == 0:
+                if (i+1) % self.model_save_step == 0 or (i+1)==last_model_step:
                     torch.save(self.G.state_dict(),
                         os.path.join(self.model_save_path, '{}_{}_G.pth'.format(E, i+1)))
                     torch.save(self.D.state_dict(),
@@ -420,20 +494,29 @@ class Solver(object):
         """Facial attribute transfer on CelebA or facial expression synthesis on RaFD."""
         # Load trained parameters
         from data_loader import get_loader
-        G_path = os.path.join(self.model_save_path, '{}_G.pth'.format(self.test_model))
-        D_path = os.path.join(self.model_save_path, '{}_D.pth'.format(self.test_model))
-        txt_path = os.path.join(self.model_save_path, '{}_{}.txt'.format(self.test_model,'{}'))
-        self.pkl_data = os.path.join(self.model_save_path, '{}_{}.pkl'.format(self.test_model, '{}'))
+        if self.test_model=='':
+            last_file = sorted(glob.glob(os.path.join(self.model_save_path,  '*_D.pth')))[-1]
+            last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
+        else:
+            last_name = self.test_model
+
+        G_path = os.path.join(self.model_save_path, '{}_G.pth'.format(last_name))
+        D_path = os.path.join(self.model_save_path, '{}_D.pth'.format(last_name))
+        txt_path = os.path.join(self.model_save_path, '{}_{}.txt'.format(last_name,'{}'))
+        self.pkl_data = os.path.join(self.model_save_path, '{}_{}.pkl'.format(last_name, '{}'))
+        self.lstm_path = os.path.join(self.model_save_path, '{}_lstm'.format(last_name))
+        if not os.path.isdir(self.lstm_path): os.makedirs(self.lstm_path)
+        print(" [!!] {} model loaded...".format(D_path))
         self.G.load_state_dict(torch.load(G_path))
         self.D.load_state_dict(torch.load(D_path))
         self.G.eval()
         self.D.eval()
         # ipdb.set_trace()
         if self.dataset == 'MultiLabelAU':
-            data_loader_train = get_loader(self.metadata_path, 256,
-                                   256, self.batch_size, 'MultiLabelAU', 'train', no_flipping = True)
-            data_loader_test = get_loader(self.metadata_path, 256,
-                                   256, self.batch_size, 'MultiLabelAU', 'test')
+            data_loader_train = get_loader(self.metadata_path, self.image_size,
+                                   self.image_size, self.batch_size, 'MultiLabelAU', 'train', no_flipping = True)
+            data_loader_test = get_loader(self.metadata_path, self.image_size,
+                                   self.image_size, self.batch_size, 'MultiLabelAU', 'test')
         elif dataset == 'au01_fold0':
             data_loader = self.au_loader    
 
@@ -462,13 +545,18 @@ class Solver(object):
         GROUNDTRUTH = []
         total_idx=int(len(data_loader)/self.batch_size)  
         count = 0
-        for i, (real_x, org_c) in enumerate(data_loader):
+        for i, (real_x, org_c, files) in enumerate(data_loader):
             if os.path.isfile(self.pkl_data.format(mode.lower())): 
                 PREDICTION, GROUNDTRUTH = pickle.load(open(self.pkl_data.format(mode.lower())))
                 break
+            # ipdb.set_trace()
             real_x = self.to_var(real_x, volatile=True)
             labels = org_c
-            _, out_cls_temp = self.D(real_x)
+            
+            
+            # ipdb.set_trace()
+            _, out_cls_temp, lstm_input = self.D(real_x, lstm=True)
+            self.save_lstm(lstm_input.data.cpu().numpy(), files)
             # output = ((F.sigmoid(out_cls_temp)>=0.5)*1.).data.cpu().numpy()
             output = F.sigmoid(out_cls_temp)
             if i==0:
@@ -499,13 +587,14 @@ class Solver(object):
         F1_real5 = [0]*len(cfg.AUs); F1_Thresh5 = [0]*len(cfg.AUs); F1_real = [0]*len(cfg.AUs)
         F1_Thresh = [0]*len(cfg.AUs); F1_0 = [0]*len(cfg.AUs); F1_1 = [0]*len(cfg.AUs)
         F1_Thresh_0 = [0]*len(cfg.AUs); F1_Thresh_1 = [0]*len(cfg.AUs); F1_MAX = [0]*len(cfg.AUs)
-        F1_Thresh_max = [0]*len(cfg.AUs)
+        F1_Thresh_max = [0]*len(cfg.AUs); F1_median5 = [0]*len(cfg.AUs); F1_median7 = [0]*len(cfg.AUs)
+        F1_median3 = [0]*len(cfg.AUs)
         # ipdb.set_trace()
         for i in xrange(len(cfg.AUs)):
             prediction = PREDICTION[:,i]
             groundtruth = GROUNDTRUTH[:,i]
             if mode=='TEST':
-                _, F1_real5[i], F1_Thresh5[i] = f1_score(groundtruth, prediction, 0.5)     
+                _, F1_real5[i], F1_Thresh5[i], F1_median3[i], F1_median5[i], F1_median7[i] = f1_score(groundtruth, prediction, 0.5, median=True)     
             _, F1_real[i], F1_Thresh[i] = f1_score(np.array(groundtruth), np.array(prediction), thresh[i])
             _, F1_0[i], F1_Thresh_0[i] = f1_score(np.array(groundtruth), np.array(prediction)*0, thresh[i])
             _, F1_1[i], F1_Thresh_1[i] = f1_score(np.array(groundtruth), (np.array(prediction)*0)+1, thresh[i])
@@ -522,6 +611,36 @@ class Solver(object):
             print("")
             print >>self.f, string
             print >>self.f, ""
+
+            for i, au in enumerate(cfg.AUs):
+                string = "---> [%s] AU%s F1_median3: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median3[i], F1_Thresh5[i])
+                print(string)
+                print >>self.f, string
+            string = "F1_median3 Mean: %.4f"%np.mean(F1_median3)
+            print(string)
+            print("")
+            print >>self.f, string
+            print >>self.f, ""
+
+            for i, au in enumerate(cfg.AUs):
+                string = "---> [%s] AU%s F1_median5: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median5[i], F1_Thresh5[i])
+                print(string)
+                print >>self.f, string
+            string = "F1_median5 Mean: %.4f"%np.mean(F1_median5)
+            print(string)
+            print("")
+            print >>self.f, string
+            print >>self.f, ""
+
+            for i, au in enumerate(cfg.AUs):
+                string = "---> [%s] AU%s F1_median7: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median7[i], F1_Thresh5[i])
+                print(string)
+                print >>self.f, string
+            string = "F1_median7 Mean: %.4f"%np.mean(F1_median7)
+            print(string)
+            print("")
+            print >>self.f, string
+            print >>self.f, ""            
 
         for i, au in enumerate(cfg.AUs):
             string = "---> [%s] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_real[i], F1_Thresh_0[i])
@@ -565,3 +684,12 @@ class Solver(object):
         print >>self.f, ""
 
         return F1_real, F1_MAX, F1_Thresh_max     
+
+    def save_lstm(self, data, files):
+        assert data.shape[0]==len(files)
+        for i in range(len(files)):
+            name = os.path.join(self.lstm_path, '/'.join(files[i].split('/')[-6:]))
+            name = name.replace('jpg', 'npy')
+            folder = os.path.dirname(name)
+            if not os.path.isdir(folder): os.makedirs(folder)
+            np.save(name, data[i])

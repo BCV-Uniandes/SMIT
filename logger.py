@@ -1,7 +1,9 @@
 # Code referenced from https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514
+import ipdb
+# ipdb.set_trace()
 import tensorflow as tf
 import numpy as np
-import scipy.misc 
+import scipy.misc
 try:
     from StringIO import StringIO  # Python 2.7
 except ImportError:
@@ -12,6 +14,7 @@ class Logger(object):
     
     def __init__(self, log_dir):
         """Create a summary writer logging to log_dir."""
+        # ipdb.set_trace()
         self.writer = tf.summary.FileWriter(log_dir)
 
     def scalar_summary(self, tag, value, step):

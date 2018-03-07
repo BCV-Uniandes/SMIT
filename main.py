@@ -1,11 +1,10 @@
 import os
 import argparse
-
+# import tensorflow as tf
 from data_loader import get_loader
 from torch.backends import cudnn
 import glob
 import math
-
 def str2bool(v):
     return v.lower() in ('true')
 
@@ -104,14 +103,14 @@ if __name__ == '__main__':
 
     # Path
     parser.add_argument('--metadata_path', type=str, default='./data/MultiLabelAU')
-    parser.add_argument('--log_path', type=str, default='./stargan_MultiLabelAU_New/logs')
-    parser.add_argument('--model_save_path', type=str, default='./stargan_MultiLabelAU_New/models')
-    parser.add_argument('--sample_path', type=str, default='./stargan_MultiLabelAU_New/samples')
-    parser.add_argument('--result_path', type=str, default='./stargan_MultiLabelAU_New/results')
-    # parser.add_argument('--log_path', type=str, default='./stargan_MultiLabelAU/logs')
-    # parser.add_argument('--model_save_path', type=str, default='./stargan_MultiLabelAU/models')
-    # parser.add_argument('--sample_path', type=str, default='./stargan_MultiLabelAU/samples')
-    # parser.add_argument('--result_path', type=str, default='./stargan_MultiLabelAU/results')    
+    # parser.add_argument('--log_path', type=str, default='./stargan_MultiLabelAU_New/logs')
+    # parser.add_argument('--model_save_path', type=str, default='./stargan_MultiLabelAU_New/models')
+    # parser.add_argument('--sample_path', type=str, default='./stargan_MultiLabelAU_New/samples')
+    # parser.add_argument('--result_path', type=str, default='./stargan_MultiLabelAU_New/results')
+    parser.add_argument('--log_path', type=str, default='./stargan_MultiLabelAU/logs')
+    parser.add_argument('--model_save_path', type=str, default='./stargan_MultiLabelAU/models')
+    parser.add_argument('--sample_path', type=str, default='./stargan_MultiLabelAU/samples')
+    parser.add_argument('--result_path', type=str, default='./stargan_MultiLabelAU/results')    
     parser.add_argument('--fold', type=str, default='0')
     parser.add_argument('--mode_data', type=str, default='aligned') 
 
