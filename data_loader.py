@@ -134,7 +134,7 @@ class MultiLabelAU(Dataset):
                 else: 
                     filename = filename_512
             if not os.path.isfile(filename): imageio.imwrite(filename, np.zeros((self.image_size, self.image_size,3)).astype(np.uint8))
-            ipdb.set_trace()
+            # ipdb.set_trace()
             values = splits[1:]
 
             label = []

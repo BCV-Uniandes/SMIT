@@ -59,7 +59,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # Model hyper-parameters
-    parser.add_argument('--c_dim', type=int, default=5)
+    parser.add_argument('--c_dim', type=int, default=12)
     parser.add_argument('--c2_dim', type=int, default=8)
     parser.add_argument('--celebA_crop_size', type=int, default=178)
     parser.add_argument('--rafd_crop_size', type=int, default=256)
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     parser.add_argument('--d_train_repeat', type=int, default=5)
 
     # Training settings
-    parser.add_argument('--dataset', type=str, default='RaFD', choices=['CelebA', 'MultiLabelAU', 'RaFD', 'au01_fold0', 'Both'])
+    parser.add_argument('--dataset', type=str, default='MultiLabelAU', choices=['CelebA', 'MultiLabelAU', 'RaFD', 'au01_fold0', 'Both'])
     parser.add_argument('--num_epochs', type=int, default=20)
     parser.add_argument('--num_epochs_decay', type=int, default=20)
     parser.add_argument('--num_iters', type=int, default=200000)
@@ -85,7 +85,15 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--beta1', type=float, default=0.5)
     parser.add_argument('--beta2', type=float, default=0.999)
-    parser.add_argument('--pretrained_model', type=str, default=None)
+    parser.add_argument('--pretrained_model', type=str, default=None)    
+    parser.add_argument('--FOCAL_LOSS', action='store_true', default=False)
+    parser.add_argument('--JUST_REAL', action='store_true', default=False)
+    parser.add_argument('--FAKE_CLS', action='store_true', default=False)
+    parser.add_argument('--DENSENET', action='store_true', default=False)
+
+    # Training LSTM
+    parser.add_argument('--LSTM', action='store_true', default=False)
+    parser.add_argument('--batch_seq', type=int, default=24)        
 
     # Test settings
     parser.add_argument('--test_model', type=str, default='')
@@ -96,10 +104,14 @@ if __name__ == '__main__':
 
     # Path
     parser.add_argument('--metadata_path', type=str, default='./data/MultiLabelAU')
-    parser.add_argument('--log_path', type=str, default='./stargan_MultiLabelAU/logs')
-    parser.add_argument('--model_save_path', type=str, default='./stargan_MultiLabelAU/models')
-    parser.add_argument('--sample_path', type=str, default='./stargan_MultiLabelAU/samples')
-    parser.add_argument('--result_path', type=str, default='./stargan_MultiLabelAU/results')
+    parser.add_argument('--log_path', type=str, default='./stargan_MultiLabelAU_New/logs')
+    parser.add_argument('--model_save_path', type=str, default='./stargan_MultiLabelAU_New/models')
+    parser.add_argument('--sample_path', type=str, default='./stargan_MultiLabelAU_New/samples')
+    parser.add_argument('--result_path', type=str, default='./stargan_MultiLabelAU_New/results')
+    # parser.add_argument('--log_path', type=str, default='./stargan_MultiLabelAU/logs')
+    # parser.add_argument('--model_save_path', type=str, default='./stargan_MultiLabelAU/models')
+    # parser.add_argument('--sample_path', type=str, default='./stargan_MultiLabelAU/samples')
+    # parser.add_argument('--result_path', type=str, default='./stargan_MultiLabelAU/results')    
     parser.add_argument('--fold', type=str, default='0')
     parser.add_argument('--mode_data', type=str, default='aligned') 
 
@@ -111,9 +123,9 @@ if __name__ == '__main__':
 
 
     # Step size
-    parser.add_argument('--log_step', type=int, default=100)
+    parser.add_argument('--log_step', type=int, default=50)
     parser.add_argument('--sample_step', type=int, default=1000)
-    parser.add_argument('--model_save_step', type=int, default=4000)
+    parser.add_argument('--model_save_step', type=int, default=30000)
 
     config = parser.parse_args()
 
@@ -123,6 +135,37 @@ if __name__ == '__main__':
     config.sample_path = os.path.join(config.sample_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
     config.model_save_path = os.path.join(config.model_save_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
     config.result_path = os.path.join(config.result_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
+
+    if config.FOCAL_LOSS:
+        config.log_path = os.path.join(config.log_path, 'Focal_Loss')
+        config.sample_path = os.path.join(config.sample_path, 'Focal_Loss')
+        config.model_save_path =os.path.join(config.model_save_path, 'Focal_Loss')
+        config.result_path = os.path.join(config.result_path, 'Focal_Loss')
+
+    if config.JUST_REAL:
+        config.log_path = os.path.join(config.log_path, 'JUST_REAL')
+        config.sample_path = os.path.join(config.sample_path, 'JUST_REAL')
+        config.model_save_path =os.path.join(config.model_save_path, 'JUST_REAL')
+        config.result_path = os.path.join(config.result_path, 'JUST_REAL')  
+
+    if config.FAKE_CLS:
+        config.log_path = os.path.join(config.log_path, 'FAKE_CLS')
+        config.sample_path = os.path.join(config.sample_path, 'FAKE_CLS')
+        config.model_save_path =os.path.join(config.model_save_path, 'FAKE_CLS')
+        config.result_path = os.path.join(config.result_path, 'FAKE_CLS')    
+
+    if config.DENSENET:
+        config.log_path = os.path.join(config.log_path, 'DENSENET')
+        config.sample_path = os.path.join(config.sample_path, 'DENSENET')
+        config.model_save_path =os.path.join(config.model_save_path, 'DENSENET')
+        config.result_path = os.path.join(config.result_path, 'DENSENET')                        
+
+    if config.lambda_cls!=1 or config.d_train_repeat!=5:
+        config.log_path = os.path.join(config.log_path, 'lambda_cls_%d_d_repeat_%d'%(config.lambda_cls, config.d_train_repeat))
+        config.sample_path = os.path.join(config.sample_path, 'lambda_cls_%d_d_repeat_%d'%(config.lambda_cls, config.d_train_repeat))
+        config.model_save_path =os.path.join(config.model_save_path, 'lambda_cls_%d_d_repeat_%d'%(config.lambda_cls, config.d_train_repeat))
+        config.result_path = os.path.join(config.result_path, 'lambda_cls_%d_d_repeat_%d'%(config.lambda_cls, config.d_train_repeat))   
+
 
     config.g_repeat_num = int(math.log(config.image_size,2)-1)
     config.d_repeat_num = int(math.log(config.image_size,2)-1)
@@ -136,11 +179,18 @@ if __name__ == '__main__':
         config.result_path = os.path.join(config.result_path.replace('MultiLabelAU', 'MultiLabelAU_CLS'), config.au_model, 'AU'+str(config.au).zfill(2))
 
     if config.pretrained_model is None:
-        try:
-            config.pretrained_model = sorted(glob.glob(os.path.join(config.model_save_path, '*_D.pth')))[-1]
-            config.pretrained_model = '_'.join(os.path.basename(config.pretrained_model).split('_')[:2])
-        except:
-            pass
+        if config.LSTM:
+            try:
+                config.pretrained_model = sorted(glob.glob(os.path.join(config.model_save_path, '*_LSTM.pth')))[-1]
+                config.pretrained_model = '_'.join(os.path.basename(config.pretrained_model).split('_')[:2])
+            except:
+                pass
+        else:            
+            try:
+                config.pretrained_model = sorted(glob.glob(os.path.join(config.model_save_path, '*_D.pth')))[-1]
+                config.pretrained_model = '_'.join(os.path.basename(config.pretrained_model).split('_')[:2])
+            except:
+                pass
 
     try:
         config.test_model = sorted(glob.glob(os.path.join(config.model_save_path, '*_D.pth')))[-1]
