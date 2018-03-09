@@ -32,20 +32,16 @@ def main(config):
     else:
         img_size = config.image_size
 
-    if config.dataset in ['MultiLabelAU']:
-        MultiLabelAU_loader = get_loader(config.metadata_path, img_size,
-                                   img_size, config.batch_size, 'MultiLabelAU', config.mode)        
-
-    if config.dataset in ['au01_fold0']:
-        au_loader = get_loader(config.metadata_path, img_size,
-                                         img_size, config.batch_size, 'au01_fold0', config.mode)        
-
+    MultiLabelAU_loader = get_loader(config.metadata_path, img_size,
+                                   img_size, config.batch_size, 'MultiLabelAU', config.mode, LSTM=config.LSTM)        
     # Solver
-    if config.CLS:
+    if config.LSTM:
+        from solver_lstm import Solver
+    elif config.CLS:
         from solver_cls import Solver
     else:
         from solver import Solver        
-    solver = Solver(MultiLabelAU_loader, au_loader, config)
+    solver = Solver(MultiLabelAU_loader, config)
 
     if config.mode == 'train':
         solver.train()
@@ -100,7 +96,7 @@ if __name__ == '__main__':
 
     # Misc
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'])
-    parser.add_argument('--use_tensorboard', type=str2bool, default=False)
+    parser.add_argument('--use_tensorboard', action='store_true', default=False)
 
     # Path
     parser.add_argument('--metadata_path', type=str, default='./data/MultiLabelAU')
@@ -136,18 +132,6 @@ if __name__ == '__main__':
     config.model_save_path = os.path.join(config.model_save_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
     config.result_path = os.path.join(config.result_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
 
-    if config.FOCAL_LOSS:
-        config.log_path = os.path.join(config.log_path, 'Focal_Loss')
-        config.sample_path = os.path.join(config.sample_path, 'Focal_Loss')
-        config.model_save_path =os.path.join(config.model_save_path, 'Focal_Loss')
-        config.result_path = os.path.join(config.result_path, 'Focal_Loss')
-
-    if config.JUST_REAL:
-        config.log_path = os.path.join(config.log_path, 'JUST_REAL')
-        config.sample_path = os.path.join(config.sample_path, 'JUST_REAL')
-        config.model_save_path =os.path.join(config.model_save_path, 'JUST_REAL')
-        config.result_path = os.path.join(config.result_path, 'JUST_REAL')  
-
     if config.FAKE_CLS:
         config.log_path = os.path.join(config.log_path, 'FAKE_CLS')
         config.sample_path = os.path.join(config.sample_path, 'FAKE_CLS')
@@ -162,7 +146,18 @@ if __name__ == '__main__':
         config.sample_path = config.sample_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
         config.model_save_path = config.model_save_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
         config.result_path = config.result_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
-        
+
+    if config.FOCAL_LOSS:
+        config.log_path = os.path.join(config.log_path, 'Focal_Loss')
+        config.sample_path = os.path.join(config.sample_path, 'Focal_Loss')
+        config.model_save_path =os.path.join(config.model_save_path, 'Focal_Loss')
+        config.result_path = os.path.join(config.result_path, 'Focal_Loss')
+
+    if config.JUST_REAL:
+        config.log_path = os.path.join(config.log_path, 'JUST_REAL')
+        config.sample_path = os.path.join(config.sample_path, 'JUST_REAL')
+        config.model_save_path =os.path.join(config.model_save_path, 'JUST_REAL')
+        config.result_path = os.path.join(config.result_path, 'JUST_REAL')  
 
     if config.DENSENET:
         config.log_path = os.path.join(config.log_path, 'DENSENET')

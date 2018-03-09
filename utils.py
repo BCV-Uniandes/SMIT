@@ -24,8 +24,11 @@ def f1_score_max(gt, pred, thresh):
 
   return F1, F1_MAX, F1_THRESH
 
-def f1_score(gt, pred, F1_Thresh=0.5):
+def f1_score(gt, pred, F1_Thresh=0.5, median=False):
   import math
+  import pandas
+  import numpy as np
+  import ipdb
   from sklearn.metrics import precision_score, recall_score
   from sklearn.metrics import f1_score as f1s
   if type(gt)==list: gt = np.array(gt)
@@ -35,6 +38,17 @@ def f1_score(gt, pred, F1_Thresh=0.5):
   F1 = f1s(gt, output)
   F1_MAX=F1
 
-  return [F1], F1_MAX, F1_Thresh  
+  if median:
+    # ipdb.set_trace()
+    output_median3 = np.array(pandas.Series(output).rolling(window=3, center=True).median().bfill().ffill())
+    F1_median3 = f1s(gt, output_median3)
 
+    output_median5 = np.array(pandas.Series(output).rolling(window=5, center=True).median().bfill().ffill())
+    F1_median5 = f1s(gt, output_median5)
 
+    output_median7 = np.array(pandas.Series(output).rolling(window=7, center=True).median().bfill().ffill())
+    F1_median7 = f1s(gt, output_median7)
+
+    return [F1], F1_MAX, F1_Thresh, F1_median3, F1_median5, F1_median7
+  else:
+    return [F1], F1_MAX, F1_Thresh 

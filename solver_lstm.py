@@ -10,18 +10,58 @@ from torch.autograd import grad
 from torch.autograd import Variable
 from torchvision.utils import save_image
 from torchvision import transforms
-
+from model import Generator
+from model import Discriminator
 from PIL import Image
 import ipdb
 import config as cfg
 import glob
 import pickle
 from utils import f1_score, f1_score_max
+import random
 
-# CUDA_VISIBLE_DEVICES=3 ipython main.py -- --c_dim=12 --num_epochs 4  --dataset MultiLabelAU --batch_size 32 --image_size 256 --d_repeat_num 7 --g_repeat_num 7 --multi_binary --au 1 --au_model aunet
-# CUDA_VISIBLE_DEVICES=0 ipython main.py -- --c_dim=12 --num_epochs 10  --dataset MultiLabelAU --batch_size 8 --image_size 256 --d_repeat_num 7 --g_repeat_num 7 --fold 1
-# CUDA_VISIBLE_DEVICES=1 ipython main.py -- --c_dim=12 --num_epochs 10  --dataset MultiLabelAU --batch_size 8 --image_size 256 --d_repeat_num 7 --g_repeat_num 7 --fold 2
+class LSTM(nn.Module):
+    """Discriminator. PatchGAN."""
+    # def __init__(self, batch_size = 8, input_size=4096*2*2, hidden_size=256, num_layers=1, c_dim=12):
+    def __init__(self, batch_size = 8, input_size=2048*4*4, hidden_size=256, num_layers=1, c_dim=12):
+        super(LSTM, self).__init__()
+        self.batch_size = batch_size
+        self.fc0 = nn.Linear(input_size, 2048)
+        self.lstm = nn.LSTM(2048, hidden_size, num_layers)
+        # ipdb.set_trace()
+        # self.conv = nn.Conv2d(hidden_size, c_dim, kernel_size=2, stride=1, bias=False)
+        self.fc1 = nn.Linear(hidden_size, c_dim)
 
+    def forward(self, x):
+        # ipdb.set_trace()
+        data = x.view(self.batch_size, -1)
+        hh = self.fc0(data)
+        hh = hh.view(self.batch_size, 1, -1)
+        hh = self.lstm(hh)
+        hh = torch.squeeze(hh[0],1)
+        hh = self.fc(hh)
+
+        return hh
+
+class LSTM2(nn.Module):
+    """Discriminator. PatchGAN."""
+    # def __init__(self, input_size=4096*2*2, hidden_size=256, num_layers=1, c_dim=12):
+    def __init__(self, input_size=4096*2*2, hidden_size=256, num_layers=1, c_dim=12):
+        super(LSTM2, self).__init__()
+        self.fc0 = nn.Linear(input_size, 2048)
+        self.dropout = nn.Dropout()
+        self.lstm = nn.LSTM(2048, hidden_size, num_layers)
+        self.fc1 = nn.Linear(hidden_size, c_dim)
+
+    def forward(self, x):
+        # ipdb.set_trace()
+        hh = x.transpose(0,1)
+        hh = self.dropout(self.fc0(hh))
+        # ipdb.set_trace()
+        hh = self.lstm(hh)[0][-1]
+        hh = self.fc1(hh)
+
+        return hh        
 
 class Solver(object):
 
@@ -43,8 +83,7 @@ class Solver(object):
         self.lambda_cls = config.lambda_cls
         self.lambda_rec = config.lambda_rec
         self.lambda_gp = config.lambda_gp
-        self.g_lr = config.g_lr
-        self.d_lr = config.d_lr
+        self.c_lr = config.d_lr
         self.beta1 = config.beta1
         self.beta2 = config.beta2
 
@@ -55,20 +94,16 @@ class Solver(object):
         self.num_iters = config.num_iters
         self.num_iters_decay = config.num_iters_decay
         self.batch_size = config.batch_size
+        self.batch_seq = config.batch_seq
         self.use_tensorboard = config.use_tensorboard
         self.pretrained_model = config.pretrained_model
-
         self.FOCAL_LOSS = config.FOCAL_LOSS
-        self.JUST_REAL = config.JUST_REAL
-        self.FAKE_CLS = config.FAKE_CLS
-        self.DENSENET = config.DENSENET     
 
         #Training Binary Classifier Settings
         self.au_model = config.au_model
         self.au = config.au
         self.multi_binary = config.multi_binary
         self.pretrained_model_generator = config.pretrained_model_generator
-        self.pretrained_model_discriminator = config.pretrained_model_discriminator
 
         # Test settings
         self.test_model = config.test_model
@@ -98,28 +133,18 @@ class Solver(object):
 
     def build_model(self):
         # Define a generator and a discriminator
-
-        from model import Generator
-        if not self.JUST_REAL: self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
-
-        if self.DENSENET:
-            from models.densenet import Generator, densenet121 as Discriminator
-            self.D = Discriminator(num_classes = self.c_dim) 
-        else:
-            from model import Discriminator
-            self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim, self.d_repeat_num) 
-
-
+        #self.C = LSTM(self.batch_size)
+        self.C = LSTM2()
+        # ipdb.set_trace()
         # Optimizers
-        self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.d_lr, [self.beta1, self.beta2])
+        # self.c_optimizer = torch.optim.Adam(self.C.parameters(), self.c_lr, [self.beta1, self.beta2])
+        self.c_optimizer = torch.optim.SGD(self.C.parameters(), self.c_lr, momentum=0.9, nesterov=True)
 
         # Print networks
-        if not self.JUST_REAL:self.print_network(self.G, 'G')
-        self.print_network(self.D, 'D')
+        self.print_network(self.C, 'C')
 
         if torch.cuda.is_available():
-            if not self.JUST_REAL:self.G.cuda()
-            self.D.cuda()
+            self.C.cuda()
 
     def print_network(self, model, name):
         num_params = 0
@@ -130,21 +155,20 @@ class Solver(object):
         print("The number of parameters: {}".format(num_params))
 
     def load_pretrained_model(self):
-        model = os.path.join(
-            self.model_save_path, '{}_D.pth'.format(self.pretrained_model))
-        self.D.load_state_dict(torch.load(model))
-        print('loaded CLS trained model: {}!'.format(model))
+        self.C.load_state_dict(torch.load(os.path.join(
+            self.model_save_path, '{}_LSTM.pth'.format(self.pretrained_model))))
+        print('loaded trained models (step: {})..!'.format(self.pretrained_model))
 
     def build_tensorboard(self):
         from logger import Logger
         self.logger = Logger(self.log_path)
 
-    def update_lr(self, d_lr):
-        for param_group in self.d_optimizer.param_groups:
-            param_group['lr'] = d_lr
+    def update_lr(self, c_lr):
+        for param_group in self.c_optimizer.param_groups:
+            param_group['lr'] = c_lr
 
     def reset_grad(self):
-        self.d_optimizer.zero_grad()
+        self.c_optimizer.zero_grad()
 
     def to_var(self, x, volatile=False):
         if torch.cuda.is_available():
@@ -160,17 +184,15 @@ class Solver(object):
         x = (x >= 0.5).float()
         return x
 
-    def color_up(self, labels):
-        where_pos = lambda x,y: np.where(x.data.cpu().numpy().flatten()==y)[0]
-        color_up = 0.2
-        rgb = np.zeros((self.batch_size, 3, 224, 224)).astype(np.float32)
-        green_r_pos = where_pos(labels,1)
-        rgb[green_r_pos,1,:,:] += color_up
-        red_r_pos = where_pos(labels,0)
-        rgb[red_r_pos,0,:,:] += color_up   
-        rgb = Variable(torch.FloatTensor(rgb))
-        if torch.cuda.is_available(): rgb = rgb.cuda()
-        return rgb
+    def focal_loss(self, out, label):
+        alpha=2
+        gamma=1
+        max_val = (-out).clamp(min=0)
+        pt = out - out * label + max_val + ((-max_val).exp() + (-out - max_val).exp()).log()
+
+        FL = alpha*torch.pow(1-(-pt).exp(),gamma)*pt
+        FL = FL.sum()
+        return FL    
 
     def compute_accuracy(self, x, y, dataset):
         if dataset == 'CelebA' or dataset=='MultiLabelAU':
@@ -192,185 +214,201 @@ class Solver(object):
         out[np.arange(batch_size), labels.long()] = 1
         return out
 
-    def show_img(self, img, real_label, fake_label):                  
-        import matplotlib.pyplot as plt
-        fake_image_list=[img]
+    def get_fixed_c_list(self):
+        fixed_x = []
+        real_c = []
+        for i, (images, labels) in enumerate(self.data_loader):
+            fixed_x.append(images)
+            real_c.append(labels)
+            if i == 3:
+                break
 
-        for fl in fake_label:
-            # ipdb.set_trace()
-            fake_image_list.append(self.G(img, self.to_var(fl.data, volatile=True)))
-        fake_images = torch.cat(fake_image_list, dim=3)        
-        shape0 = min(8, fake_images.data.cpu().shape[0])
+        # Fixed inputs and target domain labels for debugging
+        fixed_x = torch.cat(fixed_x, dim=0)
+        fixed_x = self.to_var(fixed_x, volatile=True)
+        real_c = torch.cat(real_c, dim=0)
         # ipdb.set_trace()
-        save_image(self.denorm(fake_images.data.cpu()[:shape0]), 'tmp_all.jpg',nrow=1, padding=0)
-        print("Real Label: \n"+str(real_label.data.cpu()[:shape0].numpy()))
-        for fl in fake_label:
-            print("Fake Label: \n"+str(fl.data.cpu()[:shape0].numpy()))        
-        os.system('eog tmp_all.jpg')        
-        os.remove('tmp_all.jpg')
+        if self.dataset == 'CelebA':
+            fixed_c_list = self.make_celeb_labels(real_c)
+        # elif self.dataset == 'MultiLabelAU':
+        #     fixed_c_list = [self.to_var(torch.FloatTensor(np.random.randint(0,2,[self.batch_size*4,self.c_dim])), volatile=True)]*4
+        elif self.dataset == 'RaFD' or self.dataset=='au01_fold0' or self.dataset == 'MultiLabelAU':
+            fixed_c_list = []
+            for i in range(self.c_dim):
+                # ipdb.set_trace()
+                fixed_c = self.one_hot(torch.ones(fixed_x.size(0)) * i, self.c_dim)
+                fixed_c_list.append(self.to_var(fixed_c, volatile=True))
+        return fixed_x, fixed_c_list        
+
+    def get_id_filename(self, filename):
+        return '_'.join(filename.split('/')[-3:-1])
+
+    def get_num_filename(self, filename):
+        return filename.split('/')[-1].split('.')[0]
+
+    def get_dict_filenames(self, all_filenames):
+        dict_names = {}
+        for line in all_filenames:
+            subj_id=self.get_id_filename(line)
+            frame_num=int(self.get_num_filename(line))
+            if subj_id not in dict_names:
+                dict_names[subj_id]=frame_num
+            else:
+                if frame_num<dict_names[subj_id]:
+                    dict_names[subj_id]=frame_num
+        return dict_names        
+
+    def get_ind_filename(self, filename, dict_names, num_files=24):
+        subj_id=self.get_id_filename(filename)
+        frame_last  = self.get_num_filename(filename)        
+        frame_first = dict_names[subj_id]
+        count = 1
+        files_seq = [filename]
+        range_idx = range(int(frame_last)-1, frame_first-1, -1)
+        random.seed(1234)
+        random.shuffle(range_idx)
+        # ipdb.set_trace()
+        for i in range_idx:
+            temp0 = filename.replace(frame_last, str(i).zfill(2))
+            temp1 = filename.replace(frame_last, str(i).zfill(3))
+            temp2 = filename.replace(frame_last, str(i).zfill(4))
+            if os.path.isfile(temp0): temp=temp0
+            elif os.path.isfile(temp1): temp=temp1
+            elif os.path.isfile(temp2): temp=temp2
+            else: continue
+            npy_file = os.path.join(self.lstm_path, '/'.join(temp.split('/')[-6:])).replace('jpg', 'npy')
+            if not os.path.isfile(npy_file): continue
+            files_seq.append(temp)
+            count+=1
+            if count==num_files: break
+
+        files_seq = files_seq[::-1]
+
+        while count<num_files:
+            files_seq.append(files_seq[-1])
+            count+=1
+        return files_seq
+            
 
     def train(self):
         """Train StarGAN within a single dataset."""
 
         # Set dataloader
-        if self.dataset == 'MultiLabelAU':
-            self.data_loader = self.MultiLabelAU_loader            
-        elif self.dataset == 'au01_fold0':
-            self.data_loader = self.au_loader      
+        self.data_loader, self.all_filenames = self.MultiLabelAU_loader            
 
         # The number of iterations per epoch
         iters_per_epoch = len(self.data_loader)
 
-        if not self.JUST_REAL:
-        
-            print(" [!] Loading Generator from "+self.pretrained_model_generator)
-            self.G.load_state_dict(torch.load(self.pretrained_model_generator))
+        self.lstm_path = os.path.join(self.model_save_path, '{}_lstm'.format(self.test_model))
 
-            try:
-                if not self.pretrained_model:
-                    self.D.load_state_dict(torch.load(self.pretrained_model_discriminator))
-                    print(" [!] Loading Discriminator from "+self.pretrained_model_discriminator)
-            except:
-                pass
+        try:
+            last_file = sorted(glob.glob(os.path.join(self.lstm_path, '*_LSTM.pth')))[-1]
+            last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
 
-        # lr cache for decaying
-        g_lr = self.g_lr
-        d_lr = self.d_lr
-
-        # Start with trained model if exists
-        if self.pretrained_model:
-            start = int(self.pretrained_model.split('_')[0])
-            # Decay learning rate
-            for i in range(start):
-                if (i+1) > (self.num_epochs - self.num_epochs_decay):
-                    # g_lr -= (self.g_lr / float(self.num_epochs_decay))
-                    d_lr -= (self.d_lr / float(self.num_epochs_decay))
-                    self.update_lr(d_lr)
-                    print ('Decay learning rate to d_lr: {}.'.format(d_lr))            
-        else:
+            C_path = os.path.join(self.lstm_path,'{}_LSTM.pth'.format(last_name))
+            print("[*] Loading from: "+C_path)
+            self.C.load_state_dict(torch.load(C_path))
+            start = int(last_name.split('_')[0])
+        except:
             start = 0
 
-        # Start training
-        fake_loss_cls = None
-        real_loss_cls = None
-        log_real = 'N/A'
-        log_fake = 'N/A'
-        fake_iters = 1
-        fake_rate = 1
-        real_rate = 1
-        start_time = time.time()
+        # lr cache for decaying
+        c_lr = self.c_lr
+        
+
+        for _ in range(start):
+            c_lr -= (self.c_lr / 20.)#float(self.num_epochs_decay))
+            self.update_lr(c_lr)
+            print ('Decay learning rate to c_lr: {}.'.format(c_lr))
+
+        #fake CLS loss
+        d_loss_cls_fake = self.to_var(torch.zeros((1)))
+        iter_fake = 2
+        epoch_stop_generator = 9
+        epoch_start_fake_cls = 7
 
         last_model_step = len(self.data_loader)
 
-        for i, (real_x, real_label, files) in enumerate(self.data_loader): break
-        real_x = self.to_var(real_x, volatile=True)
-        real_label = self.to_var(real_label, volatile=True)
-        fake_list = []
-        fake_c=real_label.clone()*0
-        fake_list.append(fake_c.clone())
-        for i in range(12):
-            fake_c[:,i]=1
-            fake_list.append(fake_c.clone())
-
-        # ipdb.set_trace()        
-        # self.show_img(real_x, real_label, fake_list)
-        # ipdb.set_trace()
+        # Start training
+        start_time = time.time()
+        print(" [!] Starting Epoch {}".format(start+1))
+        #50 batch size, 24 sequences
+        dict_names = self.get_dict_filenames(self.all_filenames)
 
         for e in range(start, self.num_epochs):
             E = str(e+1).zfill(2)
-            for i, (real_x, real_label, files) in enumerate(self.data_loader):
-                
-                real_x_var = self.to_var(real_x)
+            for i, (real_x, real_label_, files) in enumerate(self.data_loader):
+                # ipdb.set_trace()
+                data_lstm = []#np.zeros((real_x.size(0), self.batch_seq, 4096*4), dtype=np.float32)
+                all_files_lstm = []
+                for bs in range(real_x.size(0)):
+                    # ipdb.set_trace()
+                    imgs_lstm = self.get_ind_filename(files[bs], dict_names, num_files=self.batch_seq)
 
-                if (i)%2==0 or self.JUST_REAL:
-                    real_c = real_label.clone()
-                    # Convert tensor to variable
-                    real_label_var = self.to_var(real_label)   # this is same as real_c if dataset == 'CelebA'
+                    files_lstm = [os.path.join(self.lstm_path, '/'.join(imgs_lstm[j].split('/')[-6:])) \
+                                        for j in range(len(imgs_lstm))]
+                    all_files_lstm.append(imgs_lstm)
 
-                    _, real_out_cls = self.D(real_x_var)
+                    data_lstm_ = [np.load(j.replace('jpg', 'npy')).reshape(1,-1) for j in files_lstm]
+                    try:data_lstm_ = np.expand_dims(np.concatenate(data_lstm_, axis=0), axis=0)
+                    except:ipdb.set_trace()
+                    data_lstm.append(data_lstm_)
+                data_lstm = np.concatenate(data_lstm, axis=0)
+                # ipdb.set_trace()
+                data_lstm = self.to_var(torch.from_numpy(data_lstm))
 
-                    real_loss_cls = F.binary_cross_entropy_with_logits(
-                        real_out_cls, real_label_var, size_average=False) / real_x_var.size(0)
-
-                    self.reset_grad()
-                    real_loss_cls.backward()
-                    self.d_optimizer.step()
-
-                #if e>=1 and i%fake_rate:
-                if (i+1)%2==0 and not self.JUST_REAL:
-                    # ================== Train C FAKE ================== #
-
-                    # # Compute loss with fake images
-                    for _ in range(fake_iters):
-                        # ipdb.set_trace()
-                        real_label_ = real_label.clone()
-                        luck = np.random.randint(0,2)
-                        if luck:
-                            rand_idx = torch.randperm(real_label_.size(0))
-                            fake_label = real_label_[rand_idx]
-                        else:
-                            fake_label = torch.from_numpy(np.random.randint(0,2,[real_label_.size(0),real_label_.size(1)]).astype(np.float32))
-                            if torch.cuda.is_available():
-                                fake_label = fake_label.cuda()
-
-                        # ipdb.set_trace()
-
-                        fake_c = fake_label.clone()
-                        fake_c_var = self.to_var(fake_c)                   
-                        try:
-                            fake_x = self.G(real_x_var, fake_c_var)
-                        except: 
-                            ipdb.set_trace()
-                        fake_x_var = Variable(fake_x.data)
-                        _, fake_out_cls = self.D(fake_x_var)
-
-
-                        # fake_label = torch.clamp(torch.add(real_label, fake_label), max=1)##TRICK
-                        fake_label_var = self.to_var(fake_label)
-                        fake_loss_cls = F.binary_cross_entropy_with_logits(
-                               fake_out_cls, fake_label_var, size_average=False) / fake_x.size(0)
-
-                        # # Backward + Optimize
-                        self.reset_grad()
-                        fake_loss_cls.backward()
-                        self.d_optimizer.step()
+                # if data_lstm.size()[0]<self.batch_size:continue
 
                 # ipdb.set_trace()
+                real_c = real_label_.clone()
 
-                # ================== LOG ================== #
-                # Compute classification accuracy of the classifier
-                if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
-                    if real_loss_cls is not None:
-                        accuracies = self.compute_accuracy(real_out_cls, real_label_var, self.dataset)
-                        log_real = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
-                    if fake_loss_cls is not None:
-                        accuracies = self.compute_accuracy(fake_out_cls, fake_label_var, self.dataset)
-                        log_fake = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
-                    # ipdb.set_trace()
-                    print('Classification Acc (AU): \n Real: %s \n Fake: %s'%(log_real, log_fake))
+                # Convert tensor to variable
+                real_x = self.to_var(real_x)
+                real_c = self.to_var(real_c)   
+                real_label = self.to_var(real_label_)  
+                
+                # ================== Train D ================== #
+                # ipdb.set_trace()
+                # Compute loss with real images
+                out_cls = self.C(data_lstm)
 
+                if self.FOCAL_LOSS:
+                    c_loss_cls = self.focal_loss(
+                        out_cls, real_label) / real_x.size(0)
+                else:
+                    # c_loss_cls = F.binary_cross_entropy_with_logits(
+                    #     out_cls, real_label, size_average=False) / real_x.size(0)
+                    c_loss_cls = F.binary_cross_entropy_with_logits(
+                        out_cls, real_label, size_average=True)
+
+
+                # Compute classification accuracy of the discriminator
+                if (i+1) % self.log_step == 0:
+                    accuracies = self.compute_accuracy(out_cls, real_label, self.dataset)
+                    log = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
+                    print('Classification Acc (12 AUs): ')#, end='')
+                    print(log)
+
+                c_loss = c_loss_cls
+                self.reset_grad()
+                c_loss.backward()
+                self.c_optimizer.step()
 
                 # Logging
                 loss = {}
-                if real_loss_cls is not None: loss['real_loss_cls'] = real_loss_cls.data[0]
-                if fake_loss_cls is not None: loss['fake_loss_cls'] = fake_loss_cls.data[0]
+                loss['loss_cls_real'] = c_loss_cls.data[0]
+
+
 
                 # Print out log info
                 if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
                     elapsed = time.time() - start_time
                     elapsed = str(datetime.timedelta(seconds=elapsed))
 
-                    log = "Elapsed [{}], Epoch [{}/{}], Iter [{}/{}] [!CLS] [fold{}] [{}]".format(
-                        elapsed, E, self.num_epochs, i+1, iters_per_epoch, self.fold, self.image_size)                    
+                    log = "Elapsed [{}], Epoch [{}/{}], Iter [{}/{}] [fold{}] [{}] [LSTM]".format(
+                        elapsed, E, self.num_epochs, i+1, iters_per_epoch, self.fold, self.image_size)   
 
-
-                    if self.FOCAL_LOSS: log += ' [*FL]'
-                    if self.DENSENET: log += ' [*DENSENET]'
-                    # if self.FAKE_CLS: log += ' [*FAKE_CLS]'
-                    if self.JUST_REAL: log += ' [*JUST_REAL]'
-
-
-                    for tag, value in loss.items():
+                    for tag, value in sorted(loss.items(), key= lambda x:x[0]):
                         log += ", {}: {:.4f}".format(tag, value)
                     print(log)
 
@@ -379,52 +417,47 @@ class Solver(object):
                         for tag, value in loss.items():
                             self.logger.scalar_summary(tag, value, e * iters_per_epoch + i + 1)
 
+
                 # Save model checkpoints
                 if (i+1) % self.model_save_step == 0 or (i+1)==last_model_step:
-                    # torch.save(self.G.state_dict(),
-                    #     os.path.join(self.model_save_path, '{}_{}_G.pth'.format(e+1, i+1)))
-                    torch.save(self.D.state_dict(),
-                        os.path.join(self.model_save_path, '{}_{}_D.pth'.format(E, i+1)))
+                    print("Saving model at: "+os.path.join(self.lstm_path, '{}_{}_LSTM.pth'.format(E, i+1)))
+                    torch.save(self.C.state_dict(),
+                        os.path.join(self.lstm_path, '{}_{}_LSTM.pth'.format(E, i+1)))
 
-            # Decay learning rate
+          # Decay learning rate
             if (e+1) > (self.num_epochs - self.num_epochs_decay):
-                # g_lr -= (self.g_lr / float(self.num_epochs_decay))
-                d_lr -= (self.d_lr / float(self.num_epochs_decay))
-                self.update_lr(d_lr)
-                print ('Decay learning rate to d_lr: {}.'.format(d_lr))
-
-
+                c_lr -= (self.c_lr / float(self.num_epochs_decay))
+                self.update_lr(c_lr)
+                print ('Decay learning rate to c_lr: {}.'.format(c_lr))
 
     def test_cls(self):
         """Facial attribute transfer on CelebA or facial expression synthesis on RaFD."""
         # Load trained parameters
         from data_loader import get_loader
-        if self.test_model=='':
-            last_file = sorted(glob.glob(os.path.join(self.model_save_path,  '*_D.pth')))[-1]
-            last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
-        else:
-            last_name = self.test_model
+       
+        self.lstm_path = os.path.join(self.model_save_path, '{}_lstm'.format(self.test_model))
 
-        # G_path = os.path.join(self.model_save_path, '{}_G.pth'.format(last_name))
-        D_path = os.path.join(self.model_save_path, '{}_D.pth'.format(last_name))
-        txt_path = os.path.join(self.model_save_path, '{}_{}.txt'.format(last_name,'{}'))
-        self.pkl_data = os.path.join(self.model_save_path, '{}_{}.pkl'.format(last_name, '{}'))
-        self.lstm_path = os.path.join(self.model_save_path, '{}_lstm'.format(last_name))
-        if not os.path.isdir(self.lstm_path): os.makedirs(self.lstm_path)
-        print(" [!!] {} model loaded...".format(D_path))
-        # self.G.load_state_dict(torch.load(G_path))
-        self.D.load_state_dict(torch.load(D_path))
-        # self.G.eval()
-        self.D.eval()
+        last_file = sorted(glob.glob(os.path.join(self.lstm_path, '*_LSTM.pth')))[-1]
+        last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
+
+        C_path = os.path.join(self.lstm_path,'{}_LSTM.pth'.format(last_name))
+        txt_path = os.path.join(self.lstm_path,'{}_{}_LSTM.txt'.format(last_name,'{}'))
+        self.pkl_data = os.path.join(self.lstm_path,'{}_{}_LSTM.pkl'.format(last_name, '{}'))
+        print("[*] Loading from: "+C_path)
+        self.C.load_state_dict(torch.load(C_path))
+        self.C.eval()
         # ipdb.set_trace()
         if self.dataset == 'MultiLabelAU':
-            data_loader_train = get_loader(self.metadata_path, self.image_size,
-                                   self.image_size, self.batch_size, 'MultiLabelAU', 'train', no_flipping = True)
-            data_loader_test = get_loader(self.metadata_path, self.image_size,
-                                   self.image_size, self.batch_size, 'MultiLabelAU', 'test')
+            data_loader_train, all_filenames_train = get_loader(self.metadata_path, self.image_size,
+                                   self.image_size, self.batch_size, 'MultiLabelAU', 'train', no_flipping = True, LSTM=True)
+            data_loader_test, all_filenames_test = get_loader(self.metadata_path, self.image_size,
+                                   self.image_size, self.batch_size, 'MultiLabelAU', 'test', LSTM=True)
         elif dataset == 'au01_fold0':
             data_loader = self.au_loader    
 
+        self.dict_names = {}
+        self.dict_names['TRAIN'] = self.get_dict_filenames(all_filenames_train)
+        self.dict_names['TEST'] = self.get_dict_filenames(all_filenames_test)
 
         if not hasattr(self, 'output_txt'):
             # ipdb.set_trace()
@@ -439,8 +472,9 @@ class Solver(object):
         self.f=open(self.output_txt, 'a')     
         self.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
         # ipdb.set_trace()
-        F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
-        _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
+        # F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
+        # _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
+        _ = self.F1_TEST(data_loader_test, thresh = [0.5]*12)
      
         self.f.close()
 
@@ -454,14 +488,31 @@ class Solver(object):
             if os.path.isfile(self.pkl_data.format(mode.lower())): 
                 PREDICTION, GROUNDTRUTH = pickle.load(open(self.pkl_data.format(mode.lower())))
                 break
-            # ipdb.set_trace()
-            real_x = self.to_var(real_x, volatile=True)
+
+            data_lstm = []#np.zeros((real_x.size(0), self.batch_seq, 4096*4), dtype=np.float32)
+            all_files_lstm = []
+            for bs in range(real_x.size(0)):
+                # ipdb.set_trace()
+                imgs_lstm = self.get_ind_filename(files[bs], self.dict_names[mode], num_files=self.batch_seq)
+
+                files_lstm = [os.path.join(self.lstm_path, '/'.join(imgs_lstm[j].split('/')[-6:])) \
+                                    for j in range(len(imgs_lstm))]
+                all_files_lstm.append(imgs_lstm)
+
+                data_lstm_ = [np.load(j.replace('jpg', 'npy')).reshape(1,-1) for j in files_lstm]
+                # ipdb.set_trace()
+                try:data_lstm_ = np.expand_dims(np.concatenate(data_lstm_, axis=0), axis=0)
+                except:ipdb.set_trace()
+                data_lstm.append(data_lstm_)
+            data_lstm = np.concatenate(data_lstm, axis=0)
+            data_lstm = self.to_var(torch.from_numpy(data_lstm))
+
+            # real_x = self.to_var(real_x, volatile=True)
             labels = org_c
             
             
             # ipdb.set_trace()
-            _, out_cls_temp, lstm_input = self.D(real_x, lstm=True)
-            self.save_lstm(lstm_input.data.cpu().numpy(), files)
+            out_cls_temp = self.C(data_lstm)
             # output = ((F.sigmoid(out_cls_temp)>=0.5)*1.).data.cpu().numpy()
             output = F.sigmoid(out_cls_temp)
             if i==0:
@@ -525,7 +576,7 @@ class Solver(object):
             print(string)
             print("")
             print >>self.f, string
-            print >>self.f, ""
+            print >>self.f, ""            
 
             for i, au in enumerate(cfg.AUs):
                 string = "---> [%s] AU%s F1_median5: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median5[i], F1_Thresh5[i])
@@ -545,7 +596,7 @@ class Solver(object):
             print(string)
             print("")
             print >>self.f, string
-            print >>self.f, ""            
+            print >>self.f, ""   
 
         for i, au in enumerate(cfg.AUs):
             string = "---> [%s] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_real[i], F1_Thresh_0[i])

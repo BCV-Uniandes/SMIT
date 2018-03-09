@@ -22,10 +22,9 @@ from utils import f1_score, f1_score_max
 
 class Solver(object):
 
-    def __init__(self, MultiLabelAU_loader, au_loader, config):
+    def __init__(self, MultiLabelAU_loader, config):
         # Data loader
         self.MultiLabelAU_loader = MultiLabelAU_loader
-        self.au_loader = au_loader
 
         # Model hyper-parameters
         self.c_dim = config.c_dim
@@ -180,6 +179,22 @@ class Solver(object):
         out[np.arange(batch_size), labels.long()] = 1
         return out
 
+    def focal_loss(self, out, label):
+        alpha=0.25
+        gamma=2
+        # sigmoid = out.clone().sigmoid()
+        # ipdb.set_trace()
+        max_val = (-out).clamp(min=0)
+        # pt = -out + out * label - max_val - ((-max_val).exp() + (out + max_val).exp())
+        pt = out - out * label + max_val + ((-max_val).exp() + (-out - max_val).exp()).log()
+
+        # pt = sigmoid*label + (1-sigmoid)*(1-label)
+        FL = alpha*torch.pow(1-(-pt).exp(),gamma)*pt
+        FL = FL.sum()
+        # ipdb.set_trace()
+        # FL = F.binary_cross_entropy_with_logits(out, label, size_average=False)
+        return FL           
+
     def get_fixed_c_list(self):
         fixed_x = []
         real_c = []
@@ -211,14 +226,13 @@ class Solver(object):
         return fixed_x, fixed_c_list  
 
     def show_img(self, img, real_label, fake_label):                  
-        import matplotlib.pyplot as plt
         fake_image_list=[img]
 
         for fl in fake_label:
             # ipdb.set_trace()
             fake_image_list.append(self.G(img, self.to_var(fl.data, volatile=True)))
         fake_images = torch.cat(fake_image_list, dim=3)        
-        shape0 = min(8, fake_images.data.cpu().shape[0])
+        shape0 = min(16, fake_images.data.cpu().shape[0])
         # ipdb.set_trace()
         save_image(self.denorm(fake_images.data.cpu()[:shape0,:,:,self.image_size:]), 'tmp_fake.jpg',nrow=1, padding=0)
         save_image(self.denorm(fake_images.data.cpu()[:shape0,:,:,:self.image_size]), 'tmp_real.jpg',nrow=1, padding=0)
@@ -277,6 +291,12 @@ class Solver(object):
         # Start with trained model if exists
         if self.pretrained_model:
             start = int(self.pretrained_model.split('_')[0])
+            for i in range(start):
+                if (i+1) > (self.num_epochs - self.num_epochs_decay):
+                    # g_lr -= (self.g_lr / float(self.num_epochs_decay))
+                    d_lr -= (self.d_lr / float(self.num_epochs_decay))
+                    self.update_lr(d_lr)
+                    print ('Decay learning rate to d_lr: {}.'.format(d_lr))               
         else:
             start = 0
 
@@ -312,11 +332,12 @@ class Solver(object):
                 out_src, out_cls = self.D(real_x)#image -1,1
                 d_loss_real = - torch.mean(out_src)
                 # ipdb.set_trace()
-                if self.dataset == 'CelebA' or self.dataset=='MultiLabelAU':
+                if self.FOCAL_LOSS:
+                    d_loss_cls = self.focal_loss(
+                        out_cls, real_label) / real_x.size(0)
+                else:
                     d_loss_cls = F.binary_cross_entropy_with_logits(
                         out_cls, real_label, size_average=False) / real_x.size(0)
-                else:
-                    d_loss_cls = F.cross_entropy(out_cls, real_label)
 
                 # Compute classification accuracy of the discriminator
                 if (i+1) % self.log_step == 0:
@@ -415,11 +436,18 @@ class Solver(object):
                     g_loss_fake = - torch.mean(out_src)
                     g_loss_rec = torch.mean(torch.abs(real_x - rec_x))
 
-                    if self.dataset == 'CelebA' or self.dataset=='MultiLabelAU':
+                    if self.FOCAL_LOSS:
+                        g_loss_cls = self.focal_loss(
+                            out_cls, fake_label) / fake_x.size(0)
+                    else:
                         g_loss_cls = F.binary_cross_entropy_with_logits(
                             out_cls, fake_label, size_average=False) / fake_x.size(0)
-                    else:
-                        g_loss_cls = F.cross_entropy(out_cls, fake_label)
+
+                    # if self.dataset == 'CelebA' or self.dataset=='MultiLabelAU':
+                    #     g_loss_cls = F.binary_cross_entropy_with_logits(
+                    #         out_cls, fake_label, size_average=False) / fake_x.size(0)
+                    # else:
+                    #     g_loss_cls = F.cross_entropy(out_cls, fake_label)
 
                     # Backward + Optimize
                     g_loss = g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls
@@ -530,6 +558,7 @@ class Solver(object):
         self.lstm_path = os.path.join(self.model_save_path, '{}_lstm'.format(last_name))
         if not os.path.isdir(self.lstm_path): os.makedirs(self.lstm_path)
         print(" [!!] {} model loaded...".format(D_path))
+        # ipdb.set_trace()
         self.G.load_state_dict(torch.load(G_path))
         self.D.load_state_dict(torch.load(D_path))
         self.G.eval()
@@ -539,10 +568,11 @@ class Solver(object):
             data_loader_train = get_loader(self.metadata_path, self.image_size,
                                    self.image_size, self.batch_size, 'MultiLabelAU', 'train', no_flipping = True)
             data_loader_test = get_loader(self.metadata_path, self.image_size,
-                                   self.image_size, self.batch_size, 'MultiLabelAU', 'test')
+                                   self.image_size, self.batch_size, 'MultiLabelAU', 'test', shuffling=True)
         elif dataset == 'au01_fold0':
             data_loader = self.au_loader    
 
+        data_loader_google= get_loader('', self.image_size, self.image_size, self.batch_size, 'Google')
 
         if not hasattr(self, 'output_txt'):
             # ipdb.set_trace()
@@ -559,7 +589,8 @@ class Solver(object):
         # ipdb.set_trace()
         F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
         _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
-     
+        # _ = self.F1_TEST(data_loader_test, thresh = [0.5]*12)
+        # _ = self.F1_TEST(data_loader_google, thresh = [0.5]*12)
         self.f.close()
 
     def F1_TEST(self, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs)):
@@ -575,9 +606,19 @@ class Solver(object):
             # ipdb.set_trace()
             real_x = self.to_var(real_x, volatile=True)
             labels = org_c
+
+            ######################################################
+            # labels_dummy = self.to_var(org_c, volatile=True)
+            # fake_list = []
+            # fake_c=labels_dummy.clone()*0
+            # fake_list.append(fake_c.clone())
+            # for i in range(12):
+            #     fake_c[:,i]=1
+            #     fake_list.append(fake_c.clone())
+            # self.show_img(real_x, labels_dummy, fake_list)
+            # ipdb.set_trace()            
+            ######################################################
             
-            
-            # ipdb.set_trace()
             _, out_cls_temp, lstm_input = self.D(real_x, lstm=True)
             self.save_lstm(lstm_input.data.cpu().numpy(), files)
             # output = ((F.sigmoid(out_cls_temp)>=0.5)*1.).data.cpu().numpy()
