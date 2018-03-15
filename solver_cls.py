@@ -25,9 +25,10 @@ from utils import f1_score, f1_score_max
 
 class Solver(object):
 
-    def __init__(self, MultiLabelAU_loader, config):
+    def __init__(self, MultiLabelAU_loader, config, CelebA=None):
         # Data loader
         self.MultiLabelAU_loader = MultiLabelAU_loader
+        self.CelebA_loader = CelebA
 
         # Model hyper-parameters
         self.c_dim = config.c_dim
@@ -62,13 +63,15 @@ class Solver(object):
         self.JUST_REAL = config.JUST_REAL
         self.FAKE_CLS = config.FAKE_CLS
         self.DENSENET = config.DENSENET     
+        self.DYNAMIC_COLOR = config.DYNAMIC_COLOR  
+        self.GOOGLE = config.GOOGLE    
 
         #Training Binary Classifier Settings
-        self.au_model = config.au_model
-        self.au = config.au
-        self.multi_binary = config.multi_binary
-        self.pretrained_model_generator = config.pretrained_model_generator
-        self.pretrained_model_discriminator = config.pretrained_model_discriminator
+        # self.au_model = config.au_model
+        # self.au = config.au
+        # self.multi_binary = config.multi_binary
+        # self.pretrained_model_generator = config.pretrained_model_generator
+        # self.pretrained_model_discriminator = config.pretrained_model_discriminator
 
         # Test settings
         self.test_model = config.test_model
@@ -118,7 +121,7 @@ class Solver(object):
         self.print_network(self.D, 'D')
 
         if torch.cuda.is_available():
-            if not self.JUST_REAL:self.G.cuda()
+            if not self.JUST_REAL: self.G.cuda()
             self.D.cuda()
 
     def print_network(self, model, name):
@@ -279,10 +282,14 @@ class Solver(object):
         for e in range(start, self.num_epochs):
             E = str(e+1).zfill(2)
             for i, (real_x, real_label, files) in enumerate(self.data_loader):
+
+                if self.DYNAMIC_COLOR:
+                    random_brightness = (torch.rand( real_x.size(0), 1, 1, 1 )-0.5)/3. #-42 to 42
+                    real_x = torch.add(real_x, random_brightness).clamp(min=-1, max=1)
                 
                 real_x_var = self.to_var(real_x)
 
-                if (i)%2==0 or self.JUST_REAL:
+                if (i+e)%2==0 or self.JUST_REAL:
                     real_c = real_label.clone()
                     # Convert tensor to variable
                     real_label_var = self.to_var(real_label)   # this is same as real_c if dataset == 'CelebA'
@@ -297,7 +304,7 @@ class Solver(object):
                     self.d_optimizer.step()
 
                 #if e>=1 and i%fake_rate:
-                if (i+1)%2==0 and not self.JUST_REAL:
+                if (i+e+1)%2==0 and not self.JUST_REAL:
                     # ================== Train C FAKE ================== #
 
                     # # Compute loss with fake images
@@ -393,6 +400,199 @@ class Solver(object):
                 self.update_lr(d_lr)
                 print ('Decay learning rate to d_lr: {}.'.format(d_lr))
 
+
+    def train_multi(self):
+        """Train StarGAN within a single dataset."""
+
+        # The number of iterations per epoch
+        iters_per_epoch = len(self.MultiLabelAU_loader)
+
+        if not self.JUST_REAL:
+        
+            print(" [!] Loading Generator from "+self.pretrained_model_generator)
+            self.G.load_state_dict(torch.load(self.pretrained_model_generator))
+
+            try:
+                if not self.pretrained_model:
+                    self.D.load_state_dict(torch.load(self.pretrained_model_discriminator))
+                    print(" [!] Loading Discriminator from "+self.pretrained_model_discriminator)
+            except:
+                pass
+
+        # lr cache for decaying
+        g_lr = self.g_lr
+        d_lr = self.d_lr
+
+        # Start with trained model if exists
+        if self.pretrained_model:
+            start = int(self.pretrained_model.split('_')[0])
+            # Decay learning rate
+            for i in range(start):
+                if (i+1) > (self.num_epochs - self.num_epochs_decay):
+                    # g_lr -= (self.g_lr / float(self.num_epochs_decay))
+                    d_lr -= (self.d_lr / float(self.num_epochs_decay))
+                    self.update_lr(d_lr)
+                    print ('Decay learning rate to d_lr: {}.'.format(d_lr))            
+        else:
+            start = 0
+
+        # Start training
+        fake_loss_cls = None
+        real_loss_cls = None
+        log_real = 'N/A'
+        log_fake = 'N/A'
+        fake_iters = 1
+        fake_rate = 1
+        real_rate = 1
+        start_time = time.time()
+
+        last_model_step = len(self.MultiLabelAU_loader)
+
+        for i, (real_x, real_label, files) in enumerate(self.MultiLabelAU_loader): break
+        real_x = self.to_var(real_x, volatile=True)
+        real_label = self.to_var(real_label, volatile=True)
+        fake_list = []
+        fake_c=real_label.clone()*0
+        fake_list.append(fake_c.clone())
+        for i in range(12):
+            fake_c[:,i]=1
+            fake_list.append(fake_c.clone())
+
+        # ipdb.set_trace()        
+        # self.show_img(real_x, real_label, fake_list)
+        # ipdb.set_trace()
+
+        data_iter2 = iter(self.CelebA_loader)
+
+        for e in range(start, self.num_epochs):
+            E = str(e+1).zfill(2)
+            for i, (real_x, real_label, files) in enumerate(self.MultiLabelAU_loader):
+
+                if self.DYNAMIC_COLOR:
+                    random_brightness = (torch.rand( real_x.size(0), 1, 1, 1 )-0.5)/3. #-42 to 42
+                    real_x = torch.add(real_x, random_brightness).clamp(min=-1, max=1)
+                
+                real_x_var = self.to_var(real_x)
+
+                if (i+e)%2==0 or self.JUST_REAL:
+                    real_c = real_label.clone()
+                    # Convert tensor to variable
+                    real_label_var = self.to_var(real_label)   # this is same as real_c if dataset == 'CelebA'
+
+                    _, real_out_cls = self.D(real_x_var)
+
+                    real_loss_cls = F.binary_cross_entropy_with_logits(
+                        real_out_cls, real_label_var, size_average=False) / real_x_var.size(0)
+
+                    self.reset_grad()
+                    real_loss_cls.backward()
+                    self.d_optimizer.step()
+
+                #if e>=1 and i%fake_rate:
+                if (i+e+1)%2==0 and not self.JUST_REAL:
+                    # ================== Train C FAKE ================== #
+
+                    # # Compute loss with fake images
+                    for _ in range(fake_iters):
+                        # ipdb.set_trace()
+
+                        #################CelebA#################
+                        try:
+                            real_x2, real_label2, _ = next(data_iter2)
+                        except:
+                            # ipdb.set_trace()
+                            data_iter2 = iter(self.CelebA_loader)
+                            real_x2, real_label2, _ = next(data_iter2)
+
+                        real_x_var = self.to_var(real_x2)
+                        ########################################                        
+
+                        # real_label_ = real_label.clone()
+                        real_label_ = real_label.clone()
+                        # luck = np.random.randint(0,2)
+                        # if luck:
+                        #     rand_idx = torch.randperm(real_label_.size(0))
+                        #     fake_label = real_label_[rand_idx]
+                        # else:
+                        fake_label = torch.from_numpy(np.random.randint(0,2,[real_x2.size(0),real_label.size(1)]).astype(np.float32))
+
+                        # ipdb.set_trace()
+                        fake_c_var = self.to_var(fake_label)                   
+                        try:
+                            fake_x = self.G(real_x_var, fake_c_var)
+                        except: 
+                            ipdb.set_trace()
+                        fake_x_var = Variable(fake_x.data)
+                        _, fake_out_cls = self.D(fake_x_var)
+
+
+                        # fake_label = torch.clamp(torch.add(real_label, fake_label), max=1)##TRICK
+                        fake_label_var = self.to_var(fake_label)
+                        fake_loss_cls = F.binary_cross_entropy_with_logits(
+                               fake_out_cls, fake_label_var, size_average=False) / fake_x.size(0)
+
+                        # # Backward + Optimize
+                        self.reset_grad()
+                        fake_loss_cls.backward()
+                        self.d_optimizer.step()
+
+                # ipdb.set_trace()
+
+                # ================== LOG ================== #
+                # Compute classification accuracy of the classifier
+                if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
+                    if real_loss_cls is not None:
+                        accuracies = self.compute_accuracy(real_out_cls, real_label_var, self.dataset)
+                        log_real = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
+                    if fake_loss_cls is not None:
+                        accuracies = self.compute_accuracy(fake_out_cls, fake_label_var, self.dataset)
+                        log_fake = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
+                    # ipdb.set_trace()
+                    print('Classification Acc (AU): \n Real: %s \n Fake: %s'%(log_real, log_fake))
+
+
+                # Logging
+                loss = {}
+                if real_loss_cls is not None: loss['real_loss_cls'] = real_loss_cls.data[0]
+                if fake_loss_cls is not None: loss['fake_loss_cls'] = fake_loss_cls.data[0]
+
+                # Print out log info
+                if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
+                    elapsed = time.time() - start_time
+                    elapsed = str(datetime.timedelta(seconds=elapsed))
+
+                    log = "Elapsed [{}], Epoch [{}/{}], Iter [{}/{}] [!CLS] [fold{}] [{}]".format(
+                        elapsed, E, self.num_epochs, i+1, iters_per_epoch, self.fold, self.image_size)                    
+
+
+                    if self.FOCAL_LOSS: log += ' [*FL]'
+                    if self.DENSENET: log += ' [*DENSENET]'
+                    # if self.FAKE_CLS: log += ' [*FAKE_CLS]'
+                    if self.JUST_REAL: log += ' [*JUST_REAL]'
+
+
+                    for tag, value in loss.items():
+                        log += ", {}: {:.4f}".format(tag, value)
+                    print(log)
+
+                    if self.use_tensorboard:
+                        print("Log path: "+self.log_path)
+                        for tag, value in loss.items():
+                            self.logger.scalar_summary(tag, value, e * iters_per_epoch + i + 1)
+
+                # Save model checkpoints
+                if (i+1) % self.model_save_step == 0 or (i+1)==last_model_step:
+                    # torch.save(self.G.state_dict(),
+                    #     os.path.join(self.model_save_path, '{}_{}_G.pth'.format(e+1, i+1)))
+                    torch.save(self.D.state_dict(),
+                        os.path.join(self.model_save_path, '{}_{}_D.pth'.format(E, i+1)))
+
+            # Decay learning rate
+            if (e+1) > (self.num_epochs - self.num_epochs_decay):
+                # g_lr -= (self.g_lr / float(self.num_epochs_decay))
+                d_lr -= (self.d_lr / float(self.num_epochs_decay))
+                self.update_lr(d_lr)
+                print ('Decay learning rate to d_lr: {}.'.format(d_lr))
 
 
     def test_cls(self):
@@ -493,18 +693,47 @@ class Solver(object):
         F1_Thresh = [0]*len(cfg.AUs); F1_0 = [0]*len(cfg.AUs); F1_1 = [0]*len(cfg.AUs)
         F1_Thresh_0 = [0]*len(cfg.AUs); F1_Thresh_1 = [0]*len(cfg.AUs); F1_MAX = [0]*len(cfg.AUs)
         F1_Thresh_max = [0]*len(cfg.AUs); F1_median5 = [0]*len(cfg.AUs); F1_median7 = [0]*len(cfg.AUs)
-        F1_median3 = [0]*len(cfg.AUs)
+        F1_median3 = [0]*len(cfg.AUs); F1_median3_th = [0]*len(cfg.AUs); F1_median5_th = [0]*len(cfg.AUs);
+        F1_median7_th = [0]*len(cfg.AUs); 
         # ipdb.set_trace()
         for i in xrange(len(cfg.AUs)):
             prediction = PREDICTION[:,i]
             groundtruth = GROUNDTRUTH[:,i]
             if mode=='TEST':
                 _, F1_real5[i], F1_Thresh5[i], F1_median3[i], F1_median5[i], F1_median7[i] = f1_score(groundtruth, prediction, 0.5, median=True)     
-            _, F1_real[i], F1_Thresh[i] = f1_score(np.array(groundtruth), np.array(prediction), thresh[i])
+                _, F1_real[i], F1_Thresh[i], F1_median3_th[i], F1_median5_th[i], F1_median7_th[i] = f1_score(np.array(groundtruth), np.array(prediction), thresh[i], median=True)
+            else:
+                _, F1_real[i], F1_Thresh[i] = f1_score(np.array(groundtruth), np.array(prediction), thresh[i])
             _, F1_0[i], F1_Thresh_0[i] = f1_score(np.array(groundtruth), np.array(prediction)*0, thresh[i])
             _, F1_1[i], F1_Thresh_1[i] = f1_score(np.array(groundtruth), (np.array(prediction)*0)+1, thresh[i])
             _, F1_MAX[i], F1_Thresh_max[i] = f1_score_max(np.array(groundtruth), np.array(prediction), self.thresh)     
 
+
+        for i, au in enumerate(cfg.AUs):
+            string = "---> [%s - 0] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_0[i], F1_Thresh_0[i])
+            print(string)
+            print >>self.f, string
+        string = "F1 Mean: %.4f"%np.mean(F1_0)
+        print(string)
+        print("")
+        print >>self.f, string
+        print >>self.f, ""
+
+        for i, au in enumerate(cfg.AUs):
+            string = "---> [%s - 1] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_1[i], F1_Thresh_1[i])
+            print(string)
+            print >>self.f, string
+        string = "F1 Mean: %.4f"%np.mean(F1_1)
+        print(string)
+        print("")
+        print >>self.f, string
+        print >>self.f, ""
+
+        string = "###############################\n#######  Threshold 0.5 ########\n###############################"
+        print(string)
+        print("")
+        print >>self.f, string
+        print >>self.f, ""  
 
         if mode=='TEST':
             for i, au in enumerate(cfg.AUs):
@@ -547,6 +776,13 @@ class Solver(object):
             print >>self.f, string
             print >>self.f, ""            
 
+        if mode=='TEST':
+            string = "###############################\n######  Threshold Train #######\n###############################"
+            print(string)
+            print("")
+            print >>self.f, string
+            print >>self.f, ""    
+
         for i, au in enumerate(cfg.AUs):
             string = "---> [%s] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_real[i], F1_Thresh_0[i])
             print(string)
@@ -557,25 +793,42 @@ class Solver(object):
         print >>self.f, string
         print >>self.f, ""
 
-        for i, au in enumerate(cfg.AUs):
-            string = "---> [%s - 0] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_0[i], F1_Thresh[i])
+        if mode=='TEST':
+            for i, au in enumerate(cfg.AUs):
+                string = "---> [%s] AU%s F1_median3: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median3_th[i], F1_Thresh[i])
+                print(string)
+                print >>self.f, string
+            string = "F1_median3 Mean: %.4f"%np.mean(F1_median3_th)
             print(string)
+            print("")
             print >>self.f, string
-        string = "F1 Mean: %.4f"%np.mean(F1_0)
-        print(string)
-        print("")
-        print >>self.f, string
-        print >>self.f, ""
+            print >>self.f, ""
 
-        for i, au in enumerate(cfg.AUs):
-            string = "---> [%s - 1] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_1[i], F1_Thresh_1[i])
+            for i, au in enumerate(cfg.AUs):
+                string = "---> [%s] AU%s F1_median5: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median5_th[i], F1_Thresh[i])
+                print(string)
+                print >>self.f, string
+            string = "F1_median5 Mean: %.4f"%np.mean(F1_median5_th)
             print(string)
+            print("")
             print >>self.f, string
-        string = "F1 Mean: %.4f"%np.mean(F1_1)
+            print >>self.f, ""
+
+            for i, au in enumerate(cfg.AUs):
+                string = "---> [%s] AU%s F1_median7: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median7_th[i], F1_Thresh[i])
+                print(string)
+                print >>self.f, string
+            string = "F1_median7 Mean: %.4f"%np.mean(F1_median7_th)
+            print(string)
+            print("")
+            print >>self.f, string
+            print >>self.f, ""                
+
+        string = "###############################\n#######  Threshold MAX ########\n###############################"
         print(string)
         print("")
         print >>self.f, string
-        print >>self.f, ""
+        print >>self.f, ""  
 
         for i, au in enumerate(cfg.AUs):
             #REAL F1_MAX
