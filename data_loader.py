@@ -11,6 +11,48 @@ import numpy as np
 import imageio
 import scipy.misc
 
+def hist_match(source, template):
+    """
+    Adjust the pixel values of a grayscale image such that its histogram
+    matches that of a target image
+
+    Arguments:
+    -----------
+        source: np.ndarray
+            Image to transform; the histogram is computed over the flattened
+            array
+        template: np.ndarray
+            Template image; can have different dimensions to source
+    Returns:
+    -----------
+        matched: np.ndarray
+            The transformed output image
+    """
+
+    oldshape = source.shape
+    source = source.ravel()
+    template = template.ravel()
+
+    # get the set of unique pixel values and their corresponding indices and
+    # counts
+    s_values, bin_idx, s_counts = np.unique(source, return_inverse=True,
+                                            return_counts=True)
+    t_values, t_counts = np.unique(template, return_counts=True)
+
+    # take the cumsum of the counts and normalize by the number of pixels to
+    # get the empirical cumulative distribution functions for the source and
+    # template images (maps pixel value --> quantile)
+    s_quantiles = np.cumsum(s_counts).astype(np.float64)
+    s_quantiles /= s_quantiles[-1]
+    t_quantiles = np.cumsum(t_counts).astype(np.float64)
+    t_quantiles /= t_quantiles[-1]
+
+    # interpolate linearly to find the pixel values in the template image
+    # that correspond most closely to the quantiles in the source image
+    interp_t_values = np.interp(s_quantiles, t_quantiles, t_values)
+
+    return interp_t_values[bin_idx].reshape(oldshape)
+
 def get_resize(file_, img_size):
   org_file = file_.replace('BP4D_256', 'BP4D')
   new_file = file_.replace('BP4D_256', 'BP4D_'+str(img_size))
@@ -21,6 +63,116 @@ def get_resize(file_, img_size):
   if not os.path.isfile(new_file): 
     imageio.imwrite(new_file, scipy.misc.imresize(scipy.misc.imread(org_file), (img_size,img_size)))
   return new_file
+
+class CelebDataset_Custom(Dataset):
+    def __init__(self, image_size, metadata_path, transform):
+        self.transform = transform
+        self.image_size = image_size
+        # self.lines = open(metadata_path, 'r').readlines()
+        file_ = '/home/afromero/datos2/CelebA/Img/img_align_celeba/_data_aligned_{}.txt'.format(image_size)
+        print("Reading from: "+file_)
+        self.lines = open(file_).readlines()
+        self.num_data = int(self.lines[0])
+        self.attr2idx = {}
+        self.idx2attr = {}
+
+        print ('Start preprocessing dataset..!')
+        random.seed(1234)
+        self.preprocess()
+        print ('Finished preprocessing dataset..!')
+
+
+    def preprocess(self):
+
+        # self.selected_attrs = ['Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Male', 'Young']
+        # self.selected_attrs = ['5_o_Clock_Shadow', 'Arched_Eyebrows', 'Attractive', 'Bags_Under_Eyes', 'Bald', \
+        #                        'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair', 'Brown_Hair', \
+        #                        'Bushy_Eyebrows', 'Chubby', 'Double_Chin', 'Goatee', 'Gray_Hair', 'Heavy_Makeup', \
+        #                        'High_Cheekbones', 'Male', 'Mouth_Slightly_Open', 'Mustache', 'Narrow_Eyes', 'No_Beard', \
+        #                        'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Receding_Hairline', 'Rosy_Cheeks', 'Sideburns', \
+        #                        'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings', 'Wearing_Hat', 'Wearing_Lipstick', \
+        #                        'Wearing_Necklace', 'Wearing_Necktie', 'Young']
+
+        self.filenames = []
+        self.labels = []
+
+        random.shuffle(lines)   # random shuffling
+        for i, line in enumerate(lines):
+
+            filename = line.strip()
+            label = 1
+
+            self.filenames.append(filename)
+            self.labels.append(label)
+
+    def __getitem__(self, index):
+        image = Image.open(self.filenames[index])
+        label = self.labels[index]
+        
+        return self.transform(image), torch.FloatTensor(label), self.filenames[index]
+
+    def __len__(self):
+        return self.num_data  
+
+
+class CelebDataset(Dataset):
+    def __init__(self, image_size, metadata_path, transform):
+        self.transform = transform
+        self.image_size = image_size
+        # self.lines = open(metadata_path, 'r').readlines()
+        # self.lines = open('/home/afromero/datos2/CelebA/Img/img_align_celeba/_data_aligned.txt').readlines()
+        self.lines = open('data/CelebA/list_attr_celeba.txt').readlines()
+        self.attr2idx = {}
+        self.idx2attr = {}
+
+        random.seed(1234)
+        self.preprocess()
+        print ('Finished preprocessing dataset..!')
+
+    def preprocess(self):
+        attrs = self.lines[1].split()
+        for i, attr in enumerate(attrs):
+            self.attr2idx[attr] = i
+            self.idx2attr[i] = attr
+
+        # self.selected_attrs = ['Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Male', 'Young']
+        self.selected_attrs = ['Male', 'Mustache', 'No_Beard', 'Pale_Skin', 'Young']
+        self.filenames = []
+        self.labels = []
+
+        lines = self.lines[2:]
+        random.shuffle(lines)   # random shuffling
+        for i, line in enumerate(lines):
+
+            splits = line.split()
+            filename = os.path.abspath('data/CelebA/Faces_aligned_{}/{}'.format(self.image_size, splits[0]))
+            # ipdb.set_trace()
+            if not os.path.isfile(filename): continue
+            values = splits[1:]
+
+            label = []
+            for idx, value in enumerate(values):
+                attr = self.idx2attr[idx]
+
+                if attr in self.selected_attrs:
+                    if value == '1':
+                        label.append(1)
+                    else:
+                        label.append(0)
+
+            self.filenames.append(filename)
+            self.labels.append(label)
+        self.num_data = len(self.filenames)
+
+    def __getitem__(self, index):
+        # ipdb.set_trace()
+        image = Image.open(self.filenames[index])
+        label = self.labels[index]
+        return self.transform(image), torch.FloatTensor(label), self.filenames[index]
+
+    def __len__(self):
+        return self.num_data
+
 
 class MultiLabelAU(Dataset):
     def __init__(self, image_size, metadata_path, transform, mode, no_flipping = False, shuffling = False):
@@ -82,7 +234,7 @@ class GooglePhotos(Dataset):
         # ipdb.set_trace()
         self.transform = transform
         self.image_size = image_size
-        self.lines = open(os.path.join(metadata_path, 'Google/data_aligned.txt'), 'r').readlines()
+        self.lines = open(os.path.join('data/Google/data_faces_aligned_{}.txt'.format(image_size)), 'r').readlines()
 
         print ('Start preprocessing dataset: Google!')
         random.seed(1234)
@@ -101,14 +253,26 @@ class GooglePhotos(Dataset):
             self.filenames.append(filename)
 
     def __getitem__(self, index):
-        image = Image.open(self.filenames[index])
+        # image = Image.open(self.filenames[index])
+        image = imageio.imread(self.filenames[index])
         # ipdb.set_trace()
+
+        if not 'demo' in self.filenames[index]:
+            # file_dir = os.path.dirname(self.filenames[index])
+            # file_name = os.path.basename(self.filenames[index])
+            # target_file = os.path.join(file_dir, 'demo0_Faces_aligned.jpg')
+            target_file = 'data/face_mean.jpg'
+            # image = hist_match(image, imageio.imread(target_file))
+        image = Image.fromarray(image.astype(np.uint8))
         return self.transform(image), torch.FloatTensor([0]*12), self.filenames[index]
 
     def __len__(self):
         return self.num_data        
 
-def get_loader(metadata_path, crop_size, image_size, batch_size, dataset='MultiLabelAU', mode='train', LSTM=False, shuffling = False, no_flipping=False):
+def get_loader(metadata_path, crop_size, image_size, batch_size, \
+                dataset='MultiLabelAU', mode='train', LSTM=False, \
+                shuffling = False, no_flipping=False, \
+                mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5)):
     """Build and return data loader."""
 
     if mode == 'train':
@@ -117,18 +281,19 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, dataset='MultiL
             transforms.Resize(image_size, interpolation=Image.ANTIALIAS),
             # transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+            transforms.Normalize(mean, std)])
     else:
         transform = transforms.Compose([
             # transforms.CenterCrop(crop_size),
             # transforms.Resize(image_size, interpolation=Image.ANTIALIAS),
             transforms.Scale(image_size, interpolation=Image.ANTIALIAS),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+            transforms.Normalize(mean, std)])
 
     if dataset=='Google':
-        # ipdb.set_trace()
         dataset = GooglePhotos(image_size, 'data', transform)
+    elif dataset=='CelebA':
+        dataset = CelebDataset(image_size, 'data', transform)
     else:
         dataset = MultiLabelAU(image_size, metadata_path, transform, mode, no_flipping = no_flipping or LSTM, shuffling=shuffling)
 

@@ -1,10 +1,16 @@
+#!/usr/bin/ipython
 import os
 import argparse
-# import tensorflow as tf
 from data_loader import get_loader
 from torch.backends import cudnn
 import glob
 import math
+import ipdb
+import imageio
+import numpy as np
+
+#CUDA_VISIBLE_DEVICES=0 ipython main.py -- --num_epochs 15 --batch_size 8 --image_size 256 --fold 0 --use_tensorboard --DYNAMIC_COLOR --CelebA_GAN
+
 def str2bool(v):
     return v.lower() in ('true')
 
@@ -23,17 +29,21 @@ def main(config):
         os.makedirs(config.result_path)
 
     # Data loader
-    celebA_loader = None
+    CelebA_loader = None
     rafd_loader = None
     au_loader = None
 
-    if config.multi_binary:
-        img_size = 224
-    else:
-        img_size = config.image_size
+    img_size = config.image_size
 
     MultiLabelAU_loader = get_loader(config.metadata_path, img_size,
-                                   img_size, config.batch_size, 'MultiLabelAU', config.mode, LSTM=config.LSTM)        
+                                   img_size, config.batch_size, 'MultiLabelAU', config.mode, \
+                                   LSTM=config.LSTM, mean=config.mean, std=config.std)   
+
+    if config.CelebA:
+        CelebA_loader = get_loader(config.metadata_path, img_size,
+                                   img_size, config.batch_size, 'CelebA', config.mode, \
+                                   LSTM=config.LSTM, mean=config.mean, std=config.std)
+
     # Solver
     if config.LSTM:
         from solver_lstm import Solver
@@ -41,10 +51,14 @@ def main(config):
         from solver_cls import Solver
     else:
         from solver import Solver        
-    solver = Solver(MultiLabelAU_loader, config)
+
+    solver = Solver(MultiLabelAU_loader, config, CelebA=CelebA_loader)
 
     if config.mode == 'train':
-        solver.train()
+        if config.CelebA:
+            solver.train_multi()
+        else:
+            solver.train()
         solver.test_cls()
     elif config.mode == 'test':
         solver.test_cls()
@@ -55,7 +69,7 @@ if __name__ == '__main__':
 
     # Model hyper-parameters
     parser.add_argument('--c_dim', type=int, default=12)
-    parser.add_argument('--c2_dim', type=int, default=8)
+    parser.add_argument('--c2_dim', type=int, default=5)
     parser.add_argument('--celebA_crop_size', type=int, default=178)
     parser.add_argument('--rafd_crop_size', type=int, default=256)
     parser.add_argument('--image_size', type=int, default=128)
@@ -80,12 +94,19 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--beta1', type=float, default=0.5)
     parser.add_argument('--beta2', type=float, default=0.999)
+    parser.add_argument('--mean', type=str, default='0.5')    
+    parser.add_argument('--std', type=str, default='0.5')
     parser.add_argument('--pretrained_model', type=str, default=None)    
     parser.add_argument('--FOCAL_LOSS', action='store_true', default=False)
     parser.add_argument('--JUST_REAL', action='store_true', default=False)
     parser.add_argument('--FAKE_CLS', action='store_true', default=False)
     parser.add_argument('--DENSENET', action='store_true', default=False)
     parser.add_argument('--CLS', action='store_true', default=False)
+    parser.add_argument('--DYNAMIC_COLOR', action='store_true', default=False)    
+    parser.add_argument('--GOOGLE', action='store_true', default=False)    
+    parser.add_argument('--CelebA_GAN', action='store_true', default=False)    
+    parser.add_argument('--CelebA_CLS', action='store_true', default=False)    
+
 
     # Training LSTM
     parser.add_argument('--LSTM', action='store_true', default=False)
@@ -112,31 +133,87 @@ if __name__ == '__main__':
     parser.add_argument('--mode_data', type=str, default='aligned') 
 
     # Training Binary Classifier
-    parser.add_argument('--multi_binary', action='store_true', default=False)
-    parser.add_argument('--au', type=str, default='1')
-    parser.add_argument('--au_model', type=str, default='aunet')
-    parser.add_argument('--pretrained_model_generator', type=str, default='')
+    # parser.add_argument('--multi_binary', action='store_true', default=False)
+    # parser.add_argument('--au', type=str, default='1')
+    # parser.add_argument('--au_model', type=str, default='aunet')
+    # parser.add_argument('--pretrained_model_generator', type=str, default='')
 
 
     # Step size
-    parser.add_argument('--log_step', type=int, default=50)
+    parser.add_argument('--log_step', type=int, default=100)
     parser.add_argument('--sample_step', type=int, default=1000)
-    parser.add_argument('--model_save_step', type=int, default=30000)
+    parser.add_argument('--model_save_step', type=int, default=20000)
 
     config = parser.parse_args()
-
-    config.metadata_path = os.path.join(config.metadata_path, config.mode_data, 'fold_'+config.fold, )
 
     config.log_path = os.path.join(config.log_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
     config.sample_path = os.path.join(config.sample_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
     config.model_save_path = os.path.join(config.model_save_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
     config.result_path = os.path.join(config.result_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
 
+    if config.mean!='0.5':
+        config.log_path = os.path.join(config.log_path, 'mean_{}'.format(config.mean))
+        config.sample_path = os.path.join(config.sample_path, 'mean_{}'.format(config.mean))
+        config.model_save_path =os.path.join(config.model_save_path, 'mean_{}'.format(config.mean))
+        config.result_path = os.path.join(config.result_path, 'mean_{}'.format(config.mean))          
+
+    elif config.mean=='0.5': 
+        config.mean=(0.5,0.5,0.5)
+        config.std=(0.5,0.5,0.5)
+
+    if config.mean=='data' or config.std=='data':
+        # ipdb.set_trace()
+        mean_data = 'data/mean_data.txt'
+        if not os.path.isfile(mean_data):
+            txt_files = glob.glob(os.path.join(config.metadata_path, config.mode_data,'*', 'test.txt'))
+            lines = []
+            for txt in txt_files:
+                # ipdb.set_trace()
+                lines.extend([i.split(' ')[0] for i in open(txt).readlines()])
+            lines = list(set(sorted(lines)))
+            print("Calculating mean from {} images...".format(len(lines)))
+            mean=np.array((0.0,0.0,0.0))
+            for line in lines:
+                img = imageio.imread(line)/255.
+                # imgs.append(img)
+                mean[0]+=img[:,:,0].mean()
+                mean[1]+=img[:,:,1].mean()
+                mean[2]+=img[:,:,1].mean()
+            mean = mean/len(lines)
+            f=open(mean_data,'w')
+            for m in mean: f.write(str(m)+'\t')
+            f.close()
+        else:
+            mean = [float(i) for i in open(mean_data).readline().strip().split('\t')]
+        config.mean = (mean[0], mean[1], mean[2])
+        config.std = (1.0, 1.0, 1.0)
+
+        print("Mean {} and std {}".format(config.mean, config.std))
+
+        # ipdb.set_trace()
+
+    if config.CelebA_GAN or config.CelebA_CLS:
+        config.CelebA = True
+    else:
+        config.CelebA = False
+
+    if config.CelebA_GAN:
+        config.log_path = os.path.join(config.log_path, 'CelebA_GAN')
+        config.sample_path = os.path.join(config.sample_path, 'CelebA_GAN')
+        config.model_save_path =os.path.join(config.model_save_path, 'CelebA_GAN')
+        config.result_path = os.path.join(config.result_path, 'CelebA_GAN')  
+
     if config.FAKE_CLS:
         config.log_path = os.path.join(config.log_path, 'FAKE_CLS')
         config.sample_path = os.path.join(config.sample_path, 'FAKE_CLS')
         config.model_save_path =os.path.join(config.model_save_path, 'FAKE_CLS')
-        config.result_path = os.path.join(config.result_path, 'FAKE_CLS')    
+        config.result_path = os.path.join(config.result_path, 'FAKE_CLS')  
+
+    if config.DYNAMIC_COLOR:
+        config.log_path = os.path.join(config.log_path, 'DYNAMIC_COLOR')
+        config.sample_path = os.path.join(config.sample_path, 'DYNAMIC_COLOR')
+        config.model_save_path =os.path.join(config.model_save_path, 'DYNAMIC_COLOR')
+        config.result_path = os.path.join(config.result_path, 'DYNAMIC_COLOR')  
 
     if config.CLS:
         config.pretrained_model_generator = sorted(glob.glob(os.path.join(config.model_save_path, '*_G.pth')))[-1]
@@ -146,6 +223,12 @@ if __name__ == '__main__':
         config.sample_path = config.sample_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
         config.model_save_path = config.model_save_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
         config.result_path = config.result_path.replace('MultiLabelAU', 'MultiLabelAU_CLS')
+
+    if config.CelebA_CLS:
+        config.log_path = os.path.join(config.log_path, 'CelebA_CLS')
+        config.sample_path = os.path.join(config.sample_path, 'CelebA_CLS')
+        config.model_save_path =os.path.join(config.model_save_path, 'CelebA_CLS')
+        config.result_path = os.path.join(config.result_path, 'CelebA_CLS')  
 
     if config.FOCAL_LOSS:
         config.log_path = os.path.join(config.log_path, 'Focal_Loss')
@@ -171,6 +254,7 @@ if __name__ == '__main__':
         config.model_save_path =os.path.join(config.model_save_path, 'lambda_cls_%d_d_repeat_%d'%(config.lambda_cls, config.d_train_repeat))
         config.result_path = os.path.join(config.result_path, 'lambda_cls_%d_d_repeat_%d'%(config.lambda_cls, config.d_train_repeat))   
 
+    config.metadata_path = os.path.join(config.metadata_path, config.mode_data, 'fold_'+config.fold, )
 
     config.g_repeat_num = int(math.log(config.image_size,2)-1)
     config.d_repeat_num = int(math.log(config.image_size,2)-1)
@@ -184,16 +268,19 @@ if __name__ == '__main__':
                 pass
         else:            
             try:
+                # ipdb.set_trace()
                 config.pretrained_model = sorted(glob.glob(os.path.join(config.model_save_path, '*_D.pth')))[-1]
-                config.pretrained_model = '_'.join(os.path.basename(config.pretrained_model).split('_')[:2])
+                config.pretrained_model = '_'.join(os.path.basename(config.pretrained_model).split('_')[:-1])
             except:
                 pass
 
-    try:
-        config.test_model = sorted(glob.glob(os.path.join(config.model_save_path, '*_D.pth')))[-1]
-        config.test_model = '_'.join(os.path.basename(config.test_model).split('_')[:2])
-    except:
-        config.test_model = ''
+    if config.test_model=='':
+        try:
+            # ipdb.set_trace()
+            config.test_model = sorted(glob.glob(os.path.join(config.model_save_path, '*_D.pth')))[-1]
+            config.test_model = '_'.join(os.path.basename(config.test_model).split('_')[:-1])
+        except:
+            config.test_model = ''
 
 
     print(config)
