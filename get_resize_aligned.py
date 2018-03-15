@@ -11,6 +11,7 @@ import time
 import datetime
 import tqdm
 import glob
+from shutil import copyfile
 
 class Get_Faces():
     def __init__(self):
@@ -44,24 +45,28 @@ def get_resize(org_file, resized_file, img_size):
     if not os.path.isdir(folder): os.makedirs(folder) 
     # ipdb.set_trace()
     imageio.imwrite(resized_file, (skimage.transform.resize(imageio.imread(org_file), (img_size[0], img_size[1]))*255).astype(np.uint8))
-
-pwd = os.getcwd()
-os.chdir('/home/afromero/Codes/Face_Alignment/MTCNN_face_detection_alignment/code/codes/MTCNNv2')
-future = matlab.engine.connect_matlab(async=True)
-eng = future.result()
-eng = matlab.engine.start_matlab()
-os.chdir(pwd)
-    
+  
 if __name__ == '__main__':    
     import argparse
 
     parser = argparse.ArgumentParser(description='Txt file with path_to_image and 12 different AUs to LMDB')
     parser.add_argument('--mode', type=str, default='train', help='Mode: Training/Test (default: Training)')
     parser.add_argument('--img_size', type=int, default=256, help='size of the image to resize')
+    parser.add_argument('--gpu', type=str, default='2', help='GPU device')
     parser.add_argument('--fold', type=str, default='all', help='fold crossvalidation')
     parser.add_argument('--aligned', action='store_true', default=False)
     parser.add_argument('--google', action='store_true', default=False)
+    parser.add_argument('--folder_to_align', type=str, default='data/Google/Org', help='Folder where to perform alignment, optional.')
+    #folder_to_align='data/CelebA/Org'
     args = parser.parse_args()
+    os.environ['CUDA_VISIBLE_DEVICES']=args.gpu
+
+    pwd = os.getcwd()
+    os.chdir('/home/afromero/Codes/Face_Alignment/MTCNN_face_detection_alignment/code/codes/MTCNNv2')
+    future = matlab.engine.connect_matlab(async=True)
+    eng = future.result()
+    eng = matlab.engine.start_matlab()
+    os.chdir(pwd)
 
     if not args.google:
 
@@ -104,50 +109,68 @@ if __name__ == '__main__':
 
     else:
         import imageio
-        txt_file  = 'data/Google/data.txt'
+        folder_root = os.path.abspath(os.path.dirname(args.folder_to_align))
+        face_root = os.path.abspath(os.path.join(folder_root, 'Faces'))
+        if not os.path.isdir(face_root): os.makedirs(face_root)
+        algined_root = os.path.abspath(os.path.join(folder_root, 'Faces_aligned'))
+        if not os.path.isdir(algined_root): os.makedirs(algined_root)    
+        algined_size_root = os.path.abspath(os.path.join(folder_root, 'Faces_aligned_{}'.format(args.img_size)))
+        if not os.path.isdir(algined_root): os.makedirs(algined_size_root)            
 
-        jpg_files = sorted(glob.glob(os.path.join(os.path.dirname(txt_file), '*.jpg')))
-        jpg_files = [i for i in jpg_files if 'Faces' not in i]
+        # ipdb.set_trace()
+        img_files = glob.glob(os.path.join(args.folder_to_align, '*.jpg'))
+        txt_file = os.path.join(folder_root, 'data.txt')
         f = open(txt_file, 'w')
-        for jpg in jpg_files: f.writelines(os.path.abspath(jpg)+'\n')
+        for im in img_files:
+            f.writelines(os.path.abspath(im)+'\n')
         f.close()
-
+        # ipdb.set_trace()
 
         org_files = [line.strip() for line in open(txt_file).readlines()]
         # ipdb.set_trace()
         Faces = Get_Faces()
-        resized_files = []
+        face_files = []
         count = 0
         # ipdb.set_trace()        
-        for file_ in tqdm.tqdm(org_files, total=len(org_files), \
-                    desc='Resizing - google photos', ncols=80, leave=True):
-            org_file = file_
+        for org_file in tqdm.tqdm(org_files, total=len(org_files), \
+                    desc='Extracting Faces', ncols=80, leave=True):
             file_name = os.path.basename(org_file)
-            folder_name = os.path.dirname(org_file)
-            face_name = file_name.split('.')[0]+'_Faces.'+file_name.split('.')[1]
-            face_file = os.path.join(folder_name, face_name)
-            
-            # if not os.path.isfile(face_file): 
+            # folder_name = os.path.dirname(org_file)
+            # face_name = file_name.split('.')[0]+'_Faces.'+file_name.split('.')[1]
+            face_file = os.path.join(face_root, file_name)
+
+            if os.path.isfile(face_file): 
+                face_files.append(face_file)
+                continue
             img_face = Faces.from_file(org_file)
-            imageio.imwrite(face_file, img_face[:,:,::-1])
-            get_resize(face_file, face_file, 256)
-
-            resized_files.append(face_file)
-
-
+            # Faces.imshow(img_face)
+            try: imageio.imwrite(face_file, img_face[:,:,::-1])
+            except: continue#ipdb.set_trace()
+            face_files.append(face_file)
 
         if args.aligned: 
             print(' [*] Performing alignment...')
             _f = os.path.abspath(txt_file.replace('.txt', '_faces.txt'))
             f = open(_f, 'w')
-            for rs_file in resized_files: f.writelines(rs_file+'\n')
+            for rs_file in face_files: 
+                # if os.path.isfile(rs_file.replace('Faces', 'Faces_aligned')):
+                #     os.remove(rs_file.replace('Faces', 'Faces_aligned'))
+                f.writelines(rs_file+'\n')
             f.close()
+            # ipdb.set_trace()
             _ = eng.face_alignment(_f)
-            os.remove(_f)
+            # os.remove(_f)
+            print(' [°] Alignment done')  
 
-            _f = os.path.abspath(txt_file.replace('.txt', '_aligned.txt'))
-            f = open(_f, 'w')            
-            for rs_file in resized_files: f.writelines(rs_file.replace('Faces', 'Faces_aligned')+'\n')
-            f.close()
-            print(' [°] Alignment done')      
+            _f = os.path.abspath(txt_file.replace('.txt', '_faces_aligned_{}.txt'.format(args.img_size)))
+            f = open(_f, 'w')           
+            for rs_file in tqdm.tqdm(face_files, total=len(face_files), \
+                        desc='Resizing Facial Alignment to %d'%(args.img_size), ncols=80, leave=True):             
+                file_aligned = rs_file.replace('Faces', 'Faces_aligned')
+                if not os.path.isfile(file_aligned): continue
+                file_name = os.path.basename(rs_file)
+                resized_file = os.path.join(algined_size_root, file_name)
+                get_resize(file_aligned, resized_file, args.img_size)
+                f.writelines(resized_file+'\n')
+            f.close()    
 
