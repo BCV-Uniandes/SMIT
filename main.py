@@ -2,19 +2,21 @@
 import os
 import argparse
 from data_loader import get_loader
-from torch.backends import cudnn
 import glob
 import math
 import ipdb
 import imageio
 import numpy as np
-
+import warnings
+warnings.filterwarnings('ignore')
 #CUDA_VISIBLE_DEVICES=0 ipython main.py -- --num_epochs 15 --batch_size 8 --image_size 256 --fold 0 --use_tensorboard --DYNAMIC_COLOR --CelebA_GAN
 
 def str2bool(v):
     return v.lower() in ('true')
 
 def main(config):
+    from torch.backends import cudnn
+    import torch    
     # For fast training
     cudnn.benchmark = True
 
@@ -37,7 +39,8 @@ def main(config):
 
     MultiLabelAU_loader = get_loader(config.metadata_path, img_size,
                                    img_size, config.batch_size, 'MultiLabelAU', config.mode, \
-                                   LSTM=config.LSTM, mean=config.mean, std=config.std)   
+                                   LSTM=config.LSTM, color_jitter=config.COLOR_JITTER, \
+                                   mean=config.mean, std=config.std)   
 
     if config.CelebA:
         CelebA_loader = get_loader(config.metadata_path, img_size,
@@ -55,12 +58,13 @@ def main(config):
     solver = Solver(MultiLabelAU_loader, config, CelebA=CelebA_loader)
 
     if config.mode == 'train':
-        if config.CelebA:
+        if config.CelebA_CLS or (not config.CelebA_GAN and config.CelebA_CLS):
             solver.train_multi()
         else:
             solver.train()
         solver.test_cls()
     elif config.mode == 'test':
+        # solver.val_cls(load=True)
         solver.test_cls()
 
 
@@ -86,12 +90,12 @@ if __name__ == '__main__':
 
     # Training settings
     parser.add_argument('--dataset', type=str, default='MultiLabelAU', choices=['CelebA', 'MultiLabelAU', 'RaFD', 'au01_fold0', 'Both'])
-    parser.add_argument('--num_epochs', type=int, default=20)
-    parser.add_argument('--num_epochs_decay', type=int, default=20)
-    parser.add_argument('--num_iters', type=int, default=200000)
+    parser.add_argument('--num_epochs', type=int, default=29)
+    parser.add_argument('--num_epochs_decay', type=int, default=30)
+    parser.add_argument('--num_iters', type=int, default=300000)
     parser.add_argument('--num_iters_decay', type=int, default=100000)
     parser.add_argument('--batch_size', type=int, default=16)
-    parser.add_argument('--num_workers', type=int, default=1)
+    # parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--beta1', type=float, default=0.5)
     parser.add_argument('--beta2', type=float, default=0.999)
     parser.add_argument('--mean', type=str, default='0.5')    
@@ -103,6 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('--DENSENET', action='store_true', default=False)
     parser.add_argument('--CLS', action='store_true', default=False)
     parser.add_argument('--DYNAMIC_COLOR', action='store_true', default=False)    
+    parser.add_argument('--COLOR_JITTER', action='store_true', default=False)    
     parser.add_argument('--GOOGLE', action='store_true', default=False)    
     parser.add_argument('--CelebA_GAN', action='store_true', default=False)    
     parser.add_argument('--CelebA_CLS', action='store_true', default=False)    
@@ -117,7 +122,8 @@ if __name__ == '__main__':
 
     # Misc
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'])
-    parser.add_argument('--use_tensorboard', action='store_true', default=False)
+    parser.add_argument('--use_tensorboard', action='store_true', default=True)
+    parser.add_argument('--GPU', type=str, default='3')
 
     # Path
     parser.add_argument('--metadata_path', type=str, default='./data/MultiLabelAU')
@@ -140,11 +146,16 @@ if __name__ == '__main__':
 
 
     # Step size
-    parser.add_argument('--log_step', type=int, default=100)
-    parser.add_argument('--sample_step', type=int, default=1000)
+    parser.add_argument('--log_step', type=int, default=2000)
+    parser.add_argument('--sample_step', type=int, default=5)
     parser.add_argument('--model_save_step', type=int, default=20000)
 
     config = parser.parse_args()
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = config.GPU
+
+    if config.GOOGLE: config.mode='test'
+    if config.DENSENET: config.CLS=True
 
     config.log_path = os.path.join(config.log_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
     config.sample_path = os.path.join(config.sample_path, config.mode_data, str(config.image_size), 'fold_'+config.fold)
@@ -158,39 +169,54 @@ if __name__ == '__main__':
         config.result_path = os.path.join(config.result_path, 'mean_{}'.format(config.mean))          
 
     elif config.mean=='0.5': 
+        config.MEAN=config.mean
         config.mean=(0.5,0.5,0.5)
         config.std=(0.5,0.5,0.5)
 
-    if config.mean=='data' or config.std=='data':
+    if config.mean=='data_mean' or config.std=='data_mean':
         # ipdb.set_trace()
-        mean_data = 'data/mean_data.txt'
-        if not os.path.isfile(mean_data):
-            txt_files = glob.glob(os.path.join(config.metadata_path, config.mode_data,'*', 'test.txt'))
-            lines = []
-            for txt in txt_files:
-                # ipdb.set_trace()
-                lines.extend([i.split(' ')[0] for i in open(txt).readlines()])
-            lines = list(set(sorted(lines)))
-            print("Calculating mean from {} images...".format(len(lines)))
-            mean=np.array((0.0,0.0,0.0))
-            for line in lines:
-                img = imageio.imread(line)/255.
-                # imgs.append(img)
-                mean[0]+=img[:,:,0].mean()
-                mean[1]+=img[:,:,1].mean()
-                mean[2]+=img[:,:,1].mean()
-            mean = mean/len(lines)
-            f=open(mean_data,'w')
-            for m in mean: f.write(str(m)+'\t')
-            f.close()
-        else:
-            mean = [float(i) for i in open(mean_data).readline().strip().split('\t')]
+        config.MEAN=config.mean
+        mean_img = 'data/face_{}_mean.jpg'.format(config.mode_data)
+        std_img = 'data/face_{}_std.jpg'.format(config.mode_data)
+        print("Mean and Std from data: %s and %s"%(mean_img,std_img))
+        mean = imageio.imread(mean_img).astype(np.float32).transpose(2,0,1)
+        std = imageio.imread(std_img).astype(np.float32).transpose(2,0,1)
+
+        mean = mean.mean(axis=(0,1))/255.
+        std = std.std(axis=(0,1))/255.
         config.mean = (mean[0], mean[1], mean[2])
-        config.std = (1.0, 1.0, 1.0)
+
+        config.std = (std[0], std[1], std[2])
 
         print("Mean {} and std {}".format(config.mean, config.std))
 
+    elif config.mean=='data_full' or config.std=='data_full':
         # ipdb.set_trace()
+        config.MEAN=config.mean
+        mean_img = 'data/face_{}_mean.npy'.format(config.mode_data)
+        std_img = 'data/face_{}_std.npy'.format(config.mode_data)
+        print("Mean and Std from data: %s and %s"%(mean_img,std_img))
+        mean = np.load(mean_img).astype(np.float64).transpose(2,0,1)/255.
+        std = np.load(std_img).astype(np.float64).transpose(2,0,1)/255.
+
+        # mean = imageio.imread(mean_img).astype(np.float64).transpose(2,1,0)/255.
+        # std = imageio.imread(std_img).astype(np.float64).transpose(2,1,0)/255.
+
+        # mean = img.mean(axis=(0,1))/255.
+        import torch
+        config.mean = torch.FloatTensor(mean)#(mean[0], mean[1], mean[2])
+        config.std = torch.FloatTensor(std)#(std[0], std[1], std[2])
+        # if torch.cuda.is_available():
+        #     config.mean = config.mean.cuda()        
+        #     config.std = config.std.cuda()
+
+        # print("Mean {} and std {}".format(config.mean, config.std))
+        # ipdb.set_trace()
+
+    elif config.mean=='data_image' or config.std=='data_image':
+        config.MEAN=config.mean
+        config.mean=(0.5,0.5,0.5)
+        config.std=(0.5,0.5,0.5)
 
     if config.CelebA_GAN or config.CelebA_CLS:
         config.CelebA = True
@@ -214,6 +240,12 @@ if __name__ == '__main__':
         config.sample_path = os.path.join(config.sample_path, 'DYNAMIC_COLOR')
         config.model_save_path =os.path.join(config.model_save_path, 'DYNAMIC_COLOR')
         config.result_path = os.path.join(config.result_path, 'DYNAMIC_COLOR')  
+
+    if config.COLOR_JITTER:
+        config.log_path = os.path.join(config.log_path, 'COLOR_JITTER')
+        config.sample_path = os.path.join(config.sample_path, 'COLOR_JITTER')
+        config.model_save_path =os.path.join(config.model_save_path, 'COLOR_JITTER')
+        config.result_path = os.path.join(config.result_path, 'COLOR_JITTER')          
 
     if config.CLS:
         config.pretrained_model_generator = sorted(glob.glob(os.path.join(config.model_save_path, '*_G.pth')))[-1]

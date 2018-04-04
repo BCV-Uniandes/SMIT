@@ -21,7 +21,7 @@ class ResidualBlock(nn.Module):
 
 class Generator(nn.Module):
     """Generator. Encoder-Decoder Architecture."""
-    def __init__(self, conv_dim=64, c_dim=5, repeat_num=6):
+    def __init__(self, conv_dim=64, c_dim=5, repeat_num=6, tanh=False):
         super(Generator, self).__init__()
 
         layers = []
@@ -49,10 +49,11 @@ class Generator(nn.Module):
             curr_dim = curr_dim // 2
 
         layers.append(nn.Conv2d(curr_dim, 3, kernel_size=7, stride=1, padding=3, bias=False))
-        layers.append(nn.Tanh())
+        if tanh:
+            layers.append(nn.Tanh())
         self.main = nn.Sequential(*layers)
 
-    def forward(self, x, c):
+    def forward(self, x, c, no_tanh=False):
         # replicate spatially and concatenate domain information
         c = c.unsqueeze(2).unsqueeze(3)
         c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
@@ -62,7 +63,7 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
     """Discriminator. PatchGAN."""
-    def __init__(self, image_size=256, conv_dim=64, c_dim=5, repeat_num=6):
+    def __init__(self, image_size=256, conv_dim=64, c_dim=5, repeat_num=6, mean=0, std=0):
         super(Discriminator, self).__init__()
 
         layers = []
@@ -76,11 +77,14 @@ class Discriminator(nn.Module):
             curr_dim = curr_dim * 2
 
         k_size = int(image_size / np.power(2, repeat_num))
+        self.mean = mean
+        self.std = std
         self.main = nn.Sequential(*layers)
         self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
         self.conv2 = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
 
     def forward(self, x, lstm=False):
+        # ipdb.set_trace()
         h = self.main(x)
         # ipdb.set_trace()
         out_real = self.conv1(h)

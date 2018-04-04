@@ -16,6 +16,7 @@ import ipdb
 import config as cfg
 import glob
 import pickle
+from tqdm import tqdm
 from utils import f1_score, f1_score_max
 
 # CUDA_VISIBLE_DEVICES=3 ipython main.py -- --c_dim=12 --num_epochs 4  --dataset MultiLabelAU --batch_size 32 --image_size 256 --d_repeat_num 7 --g_repeat_num 7 --multi_binary --au 1 --au_model aunet
@@ -29,6 +30,8 @@ class Solver(object):
         # Data loader
         self.MultiLabelAU_loader = MultiLabelAU_loader
         self.CelebA_loader = CelebA
+
+        self.CelebA_GAN = config.CelebA_GAN
 
         # Model hyper-parameters
         self.c_dim = config.c_dim
@@ -62,16 +65,27 @@ class Solver(object):
         self.FOCAL_LOSS = config.FOCAL_LOSS
         self.JUST_REAL = config.JUST_REAL
         self.FAKE_CLS = config.FAKE_CLS
-        self.DENSENET = config.DENSENET     
+        self.DENSENET = config.DENSENET
         self.DYNAMIC_COLOR = config.DYNAMIC_COLOR  
-        self.GOOGLE = config.GOOGLE    
+        self.COLOR_JITTER = config.COLOR_JITTER  
+        self.GOOGLE = config.GOOGLE   
+
+        #Normalization
+        self.mean = config.mean
+        self.MEAN = config.MEAN #string
+        self.std = config.std
+
+        if self.MEAN=='data_full':
+            self.tanh=False
+        else:
+            self.tanh=True  
 
         #Training Binary Classifier Settings
         # self.au_model = config.au_model
         # self.au = config.au
         # self.multi_binary = config.multi_binary
-        # self.pretrained_model_generator = config.pretrained_model_generator
-        # self.pretrained_model_discriminator = config.pretrained_model_discriminator
+        self.pretrained_model_generator = config.pretrained_model_generator
+        self.pretrained_model_discriminator = config.pretrained_model_discriminator
 
         # Test settings
         self.test_model = config.test_model
@@ -90,6 +104,8 @@ class Solver(object):
         self.sample_step = config.sample_step
         self.model_save_step = config.model_save_step
 
+        self.GPU = config.GPU        
+
         # Build tensorboard if use
         self.build_model()
         if self.use_tensorboard:
@@ -103,7 +119,12 @@ class Solver(object):
         # Define a generator and a discriminator
 
         from model import Generator
-        if not self.JUST_REAL: self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
+        # if not self.JUST_REAL: self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
+
+        if self.CelebA_loader is not None:
+            self.G = Generator(self.g_conv_dim, self.c_dim+self.c2_dim+2, self.g_repeat_num)
+        else:
+            if not self.JUST_REAL: self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num, tanh=self.tanh)
 
         if self.DENSENET:
             from models.densenet import Generator, densenet121 as Discriminator
@@ -128,9 +149,9 @@ class Solver(object):
         num_params = 0
         for p in model.parameters():
             num_params += p.numel()
-        print(name)
-        print(model)
-        print("The number of parameters: {}".format(num_params))
+        # print(name)
+        # print(model)
+        # print("The number of parameters: {}".format(num_params))
 
     def load_pretrained_model(self):
         model = os.path.join(
@@ -244,12 +265,12 @@ class Solver(object):
         if self.pretrained_model:
             start = int(self.pretrained_model.split('_')[0])
             # Decay learning rate
-            for i in range(start):
-                if (i+1) > (self.num_epochs - self.num_epochs_decay):
-                    # g_lr -= (self.g_lr / float(self.num_epochs_decay))
-                    d_lr -= (self.d_lr / float(self.num_epochs_decay))
-                    self.update_lr(d_lr)
-                    print ('Decay learning rate to d_lr: {}.'.format(d_lr))            
+            # for i in range(start):
+            #     if (i+1) > (self.num_epochs - self.num_epochs_decay):
+            #         # g_lr -= (self.g_lr / float(self.num_epochs_decay))
+            #         d_lr -= (self.d_lr / float(self.num_epochs_decay))
+            #         self.update_lr(d_lr)
+            #         print ('Decay learning rate to d_lr: {}.'.format(d_lr))            
         else:
             start = 0
 
@@ -279,9 +300,32 @@ class Solver(object):
         # self.show_img(real_x, real_label, fake_list)
         # ipdb.set_trace()
 
+        print("Log path: "+self.log_path)
+
+        Log = " [!!CLS] bs:{}, fold:{}, img:{}, GPU:{}, !{}".format(self.batch_size, self.fold, self.image_size, self.GPU, self.mode_data) 
+
+        if self.DYNAMIC_COLOR: Log += ' [*DYNAMIC_COLOR]'
+        if self.COLOR_JITTER: Log += ' [*COLOR_JITTER]'
+        if self.FOCAL_LOSS: log += ' [*FL]'
+        if self.DENSENET: log += ' [*DENSENET]'
+        # if self.FAKE_CLS: log += ' [*FAKE_CLS]'
+        if self.JUST_REAL: log += ' [*JUST_REAL]'        
+        loss_cum = {}
+        flag_init=True        
+
         for e in range(start, self.num_epochs):
             E = str(e+1).zfill(2)
-            for i, (real_x, real_label, files) in enumerate(self.data_loader):
+            self.D.train()
+            self.G.train()
+
+            if flag_init:
+                f1 = self.val_cls(init=True)   
+                log = '[F1_VAL: %0.3f]'%(np.array(f1).mean())
+                print(log)
+                flag_init = False
+
+            for i, (real_x, real_label, files) in tqdm(enumerate(self.data_loader), \
+                    total=len(self.data_loader), desc='Epoch: %d/%d | %s'%(e,self.num_epochs, Log)):                
 
                 if self.DYNAMIC_COLOR:
                     random_brightness = (torch.rand( real_x.size(0), 1, 1, 1 )-0.5)/3. #-42 to 42
@@ -317,12 +361,20 @@ class Solver(object):
                             fake_label = real_label_[rand_idx]
                         else:
                             fake_label = torch.from_numpy(np.random.randint(0,2,[real_label_.size(0),real_label_.size(1)]).astype(np.float32))
-                            if torch.cuda.is_available():
-                                fake_label = fake_label.cuda()
+                            # if torch.cuda.is_available():
+                            #     fake_label = fake_label.cuda()
 
                         # ipdb.set_trace()
 
                         fake_c = fake_label.clone()
+
+                        if self.CelebA_GAN:
+                            zero2 = torch.zeros(real_x.size(0), self.c2_dim)
+                            mask1 = self.one_hot(torch.zeros(real_x.size(0)), 2)
+                            
+                            try: fake_c = torch.cat([fake_c, zero2, mask1], dim=1)
+                            except: ipdb.set_trace()
+
                         fake_c_var = self.to_var(fake_c)                   
                         try:
                             fake_x = self.G(real_x_var, fake_c_var)
@@ -346,52 +398,73 @@ class Solver(object):
 
                 # ================== LOG ================== #
                 # Compute classification accuracy of the classifier
-                if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
-                    if real_loss_cls is not None:
-                        accuracies = self.compute_accuracy(real_out_cls, real_label_var, self.dataset)
-                        log_real = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
-                    if fake_loss_cls is not None:
-                        accuracies = self.compute_accuracy(fake_out_cls, fake_label_var, self.dataset)
-                        log_fake = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
-                    # ipdb.set_trace()
-                    print('Classification Acc (AU): \n Real: %s \n Fake: %s'%(log_real, log_fake))
+                # if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
+                #     if real_loss_cls is not None:
+                #         accuracies = self.compute_accuracy(real_out_cls, real_label_var, self.dataset)
+                #         log_real = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
+                #     if fake_loss_cls is not None:
+                #         accuracies = self.compute_accuracy(fake_out_cls, fake_label_var, self.dataset)
+                #         log_fake = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
+                #     # ipdb.set_trace()
+                #     print('Classification Acc (AU): \n Real: %s \n Fake: %s'%(log_real, log_fake))
 
 
                 # Logging
                 loss = {}
-                if real_loss_cls is not None: loss['real_loss_cls'] = real_loss_cls.data[0]
-                if fake_loss_cls is not None: loss['fake_loss_cls'] = fake_loss_cls.data[0]
+                if len(loss_cum.keys())==0: 
+                    loss_cum['real_loss_cls'] = []; loss_cum['fake_loss_cls'] = []                
+                if real_loss_cls is not None: 
+                    loss['real_loss_cls'] = real_loss_cls.data[0]
+                    loss_cum['real_loss_cls'].append(real_loss_cls.data[0])
+                if fake_loss_cls is not None: 
+                    loss['fake_loss_cls'] = fake_loss_cls.data[0]
+                    loss_cum['fake_loss_cls'].append(fake_loss_cls.data[0])
 
                 # Print out log info
                 if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
-                    elapsed = time.time() - start_time
-                    elapsed = str(datetime.timedelta(seconds=elapsed))
+                    # elapsed = time.time() - start_time
+                    # elapsed = str(datetime.timedelta(seconds=elapsed))
 
-                    log = "Elapsed [{}], Epoch [{}/{}], Iter [{}/{}] [!CLS] [fold{}] [{}]".format(
-                        elapsed, E, self.num_epochs, i+1, iters_per_epoch, self.fold, self.image_size)                    
+                    # log = "Elapsed [{}], Epoch [{}/{}], Iter [{}/{}] [!CLS] [fold{}] [{}]".format(
+                    #     elapsed, E, self.num_epochs, i+1, iters_per_epoch, self.fold, self.image_size)                    
 
-
-                    if self.FOCAL_LOSS: log += ' [*FL]'
-                    if self.DENSENET: log += ' [*DENSENET]'
-                    # if self.FAKE_CLS: log += ' [*FAKE_CLS]'
-                    if self.JUST_REAL: log += ' [*JUST_REAL]'
-
-
-                    for tag, value in loss.items():
-                        log += ", {}: {:.4f}".format(tag, value)
-                    print(log)
+                    # for tag, value in loss.items():
+                    #     log += ", {}: {:.4f}".format(tag, value)
+                    # print(log)
 
                     if self.use_tensorboard:
-                        print("Log path: "+self.log_path)
+                        # print("Log path: "+self.log_path)
                         for tag, value in loss.items():
                             self.logger.scalar_summary(tag, value, e * iters_per_epoch + i + 1)
 
                 # Save model checkpoints
-                if (i+1) % self.model_save_step == 0 or (i+1)==last_model_step:
-                    # torch.save(self.G.state_dict(),
-                    #     os.path.join(self.model_save_path, '{}_{}_G.pth'.format(e+1, i+1)))
-                    torch.save(self.D.state_dict(),
-                        os.path.join(self.model_save_path, '{}_{}_D.pth'.format(E, i+1)))
+                # if (i+1) % self.model_save_step == 0 or (i+1)==last_model_step:
+                #     # torch.save(self.G.state_dict(),
+                #     #     os.path.join(self.model_save_path, '{}_{}_G.pth'.format(e+1, i+1)))
+                #     torch.save(self.D.state_dict(),
+                #         os.path.join(self.model_save_path, '{}_{}_D.pth'.format(E, i+1)))
+            torch.save(self.D.state_dict(),
+                os.path.join(self.model_save_path, '{}_{}_D.pth'.format(E, i+1)))                
+
+            #F1 val
+            f1 = self.val_cls()
+            if self.use_tensorboard:
+                # print("Log path: "+self.log_path)
+                for idx, au in enumerate(cfg.AUs):
+                    self.logger.scalar_summary('F1_val_'+str(au).zfill(2), f1[idx], e * iters_per_epoch + i + 1)            
+                self.logger.scalar_summary('F1_val_mean', np.array(f1).mean(), e * iters_per_epoch + i + 1)            
+
+                for tag, value in loss_cum.items():
+                    self.logger.scalar_summary(tag, value, e * iters_per_epoch + i + 1)     
+                               
+            #Stats per epoch
+            log = '[F1_VAL: %0.3f]'%(np.array(f1).mean())
+            for tag, value in loss_cum.items():
+                log += ", {}: {:.4f}".format(tag, np.array(value).mean())      
+
+            
+            print(log)
+
 
             # Decay learning rate
             if (e+1) > (self.num_epochs - self.num_epochs_decay):
@@ -427,12 +500,12 @@ class Solver(object):
         if self.pretrained_model:
             start = int(self.pretrained_model.split('_')[0])
             # Decay learning rate
-            for i in range(start):
-                if (i+1) > (self.num_epochs - self.num_epochs_decay):
-                    # g_lr -= (self.g_lr / float(self.num_epochs_decay))
-                    d_lr -= (self.d_lr / float(self.num_epochs_decay))
-                    self.update_lr(d_lr)
-                    print ('Decay learning rate to d_lr: {}.'.format(d_lr))            
+            # for i in range(start):
+            #     if (i+1) > (self.num_epochs - self.num_epochs_decay):
+            #         # g_lr -= (self.g_lr / float(self.num_epochs_decay))
+            #         d_lr -= (self.d_lr / float(self.num_epochs_decay))
+            #         self.update_lr(d_lr)
+            #         print ('Decay learning rate to d_lr: {}.'.format(d_lr))            
         else:
             start = 0
 
@@ -516,8 +589,15 @@ class Solver(object):
                         # else:
                         fake_label = torch.from_numpy(np.random.randint(0,2,[real_x2.size(0),real_label.size(1)]).astype(np.float32))
 
+                        if self.CelebA_GAN:
+                            zero2 = torch.zeros(real_x2.size(0), self.c2_dim)
+                            mask1 = self.one_hot(torch.zeros(real_x2.size(0)), 2)
+                            face_c = torch.cat([fake_label, zero2, mask1], dim=1)
+                        else:
+                            face_c = fake_label.clone()
+
                         # ipdb.set_trace()
-                        fake_c_var = self.to_var(fake_label)                   
+                        fake_c_var = self.to_var(face_c)                   
                         try:
                             fake_x = self.G(real_x_var, fake_c_var)
                         except: 
@@ -548,7 +628,7 @@ class Solver(object):
                         accuracies = self.compute_accuracy(fake_out_cls, fake_label_var, self.dataset)
                         log_fake = ["{:.2f}".format(acc) for acc in accuracies.data.cpu().numpy()]
                     # ipdb.set_trace()
-                    print('Classification Acc (AU): \n Real: %s \n Fake: %s'%(log_real, log_fake))
+                    # print('Classification Acc (AU): \n Real: %s \n Fake: %s'%(log_real, log_fake))
 
 
                 # Logging
@@ -573,10 +653,10 @@ class Solver(object):
 
                     for tag, value in loss.items():
                         log += ", {}: {:.4f}".format(tag, value)
-                    print(log)
+                    # print(log)
 
                     if self.use_tensorboard:
-                        print("Log path: "+self.log_path)
+                        # print("Log path: "+self.log_path)
                         for tag, value in loss.items():
                             self.logger.scalar_summary(tag, value, e * iters_per_epoch + i + 1)
 
@@ -594,6 +674,41 @@ class Solver(object):
                 self.update_lr(d_lr)
                 print ('Decay learning rate to d_lr: {}.'.format(d_lr))
 
+    def val_cls(self, init=False, load=False):
+        """Facial attribute transfer on CelebA or facial expression synthesis on RaFD."""
+        # Load trained parameters
+        from data_loader import get_loader
+        # ipdb.set_trace()
+        data_loader_val = get_loader(self.metadata_path, self.image_size,
+                                   self.image_size, self.batch_size, 'MultiLabelAU', 'val', shuffling=False)
+
+        if init:
+            txt_path = os.path.join(self.model_save_path, 'init_val.txt')
+        else:
+            last_file = sorted(glob.glob(os.path.join(self.model_save_path,  '*_D.pth')))[-1]
+            last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
+            txt_path = os.path.join(self.model_save_path, '{}_{}_val.txt'.format(last_name,'{}'))
+            try:
+                output_txt  = sorted(glob.glob(txt_path.format('*')))[-1]
+                number_file = len(glob.glob(output_txt))
+            except:
+                number_file = 0
+            txt_path = txt_path.format(str(number_file).zfill(2)) 
+        
+        if load:
+            D_path = os.path.join(self.model_save_path, '{}_D.pth'.format(last_name))
+            self.D.load_state_dict(torch.load(D_path))
+
+        self.D.eval()
+
+        self.f=open(txt_path, 'a')     
+        self.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
+        # ipdb.set_trace()
+        # F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
+        # _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
+        f1,_,_ = self.F1_TEST(data_loader_val, thresh = [0.5]*12, mode='VAL', verbose=load)
+        self.f.close()
+        return f1
 
     def test_cls(self):
         """Facial attribute transfer on CelebA or facial expression synthesis on RaFD."""
@@ -618,8 +733,8 @@ class Solver(object):
         self.D.eval()
         # ipdb.set_trace()
         if self.dataset == 'MultiLabelAU':
-            data_loader_train = get_loader(self.metadata_path, self.image_size,
-                                   self.image_size, self.batch_size, 'MultiLabelAU', 'train', no_flipping = True)
+            data_loader_val = get_loader(self.metadata_path, self.image_size,
+                                   self.image_size, self.batch_size, 'MultiLabelAU', 'val', no_flipping = True)
             data_loader_test = get_loader(self.metadata_path, self.image_size,
                                    self.image_size, self.batch_size, 'MultiLabelAU', 'test')
         elif dataset == 'au01_fold0':
@@ -639,19 +754,19 @@ class Solver(object):
         self.f=open(self.output_txt, 'a')     
         self.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
         # ipdb.set_trace()
-        F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
-        _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
+        F1_real, F1_max, max_thresh_val  = self.F1_TEST(data_loader_val, mode = 'VAL')
+        _ = self.F1_TEST(data_loader_test, thresh = max_thresh_val)
      
         self.f.close()
 
-    def F1_TEST(self, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs)):
+    def F1_TEST(self, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs), verbose=True):
 
         PREDICTION = []
         GROUNDTRUTH = []
         total_idx=int(len(data_loader)/self.batch_size)  
         count = 0
         for i, (real_x, org_c, files) in enumerate(data_loader):
-            if os.path.isfile(self.pkl_data.format(mode.lower())): 
+            if mode!='VAL' and os.path.isfile(self.pkl_data.format(mode.lower())): 
                 PREDICTION, GROUNDTRUTH = pickle.load(open(self.pkl_data.format(mode.lower())))
                 break
             # ipdb.set_trace()
@@ -661,30 +776,32 @@ class Solver(object):
             
             # ipdb.set_trace()
             _, out_cls_temp, lstm_input = self.D(real_x, lstm=True)
-            self.save_lstm(lstm_input.data.cpu().numpy(), files)
+            if mode!='VAL': self.save_lstm(lstm_input.data.cpu().numpy(), files)
             # output = ((F.sigmoid(out_cls_temp)>=0.5)*1.).data.cpu().numpy()
             output = F.sigmoid(out_cls_temp)
-            if i==0:
+            if i==0 and verbose:
                 print(mode.upper())
-                print("Predicted:   "+str((output>=0.5)*1))
+                # print("Predicted:   "+str((output>=0.5)*1))
+                print("Predicted:   "+str(output))
                 print("Groundtruth: "+str(org_c))
 
             count += org_c.shape[0]
-            string_ = str(count)+' / '+str(len(data_loader)*self.batch_size)
-            sys.stdout.write("\r%s" % string_)
-            sys.stdout.flush()        
+            if verbose:
+                string_ = str(count)+' / '+str(len(data_loader)*self.batch_size)
+                sys.stdout.write("\r%s" % string_)
+                sys.stdout.flush()        
             # ipdb.set_trace()
 
             PREDICTION.append(output.data.cpu().numpy().tolist())
             GROUNDTRUTH.append(labels.cpu().numpy().astype(np.uint8).tolist())
 
-        if not os.path.isfile(self.pkl_data.format(mode.lower())): 
+        if mode!='VAL' and not os.path.isfile(self.pkl_data.format(mode.lower())): 
             pickle.dump([PREDICTION, GROUNDTRUTH], open(self.pkl_data.format(mode.lower()), 'w'))
-        print("")
+        if verbose:print("")
         print >>self.f, ""
         # print("[Min and Max predicted: "+str(min(prediction))+ " " + str(max(prediction))+"]")
         # print >>self.f, "[Min and Max predicted: "+str(min(prediction))+ " " + str(max(prediction))+"]"
-        print("")
+        if verbose:print("")
 
         PREDICTION = np.vstack(PREDICTION)
         GROUNDTRUTH = np.vstack(GROUNDTRUTH)
@@ -711,135 +828,107 @@ class Solver(object):
 
         for i, au in enumerate(cfg.AUs):
             string = "---> [%s - 0] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_0[i], F1_Thresh_0[i])
-            print(string)
+            if verbose: print(string)
             print >>self.f, string
-        string = "F1 Mean: %.4f"%np.mean(F1_0)
-        print(string)
-        print("")
+        string = "F1 Mean: %.4f\n"%np.mean(F1_0)
+        if verbose: print(string)
         print >>self.f, string
-        print >>self.f, ""
 
         for i, au in enumerate(cfg.AUs):
             string = "---> [%s - 1] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_1[i], F1_Thresh_1[i])
-            print(string)
+            if verbose: print(string)
             print >>self.f, string
-        string = "F1 Mean: %.4f"%np.mean(F1_1)
-        print(string)
-        print("")
+        string = "F1 Mean: %.4f\n"%np.mean(F1_1)
+        if verbose: print(string)
         print >>self.f, string
-        print >>self.f, ""
 
-        string = "###############################\n#######  Threshold 0.5 ########\n###############################"
-        print(string)
-        print("")
+        string = "###############################\n#######  Threshold 0.5 ########\n###############################\n"
+        if verbose: print(string)
         print >>self.f, string
-        print >>self.f, ""  
 
         if mode=='TEST':
             for i, au in enumerate(cfg.AUs):
                 string = "---> [%s] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_real5[i], F1_Thresh5[i])
-                print(string)
+                if verbose: print(string)
                 print >>self.f, string
-            string = "F1 Mean: %.4f"%np.mean(F1_real5)
-            print(string)
-            print("")
+            string = "F1 Mean: %.4f\n"%np.mean(F1_real5)
+            if verbose: print(string)
             print >>self.f, string
-            print >>self.f, ""
 
             for i, au in enumerate(cfg.AUs):
                 string = "---> [%s] AU%s F1_median3: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median3[i], F1_Thresh5[i])
-                print(string)
+                if verbose: print(string)
                 print >>self.f, string
-            string = "F1_median3 Mean: %.4f"%np.mean(F1_median3)
-            print(string)
-            print("")
+            string = "F1_median3 Mean: %.4f\n"%np.mean(F1_median3)
+            if verbose: print(string)
             print >>self.f, string
-            print >>self.f, ""
 
             for i, au in enumerate(cfg.AUs):
                 string = "---> [%s] AU%s F1_median5: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median5[i], F1_Thresh5[i])
-                print(string)
+                if verbose: print(string)
                 print >>self.f, string
-            string = "F1_median5 Mean: %.4f"%np.mean(F1_median5)
-            print(string)
-            print("")
+            string = "F1_median5 Mean: %.4f\n"%np.mean(F1_median5)
+            if verbose: print(string)
             print >>self.f, string
-            print >>self.f, ""
 
             for i, au in enumerate(cfg.AUs):
                 string = "---> [%s] AU%s F1_median7: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median7[i], F1_Thresh5[i])
-                print(string)
+                if verbose: print(string)
                 print >>self.f, string
-            string = "F1_median7 Mean: %.4f"%np.mean(F1_median7)
-            print(string)
-            print("")
+            string = "F1_median7 Mean: %.4f\n"%np.mean(F1_median7)
+            if verbose: print(string)
             print >>self.f, string
-            print >>self.f, ""            
 
         if mode=='TEST':
-            string = "###############################\n######  Threshold Train #######\n###############################"
-            print(string)
-            print("")
-            print >>self.f, string
-            print >>self.f, ""    
+            string = "###############################\n######  Threshold Train #######\n###############################\n"
+            if verbose: print(string)
+            print >>self.f, string 
 
         for i, au in enumerate(cfg.AUs):
             string = "---> [%s] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_real[i], F1_Thresh_0[i])
-            print(string)
+            if verbose: print(string)
             print >>self.f, string
-        string = "F1 Mean: %.4f"%np.mean(F1_real)
-        print(string)
-        print("")
+        string = "F1 Mean: %.4f\n"%np.mean(F1_real)
+        if verbose: print(string)
         print >>self.f, string
-        print >>self.f, ""
 
         if mode=='TEST':
             for i, au in enumerate(cfg.AUs):
                 string = "---> [%s] AU%s F1_median3: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median3_th[i], F1_Thresh[i])
-                print(string)
+                if verbose: print(string)
                 print >>self.f, string
-            string = "F1_median3 Mean: %.4f"%np.mean(F1_median3_th)
-            print(string)
-            print("")
+            string = "F1_median3 Mean: %.4f\n"%np.mean(F1_median3_th)
+            if verbose: print(string)
             print >>self.f, string
-            print >>self.f, ""
 
             for i, au in enumerate(cfg.AUs):
                 string = "---> [%s] AU%s F1_median5: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median5_th[i], F1_Thresh[i])
-                print(string)
+                if verbose: print(string)
                 print >>self.f, string
-            string = "F1_median5 Mean: %.4f"%np.mean(F1_median5_th)
-            print(string)
-            print("")
+            string = "F1_median5 Mean: %.4f\n"%np.mean(F1_median5_th)
+            if verbose: print(string)
             print >>self.f, string
-            print >>self.f, ""
 
             for i, au in enumerate(cfg.AUs):
                 string = "---> [%s] AU%s F1_median7: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median7_th[i], F1_Thresh[i])
-                print(string)
+                if verbose: print(string)
                 print >>self.f, string
-            string = "F1_median7 Mean: %.4f"%np.mean(F1_median7_th)
-            print(string)
-            print("")
+            string = "F1_median7 Mean: %.4f\n"%np.mean(F1_median7_th)
+            if verbose: print(string)
             print >>self.f, string
-            print >>self.f, ""                
 
-        string = "###############################\n#######  Threshold MAX ########\n###############################"
-        print(string)
-        print("")
+        string = "###############################\n#######  Threshold MAX ########\n###############################\n"
+        if verbose: print(string)
         print >>self.f, string
-        print >>self.f, ""  
 
         for i, au in enumerate(cfg.AUs):
             #REAL F1_MAX
             string = "---> [%s] AU%s F1_MAX: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_MAX[i], F1_Thresh_max[i])
-            print(string)
+            if verbose: print(string)
             print >>self.f, string
-        string = "F1 Mean: %.4f"%np.mean(F1_MAX)
-        print(string)
-        print("")
+        string = "F1 Mean: %.4f\n"%np.mean(F1_MAX)
+        if verbose: print(string)
         print >>self.f, string
-        print >>self.f, ""
 
         return F1_real, F1_MAX, F1_Thresh_max     
 
