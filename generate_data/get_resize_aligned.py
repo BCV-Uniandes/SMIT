@@ -16,7 +16,7 @@ from shutil import copyfile
 class Get_Faces():
     def __init__(self):
         pwd = os.getcwd()
-        os.chdir('tools')
+        os.chdir('../tools')
         from get_faces import __init__, face_from_file, imshow
         net_face = __init__()
         os.chdir(pwd)
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--fold', type=str, default='all', help='fold crossvalidation')
     parser.add_argument('--aligned', action='store_true', default=False)
     parser.add_argument('--google', action='store_true', default=False)
-    parser.add_argument('--folder_to_align', type=str, default='data/Google/Org', help='Folder where to perform alignment, optional.')
+    parser.add_argument('--folder_to_align', type=str, default='../data/Google/Org', help='Folder where to perform alignment, optional.')
     #folder_to_align='data/CelebA/Org'
     args = parser.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES']=args.gpu
@@ -78,7 +78,7 @@ if __name__ == '__main__':
         for fold in folds:
             fold = int(fold)
 
-            txt_file  = 'data/MultiLabelAU/aligned/fold_{}/{}.txt'.format(fold, args.mode)
+            txt_file  = '../data/MultiLabelAU/aligned/fold_{}/{}.txt'.format(fold, args.mode)
 
             org_files = [line.split()[0] for line in open(txt_file).readlines()]
 
@@ -147,6 +147,11 @@ if __name__ == '__main__':
             try: imageio.imwrite(face_file, img_face[:,:,::-1])
             except: continue#ipdb.set_trace()
             face_files.append(face_file)
+
+        _f = os.path.abspath(txt_file.replace('.txt', '_faces.txt'))
+        f = open(_f, 'w')           
+        for img in sorted(face_files): f.writelines(img+'\n')
+        f.close()              
 
         if args.aligned: 
             print(' [*] Performing alignment...')

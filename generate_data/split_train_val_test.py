@@ -11,7 +11,7 @@ def all_data():
   img_files = sorted(glob.glob(folder_root+'/*/*/*.jpg'))
   data = []
 
-  root = 'data/MultiLabelAU/normal'
+  root = '../data/MultiLabelAU/normal'
   Test_files = sorted(glob.glob(opj(root, '*', 'Test.txt')))
   test_subjects = []  
   for test_file in Test_files:
@@ -22,7 +22,7 @@ def all_data():
   return img_files, test_subjects
 
 def txt_full_data(mode='normal'):
-  root_folder = 'data/MultiLabelAU/'+mode
+  root_folder = '../data/MultiLabelAU/'+mode
   data, test_subjects = all_data()
   for fold in [0,1,2]:
     txt_file = os.path.join(root_folder, 'fold_'+str(fold), 'train_full.txt')
@@ -40,7 +40,7 @@ def txt_full_data(mode='normal'):
 
 if __name__ == '__main__':
 
-  root = 'data/MultiLabelAU/normal'
+  root = '../datadata/MultiLabelAU/normal'
   aligned = True
 
   Train_files = sorted(glob.glob(opj(root, '*', 'Training.txt')))
