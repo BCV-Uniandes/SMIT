@@ -62,6 +62,11 @@ def main(config):
 
   solver = Solver(MultiLabelAU_loader, config, CelebA=CelebA_loader)
 
+  if config.DISPLAY_NET: 
+    solver.display_net(name='discriminator')
+    solver.display_net(name='generator')
+    return
+
   if config.mode == 'train':
     solver.train()
     solver.test()
@@ -117,6 +122,8 @@ if __name__ == '__main__':
   parser.add_argument('--TEST', action='store_true', default=False)  
   # parser.add_argument('--CelebA_GAN', action='store_true', default=False)  
   parser.add_argument('--CelebA_CLS', action='store_true', default=False)  
+  parser.add_argument('--L1_LOSS', action='store_true', default=False) 
+  parser.add_argument('--L2_LOSS', action='store_true', default=False) 
 
   #Data Normalization
   parser.add_argument('--mean', type=str, default='0.5', choices=['0.5', 'data_image', 'data_full', 'data_full+image'])  
@@ -134,6 +141,7 @@ if __name__ == '__main__':
   # Misc
   parser.add_argument('--mode', type=str, default='train', choices=['train', 'val', 'test'])
   parser.add_argument('--use_tensorboard', action='store_true', default=False)
+  parser.add_argument('--DISPLAY_NET', action='store_true', default=False) 
   parser.add_argument('--DELETE', action='store_true', default=False)
   parser.add_argument('--GPU', type=str, default='0')
 

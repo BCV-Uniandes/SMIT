@@ -110,6 +110,8 @@ def update_config(config):
   if config.COLOR_JITTER: update_folder(config, 'COLOR_JITTER')
   if config.BLUR: update_folder(config, 'BLUR') 
   if config.GRAY: update_folder(config, 'GRAY') 
+  if config.L1_LOSS: update_folder(config, 'L1_LOSS') 
+  if config.L2_LOSS: update_folder(config, 'L2_LOSS') 
   if config.CelebA_CLS: update_folder(config, 'CelebA_CLS')
   if config.FOCAL_LOSS: update_folder(config, 'Focal_Loss')
   if config.JUST_REAL: update_folder(config, 'JUST_REAL')

@@ -1,4 +1,4 @@
-import tensorflow as tf
+# import tensorflow as tf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -63,6 +63,8 @@ class Solver(object):
     self.use_tensorboard = config.use_tensorboard
     self.pretrained_model = config.pretrained_model
 
+    self.L1_LOSS = config.L1_LOSS
+    self.L2_LOSS = config.L2_LOSS
     self.FOCAL_LOSS = config.FOCAL_LOSS
     self.JUST_REAL = config.JUST_REAL
     self.FAKE_CLS = config.FAKE_CLS
@@ -135,9 +137,29 @@ class Solver(object):
     if self.pretrained_model:
       self.load_pretrained_model()
 
-  #=======================================================================================#
-  #=======================================================================================#
 
+  #=======================================================================================#
+  #=======================================================================================#
+  def display_net(self, name='discriminator'):
+    #pip install git+https://github.com/szagoruyko/pytorchviz
+    from graphviz import Digraph
+    from torchviz import make_dot, make_dot_from_trace
+    y = self.C(self.to_var(torch.randn(1,3,self.image_size,self.image_size)))
+    if name=='discriminator':
+      g=make_dot(y, params=dict(self.D.named_parameters()))
+    elif name=='generator':
+      g=make_dot(y, params=dict(self.G.named_parameters()))
+    filename=name
+    g.filename=filename
+    g.render()
+    os.remove(filename)
+
+    from utils import pdf2png
+    pdf2png(filename)
+    print('Network saved at {}.png'.format(filename))
+
+  #=======================================================================================#
+  #=======================================================================================#
   def build_model(self):
     # Define a generator and a discriminator
     if self.DENSENET:
@@ -569,6 +591,8 @@ class Solver(object):
     if self.COLOR_JITTER: Log += ' [*COLOR_JITTER]'
     if self.BLUR: Log += ' [*BLUR]'
     if self.GRAY: Log += ' [*GRAY]'
+    if self.L1_LOSS: Log += ' [*L1_LOSS]'
+    if self.L2_LOSS: Log += ' [*L2_LOSS]'
     if self.MEAN!='0.5': Log += ' [*{}]'.format(self.MEAN)
     print(Log)
     loss_cum = {}
@@ -638,14 +662,22 @@ class Solver(object):
           real_x_D = real_x
         # ipdb.set_trace()
         out_src, out_cls = self.D(real_x_D)
-        d_loss_real = - torch.mean(out_src)
+
+        if self.L1_LOSS:
+          d_loss_real = F.l1_loss(out_src, torch.ones_like(out_src))
+        else:
+          d_loss_real = - torch.mean(out_src)
         # ipdb.set_trace()
         # if self.FOCAL_LOSS:
         #  d_loss_cls = self.focal_loss(
         #    out_cls, real_label) / real_x.size(0)
         # else:
-        d_loss_cls = F.binary_cross_entropy_with_logits(
-          out_cls, real_label, size_average=False) / real_x.size(0)
+        if self.L1_LOSS:
+          d_loss_cls = F.l1_loss(
+            out_cls, real_label, size_average=False) / real_x.size(0)
+        else:
+          d_loss_cls = F.binary_cross_entropy_with_logits(
+            out_cls, real_label, size_average=False) / real_x.size(0)
 
 
         # Compute loss with fake images
@@ -670,7 +702,11 @@ class Solver(object):
 
         fake_x_D = Variable(fake_x_D.data)
         out_src, out_cls = self.D(fake_x_D)
-        d_loss_fake = torch.mean(out_src)
+
+        if self.L1_LOSS:
+          d_loss_fake = F.l1_loss(out_src, torch.zeros_like(out_src))        
+        else:
+          d_loss_fake = torch.mean(out_src)
 
         # Backward + Optimize
         
@@ -679,45 +715,46 @@ class Solver(object):
         d_loss.backward()
         self.d_optimizer.step()
 
-        # Compute gradient penalty
-        alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
-        # ipdb.set_trace()
-        interpolated = Variable(alpha * real_x_D.data + (1 - alpha) * fake_x_D.data, requires_grad=True)
-        out, out_cls = self.D(interpolated)
+        if not self.L1_LOSS: #JUST FOR WGAN
+          # Compute gradient penalty
+          alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
+          # ipdb.set_trace()
+          interpolated = Variable(alpha * real_x_D.data + (1 - alpha) * fake_x_D.data, requires_grad=True)
+          out, out_cls = self.D(interpolated)
 
-        grad = torch.autograd.grad(outputs=out,
-                       inputs=interpolated,
-                       grad_outputs=torch.ones(out.size()).cuda(),
-                       retain_graph=True,
-                       create_graph=True,
-                       only_inputs=True)[0]
+          grad = torch.autograd.grad(outputs=out,
+                         inputs=interpolated,
+                         grad_outputs=torch.ones(out.size()).cuda(),
+                         retain_graph=True,
+                         create_graph=True,
+                         only_inputs=True)[0]
 
-        grad = grad.view(grad.size(0), -1)
-        grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
-        d_loss_gp = torch.mean((grad_l2norm - 1)**2)
+          grad = grad.view(grad.size(0), -1)
+          grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
+          d_loss_gp = torch.mean((grad_l2norm - 1)**2)
 
-        # Backward + Optimize
-        d_loss = self.lambda_gp * d_loss_gp
-        self.reset_grad()
-        d_loss.backward()
-        self.d_optimizer.step()
+          # Backward + Optimize
+          d_loss = self.lambda_gp * d_loss_gp
+          self.reset_grad()
+          d_loss.backward()
+          self.d_optimizer.step()
 
         # Logging
         loss = {}
         loss['D/real'] = d_loss_real.data[0]
         loss['D/fake'] = d_loss_fake.data[0]
         loss['D/cls'] = d_loss_cls.data[0]
-        loss['D/gp'] = d_loss_gp.data[0]
+        if not self.L1_LOSS: loss['D/gp'] = d_loss_gp.data[0]
         if len(loss_cum.keys())==0: 
           loss_cum['D/loss_real'] = []; loss_cum['D/loss_fake'] = []
-          loss_cum['D/loss_cls'] = []; loss_cum['D/loss_gp'] = []
+          loss_cum['D/loss_cls'] = []; loss_cum['G/loss_cls'] = []
           loss_cum['G/loss_fake'] = []; loss_cum['G/loss_rec'] = []
-          loss_cum['G/loss_cls'] = []
+          if not self.L1_LOSS: loss_cum['D/loss_gp'] = []
         loss_cum['D/loss_real'].append(d_loss_real.data[0])
 
         loss_cum['D/loss_fake'].append(d_loss_fake.data[0])
         loss_cum['D/loss_cls'].append(d_loss_cls.data[0])
-        loss_cum['D/loss_gp'].append(d_loss_gp.data[0])
+        if not self.L1_LOSS: loss_cum['D/loss_gp'].append(d_loss_gp.data[0])
 
         #=======================================================================================#
         #======================================= Train G =======================================#
@@ -741,7 +778,11 @@ class Solver(object):
 
           # fake_x_D = self.to_var(fake_x_D)
           out_src, out_cls = self.D(fake_x_D)
-          g_loss_fake = - torch.mean(out_src)
+          if self.L1_LOSS:
+            g_loss_fake = F.l1_loss(out_src, torch.ones_like(out_src))           
+          else:
+            g_loss_fake = - torch.mean(out_src)
+
           g_loss_rec = torch.mean(torch.abs(real_x_G - rec_x))
 
           # if self.FOCAL_LOSS:

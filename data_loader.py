@@ -184,7 +184,7 @@ class MultiLabelAU(Dataset):
     self.shuffling = shuffling
     self.image_size = image_size
     self.MEAN = MEAN
-    file_txt = os.path.join(metadata_path, mode+'.txt')
+    file_txt = os.path.abspath(os.path.join(metadata_path, mode+'.txt'))
     print("Data from: "+file_txt)
     self.lines = open(file_txt, 'r').readlines()
 
@@ -245,7 +245,7 @@ class MultiLabelAU_FULL(Dataset):
     self.lines = open(os.path.join(metadata_path, mode+'.txt'), 'r').readlines()
     self.img = [line.split(' ')[0] for line in self.lines]
 
-    file_txt = os.path.join(metadata_path, mode+'_full.txt')
+    file_txt = os.path.abspath(os.path.join(metadata_path, mode+'_full.txt'))
     print("Data from: "+file_txt)
     self.lines_full = [i.strip() for i in open(file_txt, 'r').readlines()]
     subjects = sorted(list(set([line.split('/')[-3] for line in self.lines])))#Training subjects
@@ -291,13 +291,13 @@ class GooglePhotos(Dataset):
     self.mode = mode
     self.shuffling = shuffling
     MODE = '_aligned_{}'.format(image_size) if mode=='aligned' else ''
-    file_txt = os.path.join('data/Google/data_faces{}.txt'.format(MODE))
+    file_txt = os.path.abspath(os.path.join('data/Google/data_faces{}.txt'.format(MODE)))
     print('Images from: '+file_txt)
     self.lines = open(file_txt, 'r').readlines()
 
     print ('Start preprocessing dataset: Google!')
-    # random.seed(123)
-    random.seed()
+    random.seed(111)
+    # random.seed()
     self.preprocess()
     print ('Finished preprocessing dataset: Google!')
     
