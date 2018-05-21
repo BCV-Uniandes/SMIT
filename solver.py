@@ -64,6 +64,7 @@ class Solver(object):
 
     self.L1_LOSS = config.L1_LOSS
     self.L2_LOSS = config.L2_LOSS
+    self.LSGAN = config.LSGAN
     self.FOCAL_LOSS = config.FOCAL_LOSS
     self.JUST_REAL = config.JUST_REAL
     self.FAKE_CLS = config.FAKE_CLS
@@ -221,83 +222,9 @@ class Solver(object):
   #=======================================================================================#
 
   def denorm(self, x, img_org=None):
+    out = (x + 1) / 2
+    return out.clamp_(0, 1)
 
-    if self.MEAN=='data_full':
-      # ipdb.set_trace()
-      # mean = torch.unsqueeze(self.mean,0)
-      # std = torch.unsqueeze(self.std,0)
-      # mean_list = [mean for i in range(int(x.size(3)/x.size(2)))]
-      # std_list = [std for i in range(int(x.size(3)/x.size(2)))]
-      # mean_list = torch.cat(mean_list, dim=3)
-      # std_list = torch.cat(std_list, dim=3)
-
-      # out = (x.cpu()*std_list)+mean_list
-      out = (x*self.std.data.cpu().view(1,-1,1,1))+self.mean.data.cpu().view(1,-1,1,1)
-      return out.clamp_(0, 1)
-
-    elif self.MEAN=='data_image':
-      # ipdb.set_trace()
-      if img_org is None: raise ValueError('Mean <data_image> require image to denorm')
-      # if img_org is None: img_org = self.real_x.data
-      # mean = (img_org.data.cpu().mean(dim=3).mean(dim=2)).view(img_org.size(0), img_org.size(1),1,1)
-      # std = (img_org.data.cpu().std(dim=3).std(dim=2)).view(img_org.size(0), img_org.size(1),1,1)
-
-      mean = torch.from_numpy(img_org.cpu().numpy().mean(axis=(3,2)).reshape(img_org.size(0),img_org.size(1),1,1))
-      std = torch.from_numpy(img_org.cpu().numpy().std(axis=(3,2)).reshape(img_org.size(0),img_org.size(1),1,1))
-
-      out = (x*std)+mean
-      return out.clamp_(0, 1)   
-
-    else:     
-      out = (x + 1) / 2
-      return out.clamp_(0, 1)
-
-  #=======================================================================================#
-  #=======================================================================================#
-
-  def norm(self, x):
-    if self.MEAN=='data_image':
-      # ipdb.set_trace()
-      mean = torch.from_numpy(x.data.cpu().numpy().mean(axis=(3,2)).reshape(x.size(0),x.size(1),1,1))
-      std  = torch.from_numpy(x.data.cpu().numpy().std(axis=(3,2)).reshape(x.size(0),x.size(1),1,1))
-
-      mean = self.to_var(mean)
-      std = self.to_var(std)
-
-      out = (x - mean) / std
-
-    elif self.MEAN=='data_full':
-      # mean_img = 'data/face_{}_mean.npy'.format(self.mode_data)
-      # std_img = 'data/face_{}_std.npy'.format(self.mode_data)
-      # print("Mean and Std from data: %s and %s"%(mean_img,std_img))
-      # mean = np.load(mean_img).astype(np.float64).transpose(2,0,1)/255.
-      # std = np.load(std_img).astype(np.float64).transpose(2,0,1)/255.   
-      # ipdb.set_trace()
-      out = (x - self.mean.view(1,-1,1,1)) / self.std.view(1,-1,1,1)
-
-    return out
-
-  #=======================================================================================#
-  #=======================================================================================#
-
-  def get_max_dataset(self):
-    max_data = []
-    mean=0.0
-    std=0.0
-    for real_x, real_label, files in tqdm(self.MultiLabelAU_loader, desc='Confirming mean'):
-      if self.G_norm:
-        real_x = self.norm(self.to_var(real_x, volatile=True))
-      # ipdb.set_trace()
-      max_data.append(real_x.max().data[0])#.max(dim=3)[0].max(dim=2)[0].max(dim=1)[0]
-      # mean += real_x.data.mean(0) / (float(len(self.MultiLabelAU_loader.dataset)))
-    # for real_x, real_label, files in tqdm(self.MultiLabelAU_loader, desc='Confirming std'):
-    #   if self.G_norm:
-    #     real_x = self.norm(self.to_var(real_x, volatile=True))
-    #   ipdb.set_trace()
-    #   std += ((real_x - mean)**2).sum(3).sum(2).sum(0) / (float(len(self.MultiLabelAU_loader.dataset))*real_x.size(2)*real_x.size(3))
-    # ipdb.set_trace()
-    # std = torch.sqrt(std_channels )
-    return np.max(max_data)
 
   #=======================================================================================#
   #=======================================================================================#
@@ -389,7 +316,6 @@ class Solver(object):
 
   def blurRANDOM(self, img,):
     self.blurrandom +=1
-
     np.random.seed(self.blurrandom) 
     gray = np.random.randint(0,2,img.size(0))
     np.random.seed(self.blurrandom)
@@ -432,8 +358,6 @@ class Solver(object):
 
     for fl in fake_label:
       # ipdb.set_trace()
-      if self.G_norm:
-        fl = fl*self.MAX_DATASET
       if flag_time:
         start=time.time()
       fake_image_list.append(self.G(img, self.to_var(fl.data, volatile=True)))
@@ -546,6 +470,7 @@ class Solver(object):
     if self.COLOR_JITTER: Log += ' [*COLOR_JITTER]'
     if self.BLUR: Log += ' [*BLUR]'
     if self.GRAY: Log += ' [*GRAY]'
+    if self.LSGAN: Log += ' [*LSGAN]'
     if self.L1_LOSS: Log += ' [*L1_LOSS]'
     if self.L2_LOSS: Log += ' [*L2_LOSS]'
     if self.MEAN!='0.5': Log += ' [*{}]'.format(self.MEAN)
@@ -605,7 +530,10 @@ class Solver(object):
         #=======================================================================================#
         out_src, out_cls = self.D(real_x)
 
-        d_loss_real = - torch.mean(out_src)
+        if self.LSGAN:
+          d_loss_real = F.mse_loss(out_src, torch.ones_like(out_src))
+        else:
+          d_loss_real = - torch.mean(out_src)
 
         d_loss_cls = F.binary_cross_entropy_with_logits(
           out_cls, real_label, size_average=False) / real_x.size(0)
@@ -615,7 +543,10 @@ class Solver(object):
         fake_x_D = Variable(fake_x.data)
         out_src, out_cls = self.D(fake_x)
 
-        d_loss_fake = torch.mean(out_src)
+        if self.LSGAN:
+          d_loss_fake = F.mse_loss(out_src, torch.zeros_like(out_src))
+        else:
+          d_loss_fake = torch.mean(out_src)
 
         # Backward + Optimize
         
@@ -628,27 +559,30 @@ class Solver(object):
         #=================================== Gradient Penalty ==================================#
         #=======================================================================================#
         # Compute gradient penalty
-        alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
-        # ipdb.set_trace()
-        interpolated = Variable(alpha * real_x.data + (1 - alpha) * fake_x.data, requires_grad=True)
-        out, out_cls = self.D(interpolated)
+        if not self.LSGAN:
+          alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
+          # ipdb.set_trace()
+          interpolated = Variable(alpha * real_x.data + (1 - alpha) * fake_x.data, requires_grad=True)
+          out, out_cls = self.D(interpolated)
 
-        grad = torch.autograd.grad(outputs=out,
-                       inputs=interpolated,
-                       grad_outputs=torch.ones(out.size()).cuda(),
-                       retain_graph=True,
-                       create_graph=True,
-                       only_inputs=True)[0]
+          grad = torch.autograd.grad(outputs=out,
+                         inputs=interpolated,
+                         grad_outputs=torch.ones(out.size()).cuda(),
+                         retain_graph=True,
+                         create_graph=True,
+                         only_inputs=True)[0]
 
-        grad = grad.view(grad.size(0), -1)
-        grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
-        d_loss_gp = torch.mean((grad_l2norm - 1)**2)
+          grad = grad.view(grad.size(0), -1)
+          grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
+          d_loss_gp = torch.mean((grad_l2norm - 1)**2)
 
-        # Backward + Optimize
-        d_loss = self.lambda_gp * d_loss_gp
-        self.reset_grad()
-        d_loss.backward()
-        self.d_optimizer.step()
+          # Backward + Optimize
+          d_loss = self.lambda_gp * d_loss_gp
+          self.reset_grad()
+          d_loss.backward()
+          self.d_optimizer.step()
+        else:
+          d_loss_gp = Variable(torch.FloatTensor([0]), volatile=True)
 
         # Logging
         loss = {}
@@ -676,7 +610,10 @@ class Solver(object):
           rec_x = self.G(fake_x, real_c)
           out_src, out_cls = self.D(fake_x)
           
-          g_loss_fake = - torch.mean(out_src)
+          if self.LSGAN:
+            g_loss_fake = F.mse_loss(out_src, torch.ones_like(out_src))
+          else:          
+            g_loss_fake = - torch.mean(out_src)
 
           g_loss_rec = torch.mean(torch.abs(real_x - rec_x))
 
@@ -684,8 +621,8 @@ class Solver(object):
             out_cls, fake_label, size_average=False) / fake_x.size(0)
 
           if self.L1_LOSS:
-            g_l1 = F.l1_loss(fake_x, real_x, size_average=False) / fake_x.size(0) + \
-                 F.l1_loss(rec_x, fake_x, size_average=False) / fake_x.size(0)
+            g_l1 = F.l1_loss(fake_x, real_x) + \
+                 F.l1_loss(rec_x, fake_x)
             # ipdb.set_trace()
           else:
             g_l1 = 0.0

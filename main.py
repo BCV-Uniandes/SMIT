@@ -117,6 +117,7 @@ if __name__ == '__main__':
   parser.add_argument('--TEST', action='store_true', default=False)  
   # parser.add_argument('--CelebA_GAN', action='store_true', default=False)  
   parser.add_argument('--CelebA_CLS', action='store_true', default=False)  
+  parser.add_argument('--LSGAN', action='store_true', default=False) 
   parser.add_argument('--L1_LOSS', action='store_true', default=False) 
   parser.add_argument('--L2_LOSS', action='store_true', default=False) 
 
