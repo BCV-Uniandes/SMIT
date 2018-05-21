@@ -87,14 +87,7 @@ def F1_TEST(config, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs), sho
         # fake_c=labels_dummy.clone()*0
         fake_c[:,i]=1
 
-        if config.CelebA_loader is not None:
-          zero2 = torch.zeros(real_x.size(0), config.c2_dim)
-          mask1 = config.one_hot(torch.zeros(real_x.size(0)), 2)
-          zero2 = config.to_var(zero2, volatile=True)           
-          mask1 = config.to_var(mask1, volatile=True)
-          fake_c_ = torch.cat([fake_c.clone(), zero2, mask1], dim=1)
-        else:
-          fake_c_ = fake_c.clone()
+        fake_c_ = fake_c.clone()
 
         fake_list.append(fake_c_)
       config.show_img(real_x, labels_dummy, fake_list, ppt=config.PPT)
@@ -102,7 +95,6 @@ def F1_TEST(config, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs), sho
     ######################################################
     
     _, out_cls_temp, lstm_input = config.D(real_x, lstm=True)
-    if config.CelebA_loader is not None: out_cls_temp = out_cls_temp[:,:config.c_dim]
     if mode!='VAL': config.save_lstm(lstm_input.data.cpu().numpy(), files)
     # output = ((F.sigmoid(out_cls_temp)>=0.5)*1.).data.cpu().numpy()
     output = F.sigmoid(out_cls_temp)

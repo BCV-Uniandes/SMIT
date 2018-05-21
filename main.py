@@ -47,11 +47,6 @@ def main(config):
                    LSTM=config.LSTM, color_jitter=config.COLOR_JITTER, \
                    mean=config.mean, std=config.std, num_workers=config.num_workers)   
 
-  if config.CelebA:
-    CelebA_loader = get_loader(config.metadata_path, img_size,
-                   img_size, config.batch_size, 'CelebA', config.mode, \
-                   LSTM=config.LSTM, mean=config.mean, std=config.std, num_workers=config.num_workers)
-
   # Solver
   if config.LSTM:
     from solver_lstm import Solver
@@ -60,7 +55,7 @@ def main(config):
   else:
     from solver import Solver    
 
-  solver = Solver(MultiLabelAU_loader, config, CelebA=CelebA_loader)
+  solver = Solver(MultiLabelAU_loader, config)
 
   if config.DISPLAY_NET: 
     solver.display_net(name='discriminator')
