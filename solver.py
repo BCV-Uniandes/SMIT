@@ -195,7 +195,7 @@ class Solver(object):
     for p in model.parameters():
       num_params += p.numel()
     # print(name)
-    print(model)
+    # print(model)
     print("The number of parameters: {}".format(num_params))
 
   #=======================================================================================#
@@ -611,7 +611,7 @@ class Solver(object):
 
       desc_bar = 'Epoch: %d/%d'%(e,self.num_epochs)
       progress_bar = tqdm(enumerate(self.data_loader), \
-          total=len(self.data_loader), desc=desc_bar)
+          total=len(self.data_loader), desc=desc_bar, ncols=10)
       for i, (real_x, real_label, files) in progress_bar:
         
         # save_image(self.denorm(real_x.cpu()), 'dm1.png',nrow=1, padding=0)
@@ -672,12 +672,8 @@ class Solver(object):
         #  d_loss_cls = self.focal_loss(
         #    out_cls, real_label) / real_x.size(0)
         # else:
-        if self.L1_LOSS:
-          d_loss_cls = F.l1_loss(
-            out_cls, real_label, size_average=False) / real_x.size(0)
-        else:
-          d_loss_cls = F.binary_cross_entropy_with_logits(
-            out_cls, real_label, size_average=False) / real_x.size(0)
+        d_loss_cls = F.binary_cross_entropy_with_logits(
+          out_cls, real_label, size_average=False) / real_x.size(0)
 
 
         # Compute loss with fake images
@@ -815,7 +811,7 @@ class Solver(object):
         # Print out log info
         if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
           # progress_bar.set_postfix(G_loss_rec=np.array(loss_cum['G/loss_rec']).mean())
-          progress_bar.set_postfix(**loss)
+          # progress_bar.set_postfix(**loss)
           if (i+1)==last_model_step or self.D_norm or self.G_norm: progress_bar.set_postfix('')
           if self.use_tensorboard:
             for tag, value in loss.items():
@@ -880,7 +876,7 @@ class Solver(object):
         g_lr -= (self.g_lr / float(self.num_epochs_decay))
         d_lr -= (self.d_lr / float(self.num_epochs_decay))
         self.update_lr(g_lr, d_lr)
-        print ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
+        # print ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
   #=======================================================================================#
   #=======================================================================================#
