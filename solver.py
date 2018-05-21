@@ -29,10 +29,9 @@ warnings.filterwarnings('ignore')
 
 class Solver(object):
 
-  def __init__(self, MultiLabelAU_loader, config, CelebA=None):
+  def __init__(self, data_loader, config):
     # Data loader
-    self.MultiLabelAU_loader = MultiLabelAU_loader
-    self.CelebA_loader = CelebA
+    self.data_loader = data_loader
 
     # Model hyper-parameters
     self.c_dim = config.c_dim
@@ -81,31 +80,6 @@ class Solver(object):
     self.std = config.std
     self.D_norm = config.D_norm
     self.G_norm = config.G_norm
-
-    if self.MEAN in ['data_full','data_image']:
-      self.tanh=False
-      if self.MEAN=='data_full':
-        mean_img = 'data/stats/channels_{}_mean.npy'.format(config.mode_data)
-        std_img = 'data/stats/channels_{}_std.npy'.format(config.mode_data)
-        print("Mean and Std from data: %s and %s"%(mean_img,std_img))
-        # ipdb.set_trace()
-        self.mean = np.load(mean_img).astype(np.float64)/255.#.transpose(2,0,1)/255.
-        self.std = np.load(std_img).astype(np.float64)/255.#.transpose(2,0,1)/255.
-        # self.mean = self.to_var(torch.FloatTensor(self.mean.mean(axis=(1,2))))
-        # self.std = self.to_var(torch.FloatTensor(self.std.std(axis=(1,2))))
-
-        self.mean = self.to_var(torch.FloatTensor(self.mean))
-        self.std = self.to_var(torch.FloatTensor(self.std))
-
-        self.MAX_DATASET = 20#10#self.get_max_dataset()
-    else:
-      self.tanh=True
-
-    #Training Binary Classifier Settings
-    # self.au_model = config.au_model
-    # self.au = config.au
-    # self.multi_binary = config.multi_binary
-    # self.pretrained_model_generator = config.pretrained_model_generator
 
     # Test settings
     self.test_model = config.test_model
@@ -168,12 +142,8 @@ class Solver(object):
       self.D = Discriminator(num_classes = self.c_dim) 
     else:
       from model import Generator, Discriminator
-      if self.CelebA_loader is not None:
-        self.G = Generator(self.g_conv_dim, self.c_dim+self.c2_dim+2, self.g_repeat_num)
-        self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim+self.c2_dim, self.d_repeat_num) 
-      else:
-        self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num, tanh=self.tanh)
-        self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim, self.d_repeat_num, mean=self.mean, std=self.std) 
+      self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
+      self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim, self.d_repeat_num, mean=self.mean, std=self.std) 
 
     # Optimizers
     self.g_optimizer = torch.optim.Adam(self.G.parameters(), self.g_lr, [self.beta1, self.beta2])
@@ -341,15 +311,11 @@ class Solver(object):
   #=======================================================================================#
 
   def compute_accuracy(self, x, y, dataset):
-    if dataset == 'CelebA' or dataset=='MultiLabelAU':
-      x = F.sigmoid(x)
-      predicted = self.threshold(x)
-      correct = (predicted == y).float()
-      accuracy = torch.mean(correct, dim=0) * 100.0
-    else:
-      _, predicted = torch.max(x, dim=1)
-      correct = (predicted == y).float()
-      accuracy = torch.mean(correct) * 100.0
+    x = F.sigmoid(x)
+    predicted = self.threshold(x)
+    correct = (predicted == y).float()
+    accuracy = torch.mean(correct, dim=0) * 100.0
+
     return accuracy
 
   #=======================================================================================#
@@ -527,12 +493,6 @@ class Solver(object):
   def train(self):
     """Train StarGAN within a single dataset."""
 
-    # Set dataloader
-    if self.dataset == 'MultiLabelAU':
-      self.data_loader = self.MultiLabelAU_loader     
-    elif self.dataset == 'au01_fold0':
-      self.data_loader = self.au_loader   
-
     # The number of iterations per epoch
     iters_per_epoch = len(self.data_loader)
 
@@ -551,17 +511,12 @@ class Solver(object):
     fixed_x = torch.cat(fixed_x, dim=0)
     fixed_x = self.to_var(fixed_x, volatile=True)
     real_c = torch.cat(real_c, dim=0)
-    
-    if self.dataset == 'CelebA':
-      fixed_c_list = self.make_celeb_labels(real_c)
-    # elif self.dataset == 'MultiLabelAU':
-    #  fixed_c_list = [self.to_var(torch.FloatTensor(np.random.randint(0,2,[self.batch_size*4,self.c_dim])), volatile=True)]*4
-    elif self.dataset == 'MultiLabelAU':
-      fixed_c_list = [self.to_var(torch.zeros(fixed_x.size(0), self.c_dim), volatile=True)]
-      for i in range(self.c_dim):
-        # ipdb.set_trace()
-        fixed_c = self.one_hot(torch.ones(fixed_x.size(0)) * i, self.c_dim)
-        fixed_c_list.append(self.to_var(fixed_c, volatile=True))
+
+    fixed_c_list = [self.to_var(torch.zeros(fixed_x.size(0), self.c_dim), volatile=True)]
+    for i in range(self.c_dim):
+      # ipdb.set_trace()
+      fixed_c = self.one_hot(torch.ones(fixed_x.size(0)) * i, self.c_dim)
+      fixed_c_list.append(self.to_var(fixed_c, volatile=True))
 
 
     # lr cache for decaying
@@ -603,11 +558,11 @@ class Solver(object):
       self.D.train()
       self.G.train()
 
-      if flag_init:
-        f1, loss, f1_1 = self.val_cls(init=True)   
-        log = '[F1_VAL: %0.3f (F1_1: %0.3f) LOSS_VAL: %0.3f]'%(np.mean(f1), np.mean(f1_1), np.mean(loss))
-        print(log)
-        flag_init = False
+      # if flag_init:
+      #   f1, loss, f1_1 = self.val_cls(init=True)   
+      #   log = '[F1_VAL: %0.3f (F1_1: %0.3f) LOSS_VAL: %0.3f]'%(np.mean(f1), np.mean(f1_1), np.mean(loss))
+      #   print(log)
+      #   flag_init = False
 
       desc_bar = 'Epoch: %d/%d'%(e,self.num_epochs)
       progress_bar = tqdm(enumerate(self.data_loader), \
@@ -615,8 +570,6 @@ class Solver(object):
       for i, (real_x, real_label, files) in progress_bar:
         
         # save_image(self.denorm(real_x.cpu()), 'dm1.png',nrow=1, padding=0)
-
-
         #=======================================================================================#
         #========================================== BLUR =======================================#
         #=======================================================================================#
@@ -631,18 +584,14 @@ class Solver(object):
           
 
         #=======================================================================================#
-        #==================================== DATA 2 VAR =======================================#
+        #====================================== DATA2VAR =======================================#
         #=======================================================================================#
         # Generat fake labels randomly (target domain labels)
         rand_idx = torch.randperm(real_label.size(0))
         fake_label = real_label[rand_idx]
-        # ipdb.set_trace()
-        if self.dataset == 'CelebA' or self.dataset=='MultiLabelAU':
-          real_c = real_label.clone()
-          fake_c = fake_label.clone()
-        else:
-          real_c = self.one_hot(real_label, self.c_dim)
-          fake_c = self.one_hot(fake_label, self.c_dim)
+        
+        real_c = real_label.clone()
+        fake_c = fake_label.clone()
 
         # Convert tensor to variable
         real_x = self.to_var(real_x)
@@ -654,55 +603,19 @@ class Solver(object):
         #=======================================================================================#
         #======================================== Train D ======================================#
         #=======================================================================================#
-        # ipdb.set_trace()
-        # Compute loss with real images
-        if self.D_norm:
-          real_x_D = self.norm(real_x)
-        else:
-          real_x_D = real_x
-        # ipdb.set_trace()
-        out_src, out_cls = self.D(real_x_D)
+        out_src, out_cls = self.D(real_x)
 
-        if self.L1_LOSS:
-          d_loss_real = F.l1_loss(out_src, torch.ones_like(out_src))
-        else:
-          d_loss_real = - torch.mean(out_src)
-        # ipdb.set_trace()
-        # if self.FOCAL_LOSS:
-        #  d_loss_cls = self.focal_loss(
-        #    out_cls, real_label) / real_x.size(0)
-        # else:
+        d_loss_real = - torch.mean(out_src)
+
         d_loss_cls = F.binary_cross_entropy_with_logits(
           out_cls, real_label, size_average=False) / real_x.size(0)
 
+        # Compute loss with fake images    
+        fake_x = self.G(real_x, fake_c)
+        fake_x_D = Variable(fake_x.data)
+        out_src, out_cls = self.D(fake_x)
 
-        # Compute loss with fake images
-        if self.G_norm:
-          real_x_G = self.norm(real_x)
-          # fake_c = fake_c*int(real_x_G.max)
-          fake_c = fake_c*self.MAX_DATASET
-          # ipdb.set_trace()
-        else:
-          real_x_G = real_x         
-
-        fake_x = self.G(real_x_G, fake_c)
-
-        if self.D_norm and self.G_norm:
-          fake_x_D = fake_x #self.norm(fake_x.data.clone())
-        elif self.D_norm and not self.G_norm:
-          fake_x_D = self.norm(fake_x)
-        elif not self.D_norm and self.G_norm:
-          fake_x_D = self.to_var(self.denorm(fake_x.data.cpu(), real_x.data))
-        else:
-          fake_x_D = fake_x
-
-        fake_x_D = Variable(fake_x_D.data)
-        out_src, out_cls = self.D(fake_x_D)
-
-        if self.L1_LOSS:
-          d_loss_fake = F.l1_loss(out_src, torch.zeros_like(out_src))        
-        else:
-          d_loss_fake = torch.mean(out_src)
+        d_loss_fake = torch.mean(out_src)
 
         # Backward + Optimize
         
@@ -711,46 +624,47 @@ class Solver(object):
         d_loss.backward()
         self.d_optimizer.step()
 
-        if not self.L1_LOSS: #JUST FOR WGAN
-          # Compute gradient penalty
-          alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
-          # ipdb.set_trace()
-          interpolated = Variable(alpha * real_x_D.data + (1 - alpha) * fake_x_D.data, requires_grad=True)
-          out, out_cls = self.D(interpolated)
+        #=======================================================================================#
+        #=================================== Gradient Penalty ==================================#
+        #=======================================================================================#
+        # Compute gradient penalty
+        alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
+        # ipdb.set_trace()
+        interpolated = Variable(alpha * real_x.data + (1 - alpha) * fake_x.data, requires_grad=True)
+        out, out_cls = self.D(interpolated)
 
-          grad = torch.autograd.grad(outputs=out,
-                         inputs=interpolated,
-                         grad_outputs=torch.ones(out.size()).cuda(),
-                         retain_graph=True,
-                         create_graph=True,
-                         only_inputs=True)[0]
+        grad = torch.autograd.grad(outputs=out,
+                       inputs=interpolated,
+                       grad_outputs=torch.ones(out.size()).cuda(),
+                       retain_graph=True,
+                       create_graph=True,
+                       only_inputs=True)[0]
 
-          grad = grad.view(grad.size(0), -1)
-          grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
-          d_loss_gp = torch.mean((grad_l2norm - 1)**2)
+        grad = grad.view(grad.size(0), -1)
+        grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
+        d_loss_gp = torch.mean((grad_l2norm - 1)**2)
 
-          # Backward + Optimize
-          d_loss = self.lambda_gp * d_loss_gp
-          self.reset_grad()
-          d_loss.backward()
-          self.d_optimizer.step()
+        # Backward + Optimize
+        d_loss = self.lambda_gp * d_loss_gp
+        self.reset_grad()
+        d_loss.backward()
+        self.d_optimizer.step()
 
         # Logging
         loss = {}
         loss['D/real'] = d_loss_real.data[0]
         loss['D/fake'] = d_loss_fake.data[0]
         loss['D/cls'] = d_loss_cls.data[0]
-        if not self.L1_LOSS: loss['D/gp'] = d_loss_gp.data[0]
+        loss['D/gp'] = d_loss_gp.data[0]
         if len(loss_cum.keys())==0: 
-          loss_cum['D/loss_real'] = []; loss_cum['D/loss_fake'] = []
-          loss_cum['D/loss_cls'] = []; loss_cum['G/loss_cls'] = []
-          loss_cum['G/loss_fake'] = []; loss_cum['G/loss_rec'] = []
-          if not self.L1_LOSS: loss_cum['D/loss_gp'] = []
-        loss_cum['D/loss_real'].append(d_loss_real.data[0])
-
-        loss_cum['D/loss_fake'].append(d_loss_fake.data[0])
-        loss_cum['D/loss_cls'].append(d_loss_cls.data[0])
-        if not self.L1_LOSS: loss_cum['D/loss_gp'].append(d_loss_gp.data[0])
+          loss_cum['D/real'] = []; loss_cum['D/fake'] = []
+          loss_cum['D/cls'] = []; loss_cum['G/cls'] = []
+          loss_cum['G/fake'] = []; loss_cum['G/rec'] = []
+          loss_cum['D/gp'] = []; loss_cum['G/l1'] = []
+        loss_cum['D/real'].append(d_loss_real.data[0])
+        loss_cum['D/fake'].append(d_loss_fake.data[0])
+        loss_cum['D/cls'].append(d_loss_cls.data[0])
+        loss_cum['D/gp'].append(d_loss_gp.data[0])
 
         #=======================================================================================#
         #======================================= Train G =======================================#
@@ -758,39 +672,27 @@ class Solver(object):
         if (i+1) % self.d_train_repeat == 0:
 
           # Original-to-target and target-to-original domain
-          fake_x = self.G(real_x_G, fake_c)
-          if self.G_norm:
-            real_c = real_c*int(fake_x.max())         
+          fake_x = self.G(real_x, fake_c)
           rec_x = self.G(fake_x, real_c)
+          out_src, out_cls = self.D(fake_x)
+          
+          g_loss_fake = - torch.mean(out_src)
 
-          if self.D_norm and self.G_norm:
-            fake_x_D = fake_x #self.norm(fake_x.data.clone())
-          elif self.D_norm and not self.G_norm:
-            fake_x_D = self.norm(fake_x)
-          elif not self.D_norm and self.G_norm:
-            fake_x_D = self.to_var(self.denorm(fake_x.data.cpu(), real_x.data))
-          else:
-            fake_x_D = fake_x
+          g_loss_rec = torch.mean(torch.abs(real_x - rec_x))
 
-          # fake_x_D = self.to_var(fake_x_D)
-          out_src, out_cls = self.D(fake_x_D)
-          if self.L1_LOSS:
-            g_loss_fake = F.l1_loss(out_src, torch.ones_like(out_src))           
-          else:
-            g_loss_fake = - torch.mean(out_src)
-
-          g_loss_rec = torch.mean(torch.abs(real_x_G - rec_x))
-
-          # if self.FOCAL_LOSS:
-          #  g_loss_cls = self.focal_loss(
-          #    out_cls, fake_label) / fake_x.size(0)
-          # else:
           g_loss_cls = F.binary_cross_entropy_with_logits(
             out_cls, fake_label, size_average=False) / fake_x.size(0)
 
+          if self.L1_LOSS:
+            g_l1 = F.l1_loss(fake_x, real_x, size_average=False) / fake_x.size(0) + \
+                 F.l1_loss(rec_x, fake_x, size_average=False) / fake_x.size(0)
+            # ipdb.set_trace()
+          else:
+            g_l1 = 0.0
+
 
           # Backward + Optimize
-          g_loss = g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls
+          g_loss = g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls + g_l1 * 0.5
           self.reset_grad()
           g_loss.backward()
           self.g_optimizer.step()
@@ -799,10 +701,14 @@ class Solver(object):
           loss['G/fake'] = g_loss_fake.data[0]
           loss['G/rec'] = g_loss_rec.data[0]
           loss['G/cls'] = g_loss_cls.data[0]
+          loss['G/l1'] = g_l1.data[0]
 
-          loss_cum['G/loss_fake'].append(g_loss_fake.data[0])
-          loss_cum['G/loss_rec'].append(g_loss_rec.data[0])
-          loss_cum['G/loss_cls'].append(g_loss_cls.data[0])
+
+          loss_cum['G/fake'].append(g_loss_fake.data[0])
+          loss_cum['G/rec'].append(g_loss_rec.data[0])
+          loss_cum['G/cls'].append(g_loss_cls.data[0])
+          loss_cum['G/l1'].append(g_l1.data[0])
+
 
         #=======================================================================================#
         #========================================MISCELANEOUS===================================#
@@ -812,7 +718,7 @@ class Solver(object):
         if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
           # progress_bar.set_postfix(G_loss_rec=np.array(loss_cum['G/loss_rec']).mean())
           # progress_bar.set_postfix(**loss)
-          if (i+1)==last_model_step or self.D_norm or self.G_norm: progress_bar.set_postfix('')
+          # if (i+1)==last_model_step: progress_bar.set_postfix('')
           if self.use_tensorboard:
             for tag, value in loss.items():
               self.logger.scalar_summary(tag, value, e * iters_per_epoch + i + 1)
@@ -820,18 +726,10 @@ class Solver(object):
         # Translate fixed images for debugging
         if (i+1) % self.sample_step == 0 or (i+1)==last_model_step or i+e==0:
           self.G.eval()
-          if self.G_norm:
-            fake_image_list = [self.norm(fixed_x)]
-          else:
-            fake_image_list = [fixed_x]
+          fake_image_list = [fixed_x]
           # ipdb.set_trace()
           for fixed_c in fixed_c_list:
-            if self.G_norm:
-              fixed_x_G = self.norm(fixed_x)
-              fixed_c = fixed_c*self.MAX_DATASET               
-            else:
-              fixed_x_G = fixed_x              
-            fake_image_list.append(self.G(fixed_x_G, fixed_c))
+            fake_image_list.append(self.G(fixed_x, fixed_c))
           fake_images = torch.cat(fake_image_list, dim=3)
           # ipdb.set_trace()
           shape0 = min(64, fake_images.data.cpu().shape[0])
@@ -850,22 +748,23 @@ class Solver(object):
       #=========================================METRICS=======================================#
       #=======================================================================================#
       #F1 val
-      f1, loss,_ = self.val_cls()
-      if self.use_tensorboard:
-        # print("Log path: "+self.log_path)
-        for idx, au in enumerate(cfg.AUs):
-          self.logger.scalar_summary('F1_val_'+str(au).zfill(2), f1[idx], e * iters_per_epoch + i + 1)      
-          self.logger.scalar_summary('Loss_val_'+str(au).zfill(2), loss[idx], e * iters_per_epoch + i + 1)      
-        self.logger.scalar_summary('F1_val_mean', np.array(f1).mean(), e * iters_per_epoch + i + 1)     
-        self.logger.scalar_summary('Loss_val_mean', np.array(loss).mean(), e * iters_per_epoch + i + 1)     
+      # f1, loss,_ = self.val_cls()
+      # if self.use_tensorboard:
+      #   # print("Log path: "+self.log_path)
+      #   for idx, au in enumerate(cfg.AUs):
+      #     self.logger.scalar_summary('F1_val_'+str(au).zfill(2), f1[idx], e * iters_per_epoch + i + 1)      
+      #     self.logger.scalar_summary('Loss_val_'+str(au).zfill(2), loss[idx], e * iters_per_epoch + i + 1)      
+      #   self.logger.scalar_summary('F1_val_mean', np.array(f1).mean(), e * iters_per_epoch + i + 1)     
+      #   self.logger.scalar_summary('Loss_val_mean', np.array(loss).mean(), e * iters_per_epoch + i + 1)     
 
-        for tag, value in loss_cum.items():
-          self.logger.scalar_summary(tag, np.array(value).mean(), e * iters_per_epoch + i + 1)   
+      #   for tag, value in loss_cum.items():
+      #     self.logger.scalar_summary(tag, np.array(value).mean(), e * iters_per_epoch + i + 1)   
                  
       #Stats per epoch
       elapsed = time.time() - start_time
       elapsed = str(datetime.timedelta(seconds=elapsed))
-      log = '!Elapsed: %s | [F1_VAL: %0.3f LOSS_VAL: %0.3f]\nTrain'%(elapsed, np.array(f1).mean(), np.array(loss).mean())
+      # log = '!Elapsed: %s | [F1_VAL: %0.3f LOSS_VAL: %0.3f]\nTrain'%(elapsed, np.array(f1).mean(), np.array(loss).mean())
+      log = '!Elapsed: %s\nTrain'%(elapsed)
       for tag, value in loss_cum.items():
         log += ", {}: {:.4f}".format(tag, np.array(value).mean())   
 
@@ -896,17 +795,10 @@ class Solver(object):
     # Start translations
     fake_image_list = [real_x]
 
-    for target_c in target_c_list:
-      if self.G_norm:
-        target_c = target_c*int(real_x.max())          
+    for target_c in target_c_list:       
       fake_x = self.G(real_x, target_c)
-      #out_src_temp, out_cls_temp = self.D(fake_x)
-      #F.sigmoid(out_cls_temp)
-      #accuracies = self.compute_accuracy(out_cls_temp, target_c, self.dataset)
       fake_image_list.append(fake_x)
     fake_images = torch.cat(fake_image_list, dim=3)
-
-    # ipdb.set_trace()
     save_image(self.denorm(fake_images.data), save_path, nrow=1, padding=0)
 
   #=======================================================================================#
