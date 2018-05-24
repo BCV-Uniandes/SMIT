@@ -27,6 +27,7 @@ class MultiLabelAU(Dataset):
 
     if mode!='val': print ('Start preprocessing dataset: %s!'%(mode))
     random.seed(1234)
+    # random.seed(10)
     self.preprocess()
     if mode!='val': print ('Finished preprocessing dataset: %s!'%(mode))
     

@@ -10,7 +10,8 @@ import numpy as np
 import config as cfg
 import warnings
 warnings.filterwarnings('ignore')
-#CUDA_VISIBLE_DEVICES=0 ipython main.py -- --num_epochs 15 --batch_size 8 --image_size 256 --fold 0 --use_tensorboard --DYNAMIC_COLOR --CelebA_GAN
+
+#./main.py -- --GPU 3 --GRAY --BLUR --L1_LOSS --lambda_l1 5
 
 def str2bool(v):
   return v.lower() in ('true')
@@ -88,6 +89,7 @@ if __name__ == '__main__':
   parser.add_argument('--g_lr', type=float, default=0.0001)
   parser.add_argument('--d_lr', type=float, default=0.0001)
   parser.add_argument('--lambda_cls', type=float, default=1)
+  parser.add_argument('--lambda_l1', type=float, default=0.5)
   parser.add_argument('--lambda_rec', type=float, default=10)
   parser.add_argument('--lambda_gp', type=float, default=10)
   parser.add_argument('--d_train_repeat', type=int, default=5)

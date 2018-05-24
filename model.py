@@ -21,7 +21,7 @@ class ResidualBlock(nn.Module):
 
 class Generator(nn.Module):
   """Generator. Encoder-Decoder Architecture."""
-  def __init__(self, conv_dim=64, c_dim=5, repeat_num=6, tanh=False):
+  def __init__(self, conv_dim=64, c_dim=5, repeat_num=6):
     super(Generator, self).__init__()
 
     layers = []
@@ -49,8 +49,7 @@ class Generator(nn.Module):
       curr_dim = curr_dim // 2
 
     layers.append(nn.Conv2d(curr_dim, 3, kernel_size=7, stride=1, padding=3, bias=False))
-    if tanh:
-      layers.append(nn.Tanh())
+    layers.append(nn.Tanh())
     self.main = nn.Sequential(*layers)
 
   def forward(self, x, c):
@@ -90,5 +89,4 @@ class Discriminator(nn.Module):
     # ipdb.set_trace()
     out_real = self.conv1(h)
     out_aux = self.conv2(h)
-    if lstm: return out_real.squeeze(), out_aux.squeeze(), h
-    else: return out_real.squeeze(), out_aux.squeeze()
+    return out_real.squeeze(), out_aux.squeeze()

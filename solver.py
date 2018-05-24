@@ -32,84 +32,17 @@ class Solver(object):
   def __init__(self, data_loader, config):
     # Data loader
     self.data_loader = data_loader
-
-    # Model hyper-parameters
-    self.c_dim = config.c_dim
-    # self.c2_dim = config.c2_dim
-    self.image_size = config.image_size
-    self.g_conv_dim = config.g_conv_dim
-    self.d_conv_dim = config.d_conv_dim
-    self.g_repeat_num = config.g_repeat_num
-    self.d_repeat_num = config.d_repeat_num
-    self.d_train_repeat = config.d_train_repeat
-
-    # Hyper-parameteres
-    self.lambda_cls = config.lambda_cls
-    self.lambda_rec = config.lambda_rec
-    self.lambda_gp = config.lambda_gp
-    self.g_lr = config.g_lr
-    self.d_lr = config.d_lr
-    self.beta1 = config.beta1
-    self.beta2 = config.beta2
-
-    # Training settings
-    self.dataset = config.dataset
-    self.num_epochs = config.num_epochs
-    self.num_epochs_decay = config.num_epochs_decay
-    # self.num_iters = config.num_iters
-    # self.num_iters_decay = config.num_iters_decay
-    self.batch_size = config.batch_size
-    self.use_tensorboard = config.use_tensorboard
-    self.pretrained_model = config.pretrained_model
-
-    self.L1_LOSS = config.L1_LOSS
-    self.L2_LOSS = config.L2_LOSS
-    self.LSGAN = config.LSGAN
-    self.FOCAL_LOSS = config.FOCAL_LOSS
-    self.JUST_REAL = config.JUST_REAL
-    self.FAKE_CLS = config.FAKE_CLS
-    self.DENSENET = config.DENSENET
-    self.COLOR_JITTER = config.COLOR_JITTER  
-    self.GOOGLE = config.GOOGLE   
-    self.PPT = config.PPT
-    self.BLUR = config.BLUR
-    self.GRAY = config.GRAY
-
-    #Normalization
-    self.mean = config.mean
-    self.MEAN = config.MEAN #string
-    self.std = config.std
-    self.D_norm = config.D_norm
-    self.G_norm = config.G_norm
-
-    # Test settings
-    self.test_model = config.test_model
-    self.metadata_path = config.metadata_path
-
-    # Path
-    self.log_path = config.log_path
-    self.sample_path = config.sample_path
-    self.model_save_path = config.model_save_path
-    # self.result_path = config.result_path
-    self.fold = config.fold
-    self.mode_data = config.mode_data
-
-    # Step size
-    self.log_step = config.log_step
-    self.sample_step = config.sample_step
-    self.model_save_step = config.model_save_step
-
-    self.GPU = config.GPU
+    self.config = config
 
     self.blurrandom = 0
 
     # Build tensorboard if use
     self.build_model()
-    if self.use_tensorboard:
+    if self.config.use_tensorboard:
       self.build_tensorboard()
 
     # Start with trained model
-    if self.pretrained_model:
+    if self.config.pretrained_model:
       self.load_pretrained_model()
 
 
@@ -119,7 +52,7 @@ class Solver(object):
     #pip install git+https://github.com/szagoruyko/pytorchviz
     from graphviz import Digraph
     from torchviz import make_dot, make_dot_from_trace
-    y = self.C(self.to_var(torch.randn(1,3,self.image_size,self.image_size)))
+    y = self.C(self.to_var(torch.randn(1,3,self.config.image_size,self.config.image_size)))
     if name=='discriminator':
       g=make_dot(y, params=dict(self.D.named_parameters()))
     elif name=='generator':
@@ -137,18 +70,18 @@ class Solver(object):
   #=======================================================================================#
   def build_model(self):
     # Define a generator and a discriminator
-    if self.DENSENET:
+    if self.config.DENSENET:
       from models.densenet import Generator, densenet121 as Discriminator
-      self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
-      self.D = Discriminator(num_classes = self.c_dim) 
+      self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num)
+      self.D = Discriminator(num_classes = self.config.c_dim) 
     else:
       from model import Generator, Discriminator
-      self.G = Generator(self.g_conv_dim, self.c_dim, self.g_repeat_num)
-      self.D = Discriminator(self.image_size, self.d_conv_dim, self.c_dim, self.d_repeat_num, mean=self.mean, std=self.std) 
+      self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num)
+      self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, self.config.d_repeat_num) 
 
     # Optimizers
-    self.g_optimizer = torch.optim.Adam(self.G.parameters(), self.g_lr, [self.beta1, self.beta2])
-    self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.d_lr, [self.beta1, self.beta2])
+    self.g_optimizer = torch.optim.Adam(self.G.parameters(), self.config.g_lr, [self.config.beta1, self.config.beta2])
+    self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.config.d_lr, [self.config.beta1, self.config.beta2])
 
     # Print networks
     self.print_network(self.G, 'G')
@@ -175,10 +108,10 @@ class Solver(object):
   def load_pretrained_model(self):
     # ipdb.set_trace()
     self.G.load_state_dict(torch.load(os.path.join(
-      self.model_save_path, '{}_G.pth'.format(self.pretrained_model))))
+      self.config.model_save_path, '{}_G.pth'.format(self.config.pretrained_model))))
     self.D.load_state_dict(torch.load(os.path.join(
-      self.model_save_path, '{}_D.pth'.format(self.pretrained_model))))
-    print('loaded trained models (step: {})..!'.format(self.pretrained_model))
+      self.config.model_save_path, '{}_D.pth'.format(self.config.pretrained_model))))
+    print('loaded trained models (step: {})..!'.format(self.config.pretrained_model))
 
   #=======================================================================================#
   #=======================================================================================#
@@ -186,7 +119,7 @@ class Solver(object):
   def build_tensorboard(self):
     # ipdb.set_trace()
     from logger import Logger
-    self.logger = Logger(self.log_path)
+    self.logger = Logger(self.config.log_path)
 
   #=======================================================================================#
   #=======================================================================================#
@@ -221,7 +154,7 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
 
-  def denorm(self, x, img_org=None):
+  def denorm(self, x):
     out = (x + 1) / 2
     return out.clamp_(0, 1)
 
@@ -279,11 +212,9 @@ class Solver(object):
   #=======================================================================================#
 
   def get_aus(self):
-    resize = lambda x: skimage.transform.resize(imageio.imread(line), (self.image_size,self.image_size))
-    imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('/home/afromero/aus_flat/*.jpeg'))]
-    # ipdb.set_trace()
+    resize = lambda x: skimage.transform.resize(imageio.imread(line), (self.config.image_size,self.config.image_size))
+    imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('/home/afromero/datos2/aus_flat/*.jpeg'))]
     imgs = torch.from_numpy(np.concatenate(imgs, axis=2).astype(np.float32)).unsqueeze(0)
-
     return imgs
 
   #=======================================================================================#
@@ -328,7 +259,7 @@ class Solver(object):
     conv_img = torch.zeros_like(img.clone())
     for i in range(img.size(0)):    
       # ipdb.set_trace()
-      if gray[i] and self.GRAY:
+      if gray[i] and self.config.GRAY:
         conv_img[i] = torch.from_numpy(filters.gaussian_filter(img[i], sigma=sigma[i], truncate=trunc[i]))
       else:
         for j in range(img.size(1)):
@@ -339,22 +270,13 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
 
-  def show_img(self, img, real_label, fake_label, hist_match=None, ppt=False):         
+  def show_img(self, img, real_label, fake_label, ppt=False):         
 
     AUS_SHOW = self.get_aus()
-    # if self.BLUR: img = self.blurRANDOM(img)
-    # img = F.conv
-
-    # conv_img=F.conv2d(img,self.to_var(torch.randn(3,3,3,3), volatile=True), padding=1)
-    # conv_img = self.gauss(img,3,2)
-    
-    # for i in range(3,30,2):
-    #   for j in range(1,50,7):
-    #     save_image(self.denorm(self.gauss(img,i,j).data).cpu(), 'dummy%s_%s.jpg'%(i,j))
-    # ipdb.set_trace()
 
     fake_image_list=[img]
     flag_time=True
+    self.G.eval()
 
     for fl in fake_label:
       # ipdb.set_trace()
@@ -372,7 +294,6 @@ class Solver(object):
 
     fake_images = fake_images.data.cpu()
     fake_images = torch.cat((AUS_SHOW, self.denorm(fake_images[:shape0])),dim=0)
-    # ipdb.set_trace()
     if ppt:
       name_folder = len(glob.glob('show/ppt*'))
       name_folder = 'show/ppt'+str(name_folder)
@@ -387,25 +308,14 @@ class Solver(object):
       save_image(fake_images, file_name+'.jpg',nrow=1, padding=0)       
     else:
       file_name = 'tmp_all'
-      # save_image(self.denorm(fake_images.data.cpu()[:shape0,:,:,self.image_size:]), 'tmp_fake.jpg',nrow=1, padding=0)
-      # save_image(self.denorm(fake_images.data.cpu()[:shape0,:,:,:self.image_size]), 'tmp_real.jpg',nrow=1, padding=0)
       save_image(fake_images, file_name+'.jpg',nrow=1, padding=0)
-
-      # print("Real Label: \n"+str(real_label.data.cpu()[:shape0].numpy()))
-      # for fl in fake_label:
-        # print("Fake Label: \n"+str(fl.data.cpu()[:shape0].numpy()))   
-      # os.system('eog tmp_real.jpg')
-      # os.system('eog tmp_fake.jpg')
       os.system('eog tmp_all.jpg')    
-      # os.remove('tmp_real.jpg')
-      # os.remove('tmp_fake.jpg')
       os.remove('tmp_all.jpg')
 
   #=======================================================================================#
   #=======================================================================================#
 
   def show_img_single(self, img):  
-    # ipdb.set_trace()        
     img_ = self.denorm(img.data.cpu())
     save_image(img_.cpu(), 'show/tmp0.jpg',nrow=int(math.sqrt(img_.size(0))), padding=0)
     os.system('eog show/tmp0.jpg')    
@@ -415,8 +325,6 @@ class Solver(object):
   #=======================================================================================#
 
   def train(self):
-    """Train StarGAN within a single dataset."""
-
     # The number of iterations per epoch
     iters_per_epoch = len(self.data_loader)
 
@@ -424,7 +332,7 @@ class Solver(object):
     real_c = []
     for i, (images, labels, files) in enumerate(self.data_loader):
       # ipdb.set_trace()
-      if self.BLUR: images = self.blurRANDOM(images)
+      if self.config.BLUR: images = self.blurRANDOM(images)
       fixed_x.append(images)
       real_c.append(labels)
       if i == 1:
@@ -436,24 +344,24 @@ class Solver(object):
     fixed_x = self.to_var(fixed_x, volatile=True)
     real_c = torch.cat(real_c, dim=0)
 
-    fixed_c_list = [self.to_var(torch.zeros(fixed_x.size(0), self.c_dim), volatile=True)]
-    for i in range(self.c_dim):
+    fixed_c_list = [self.to_var(torch.zeros(fixed_x.size(0), self.config.c_dim), volatile=True)]
+    for i in range(self.config.c_dim):
       # ipdb.set_trace()
-      fixed_c = self.one_hot(torch.ones(fixed_x.size(0)) * i, self.c_dim)
+      fixed_c = self.one_hot(torch.ones(fixed_x.size(0)) * i, self.config.c_dim)
       fixed_c_list.append(self.to_var(fixed_c, volatile=True))
 
-
+    
     # lr cache for decaying
-    g_lr = self.g_lr
-    d_lr = self.d_lr
+    g_lr = self.config.g_lr
+    d_lr = self.config.d_lr
 
     # Start with trained model if exists
-    if self.pretrained_model:
-      start = int(self.pretrained_model.split('_')[0])
+    if self.config.pretrained_model:
+      start = int(self.config.pretrained_model.split('_')[0])
       for i in range(start):
-        if (i+1) > (self.num_epochs - self.num_epochs_decay):
-          g_lr -= (self.g_lr / float(self.num_epochs_decay))
-          d_lr -= (self.d_lr / float(self.num_epochs_decay))
+        if (i+1) > (self.config.num_epochs - self.config.num_epochs_decay):
+          g_lr -= (self.config.g_lr / float(self.config.num_epochs_decay))
+          d_lr -= (self.config.d_lr / float(self.config.num_epochs_decay))
           self.update_lr(g_lr, d_lr)
           print ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))     
     else:
@@ -463,22 +371,23 @@ class Solver(object):
 
     # Start training
 
-    print("Log path: "+self.log_path)
+    print("Log path: "+self.config.log_path)
 
-    Log = "---> batch size: {}, fold: {}, img: {}, GPU: {}, !{}".format(self.batch_size, self.fold, self.image_size, self.GPU, self.mode_data) 
+    Log = "---> batch size: {}, fold: {}, img: {}, GPU: {}, !{}".format(\
+        self.config.batch_size, self.config.fold, self.config.image_size, \
+        self.config.GPU, self.config.mode_data) 
 
-    if self.COLOR_JITTER: Log += ' [*COLOR_JITTER]'
-    if self.BLUR: Log += ' [*BLUR]'
-    if self.GRAY: Log += ' [*GRAY]'
-    if self.LSGAN: Log += ' [*LSGAN]'
-    if self.L1_LOSS: Log += ' [*L1_LOSS]'
-    if self.L2_LOSS: Log += ' [*L2_LOSS]'
-    if self.MEAN!='0.5': Log += ' [*{}]'.format(self.MEAN)
+    if self.config.COLOR_JITTER: Log += ' [*COLOR_JITTER]'
+    if self.config.BLUR: Log += ' [*BLUR]'
+    if self.config.GRAY: Log += ' [*GRAY]'
+    if self.config.LSGAN: Log += ' [*LSGAN]'
+    if self.config.L1_LOSS: Log += ' [*L1_LOSS]'
+    if self.config.L2_LOSS: Log += ' [*L2_LOSS]'
     print(Log)
     loss_cum = {}
     start_time = time.time()
     flag_init=True
-    for e in range(start, self.num_epochs):
+    for e in range(start, self.config.num_epochs):
       E = str(e+1).zfill(3)
       self.D.train()
       self.G.train()
@@ -489,7 +398,7 @@ class Solver(object):
       #   print(log)
       #   flag_init = False
 
-      desc_bar = 'Epoch: %d/%d'%(e,self.num_epochs)
+      desc_bar = 'Epoch: %d/%d'%(e,self.config.num_epochs)
       progress_bar = tqdm(enumerate(self.data_loader), \
           total=len(self.data_loader), desc=desc_bar, ncols=10)
       for i, (real_x, real_label, files) in progress_bar:
@@ -499,7 +408,7 @@ class Solver(object):
         #========================================== BLUR =======================================#
         #=======================================================================================#
         np.random.seed(i+(e*len(self.data_loader)))
-        if self.BLUR and np.random.randint(0,2,1)[0]:
+        if self.config.BLUR and np.random.randint(0,2,1)[0]:
           # for i in range(3,27,2):
           #   for j in range(1,10):
           #     save_image(self.denorm(self.blur(real_x,i,j)), 'dummy%s_%s_color.jpg'%(i,j))      
@@ -530,7 +439,7 @@ class Solver(object):
         #=======================================================================================#
         out_src, out_cls = self.D(real_x)
 
-        if self.LSGAN:
+        if self.config.LSGAN:
           d_loss_real = F.mse_loss(out_src, torch.ones_like(out_src))
         else:
           d_loss_real = - torch.mean(out_src)
@@ -543,14 +452,14 @@ class Solver(object):
         fake_x_D = Variable(fake_x.data)
         out_src, out_cls = self.D(fake_x)
 
-        if self.LSGAN:
+        if self.config.LSGAN:
           d_loss_fake = F.mse_loss(out_src, torch.zeros_like(out_src))
         else:
           d_loss_fake = torch.mean(out_src)
 
         # Backward + Optimize
         
-        d_loss = d_loss_real + d_loss_fake + self.lambda_cls * d_loss_cls
+        d_loss = d_loss_real + d_loss_fake + self.config.lambda_cls * d_loss_cls
         self.reset_grad()
         d_loss.backward()
         self.d_optimizer.step()
@@ -559,7 +468,7 @@ class Solver(object):
         #=================================== Gradient Penalty ==================================#
         #=======================================================================================#
         # Compute gradient penalty
-        if not self.LSGAN:
+        if not self.config.LSGAN:
           alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
           # ipdb.set_trace()
           interpolated = Variable(alpha * real_x.data + (1 - alpha) * fake_x.data, requires_grad=True)
@@ -577,7 +486,7 @@ class Solver(object):
           d_loss_gp = torch.mean((grad_l2norm - 1)**2)
 
           # Backward + Optimize
-          d_loss = self.lambda_gp * d_loss_gp
+          d_loss = self.config.lambda_gp * d_loss_gp
           self.reset_grad()
           d_loss.backward()
           self.d_optimizer.step()
@@ -588,8 +497,8 @@ class Solver(object):
         loss = {}
         loss['D/real'] = d_loss_real.data[0]
         loss['D/fake'] = d_loss_fake.data[0]
-        loss['D/cls'] = d_loss_cls.data[0]
-        loss['D/gp'] = d_loss_gp.data[0]
+        loss['D/cls'] = d_loss_cls.data[0]*self.config.lambda_cls
+        loss['D/gp'] = d_loss_gp.data[0]*self.config.lambda_gp
         if len(loss_cum.keys())==0: 
           loss_cum['D/real'] = []; loss_cum['D/fake'] = []
           loss_cum['D/cls'] = []; loss_cum['G/cls'] = []
@@ -597,20 +506,20 @@ class Solver(object):
           loss_cum['D/gp'] = []; loss_cum['G/l1'] = []
         loss_cum['D/real'].append(d_loss_real.data[0])
         loss_cum['D/fake'].append(d_loss_fake.data[0])
-        loss_cum['D/cls'].append(d_loss_cls.data[0])
-        loss_cum['D/gp'].append(d_loss_gp.data[0])
+        loss_cum['D/cls'].append(d_loss_cls.data[0]*self.config.lambda_cls)
+        loss_cum['D/gp'].append(d_loss_gp.data[0]*self.config.lambda_gp)
 
         #=======================================================================================#
         #======================================= Train G =======================================#
         #=======================================================================================#
-        if (i+1) % self.d_train_repeat == 0:
+        if (i+1) % self.config.d_train_repeat == 0:
 
           # Original-to-target and target-to-original domain
           fake_x = self.G(real_x, fake_c)
           rec_x = self.G(fake_x, real_c)
           out_src, out_cls = self.D(fake_x)
           
-          if self.LSGAN:
+          if self.config.LSGAN:
             g_loss_fake = F.mse_loss(out_src, torch.ones_like(out_src))
           else:          
             g_loss_fake = - torch.mean(out_src)
@@ -620,7 +529,7 @@ class Solver(object):
           g_loss_cls = F.binary_cross_entropy_with_logits(
             out_cls, fake_label, size_average=False) / fake_x.size(0)
 
-          if self.L1_LOSS:
+          if self.config.L1_LOSS:
             g_l1 = F.l1_loss(fake_x, real_x) + \
                  F.l1_loss(rec_x, fake_x)
             # ipdb.set_trace()
@@ -629,22 +538,25 @@ class Solver(object):
 
 
           # Backward + Optimize
-          g_loss = g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls + g_l1 * 0.5
+          g_loss = g_loss_fake + \
+                   self.config.lambda_rec * g_loss_rec + \
+                   self.config.lambda_cls * g_loss_cls + \
+                   self.config.lambda_l1 * g_l1
           self.reset_grad()
           g_loss.backward()
           self.g_optimizer.step()
 
           # Logging
           loss['G/fake'] = g_loss_fake.data[0]
-          loss['G/rec'] = g_loss_rec.data[0]
-          loss['G/cls'] = g_loss_cls.data[0]
-          loss['G/l1'] = g_l1.data[0]
+          loss['G/rec'] = g_loss_rec.data[0]*self.config.lambda_rec
+          loss['G/cls'] = g_loss_cls.data[0]*self.config.lambda_cls
+          loss['G/l1'] = g_l1.data[0]*self.config.lambda_l1
 
 
           loss_cum['G/fake'].append(g_loss_fake.data[0])
-          loss_cum['G/rec'].append(g_loss_rec.data[0])
-          loss_cum['G/cls'].append(g_loss_cls.data[0])
-          loss_cum['G/l1'].append(g_l1.data[0])
+          loss_cum['G/rec'].append(g_loss_rec.data[0]*self.config.lambda_rec)
+          loss_cum['G/cls'].append(g_loss_cls.data[0]*self.config.lambda_cls)
+          loss_cum['G/l1'].append(g_l1.data[0]*self.config.lambda_l1)
 
 
         #=======================================================================================#
@@ -652,16 +564,16 @@ class Solver(object):
         #=======================================================================================#
 
         # Print out log info
-        if (i+1) % self.log_step == 0 or (i+1)==last_model_step:
+        if (i+1) % self.config.log_step == 0 or (i+1)==last_model_step:
           # progress_bar.set_postfix(G_loss_rec=np.array(loss_cum['G/loss_rec']).mean())
           # progress_bar.set_postfix(**loss)
           # if (i+1)==last_model_step: progress_bar.set_postfix('')
-          if self.use_tensorboard:
+          if self.config.use_tensorboard:
             for tag, value in loss.items():
               self.logger.scalar_summary(tag, value, e * iters_per_epoch + i + 1)
 
         # Translate fixed images for debugging
-        if (i+1) % self.sample_step == 0 or (i+1)==last_model_step or i+e==0:
+        if (i+1) % self.config.sample_step == 0 or (i+1)==last_model_step or i+e==0:
           self.G.eval()
           fake_image_list = [fixed_x]
           # ipdb.set_trace()
@@ -670,15 +582,15 @@ class Solver(object):
           fake_images = torch.cat(fake_image_list, dim=3)
           # ipdb.set_trace()
           shape0 = min(64, fake_images.data.cpu().shape[0])
-          img_denorm = self.denorm(fake_images.data.cpu()[:shape0], img_org=fixed_x.data)
+          img_denorm = self.denorm(fake_images.data.cpu()[:shape0])
           save_image(img_denorm,
-            os.path.join(self.sample_path, '{}_{}_fake.jpg'.format(E, i+1)),nrow=1, padding=0)
+            os.path.join(self.config.sample_path, '{}_{}_fake.jpg'.format(E, i+1)),nrow=1, padding=0)
           # print('Translated images and saved into {}..!'.format(self.sample_path))
 
       torch.save(self.G.state_dict(),
-        os.path.join(self.model_save_path, '{}_{}_G.pth'.format(E, i+1)))
+        os.path.join(self.config.model_save_path, '{}_{}_G.pth'.format(E, i+1)))
       torch.save(self.D.state_dict(),
-        os.path.join(self.model_save_path, '{}_{}_D.pth'.format(E, i+1)))
+        os.path.join(self.config.model_save_path, '{}_{}_D.pth'.format(E, i+1)))
 
 
       #=======================================================================================#
@@ -702,15 +614,15 @@ class Solver(object):
       elapsed = str(datetime.timedelta(seconds=elapsed))
       # log = '!Elapsed: %s | [F1_VAL: %0.3f LOSS_VAL: %0.3f]\nTrain'%(elapsed, np.array(f1).mean(), np.array(loss).mean())
       log = '!Elapsed: %s\nTrain'%(elapsed)
-      for tag, value in loss_cum.items():
+      for tag, value in sorted(loss_cum.items()):
         log += ", {}: {:.4f}".format(tag, np.array(value).mean())   
 
       print(log)
 
       # Decay learning rate     
-      if (e+1) > (self.num_epochs - self.num_epochs_decay):
-        g_lr -= (self.g_lr / float(self.num_epochs_decay))
-        d_lr -= (self.d_lr / float(self.num_epochs_decay))
+      if (e+1) > (self.config.num_epochs - self.config.num_epochs_decay):
+        g_lr -= (self.config.g_lr / float(self.config.num_epochs_decay))
+        d_lr -= (self.config.d_lr / float(self.config.num_epochs_decay))
         self.update_lr(g_lr, d_lr)
         # print ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
@@ -721,7 +633,7 @@ class Solver(object):
     real_x = self.to_var(real_x, volatile=True)
 
     # target_c_list = []
-    target_c= torch.from_numpy(np.zeros((real_x.size(0), self.c_dim), dtype=np.float32))
+    target_c= torch.from_numpy(np.zeros((real_x.size(0), self.config.c_dim), dtype=np.float32))
     target_c_list = [self.to_var(target_c, volatile=True)]
     for j in range(self.c_dim):
       target_c[:,j]=1       
@@ -745,22 +657,22 @@ class Solver(object):
     """Facial attribute transfer on CelebA or facial expression synthesis on RaFD."""
     # Load trained parameters
     from data_loader import get_loader
-    if self.test_model=='':
-      last_file = sorted(glob.glob(os.path.join(self.model_save_path,  '*_D.pth')))[-1]
+    if self.config.pretrained_model=='':
+      last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*_D.pth')))[-1]
       last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
     else:
-      last_name = self.test_model
+      last_name = self.config.pretrained_model
 
-    G_path = os.path.join(self.model_save_path, '{}_G.pth'.format(last_name))
+    G_path = os.path.join(self.config.model_save_path, '{}_G.pth'.format(last_name))
     self.G.load_state_dict(torch.load(G_path))
     self.G.eval()
     # ipdb.set_trace()
 
-    data_loader_val = get_loader(self.metadata_path, self.image_size,
-                 self.image_size, self.batch_size, 'MultiLabelAU', 'val')   
+    data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
+                 self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'val')   
 
     for i, (real_x, org_c, files) in enumerate(data_loader_val):
-      save_path = os.path.join(self.sample_path, '{}_fake_val_{}.jpg'.format(last_name, i+1))
+      save_path = os.path.join(self.config.sample_path, '{}_fake_val_{}.jpg'.format(last_name, i+1))
       self.save_fake_output(real_x, save_path)
       print('Translated test images and saved into "{}"..!'.format(save_path))
       if i==3: break
@@ -775,14 +687,14 @@ class Solver(object):
 
       from data_loader import get_loader
       # ipdb.set_trace()
-      self.data_loader_val = get_loader(self.metadata_path, self.image_size,
-                   self.image_size, self.batch_size, 'MultiLabelAU', 'val', shuffling=True)
+      self.data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
+                   self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'val', shuffling=True)
 
-      txt_path = os.path.join(self.model_save_path, 'init_val.txt')
+      txt_path = os.path.join(self.config.model_save_path, 'init_val.txt')
     else:
-      last_file = sorted(glob.glob(os.path.join(self.model_save_path,  '*_D.pth')))[-1]
+      last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*_D.pth')))[-1]
       last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
-      txt_path = os.path.join(self.model_save_path, '{}_{}_val.txt'.format(last_name,'{}'))
+      txt_path = os.path.join(self.config.model_save_path, '{}_{}_val.txt'.format(last_name,'{}'))
       try:
         output_txt  = sorted(glob.glob(txt_path.format('*')))[-1]
         number_file = len(glob.glob(output_txt))
@@ -791,13 +703,13 @@ class Solver(object):
       txt_path = txt_path.format(str(number_file).zfill(2)) 
     
     if load:
-      D_path = os.path.join(self.model_save_path, '{}_D.pth'.format(last_name))
+      D_path = os.path.join(self.config.model_save_path, '{}_D.pth'.format(last_name))
       self.D.load_state_dict(torch.load(D_path))
 
     self.D.eval()
 
-    self.f=open(txt_path, 'a')   
-    self.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
+    self.config.f=open(txt_path, 'a')   
+    self.config.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
     # ipdb.set_trace()
     # F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
     # _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
@@ -813,19 +725,19 @@ class Solver(object):
     """Facial attribute transfer on CelebA or facial expression synthesis on RaFD."""
     # Load trained parameters
     from data_loader import get_loader
-    if self.test_model=='':
-      last_file = sorted(glob.glob(os.path.join(self.model_save_path,  '*_D.pth')))[-1]
+    if self.config.pretrained_model=='':
+      last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*_D.pth')))[-1]
       last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
     else:
-      last_name = self.test_model
+      last_name = self.config.pretrained_model
 
-    G_path = os.path.join(self.model_save_path, '{}_G.pth'.format(last_name))
-    D_path = os.path.join(self.model_save_path, '{}_D.pth'.format(last_name))
-    txt_path = os.path.join(self.model_save_path, '{}_{}_test.txt'.format(last_name,'{}'))
-    show_fake = os.path.join(self.sample_path, '{}_fake_{}_{}.jpg'.format(last_name,'{}', '{}'))
-    self.pkl_data = os.path.join(self.model_save_path, '{}_{}.pkl'.format(last_name, '{}'))
-    self.lstm_path = os.path.join(self.model_save_path, '{}_lstm'.format(last_name))
-    if not os.path.isdir(self.lstm_path): os.makedirs(self.lstm_path)
+    G_path = os.path.join(self.config.model_save_path, '{}_G.pth'.format(last_name))
+    D_path = os.path.join(self.config.model_save_path, '{}_D.pth'.format(last_name))
+    txt_path = os.path.join(self.config.model_save_path, '{}_{}_test.txt'.format(last_name,'{}'))
+    show_fake = os.path.join(self.config.sample_path, '{}_fake_{}_{}.jpg'.format(last_name,'{}', '{}'))
+    self.config.pkl_data = os.path.join(self.config.model_save_path, '{}_{}.pkl'.format(last_name, '{}'))
+    self.config.lstm_path = os.path.join(self.config.model_save_path, '{}_lstm'.format(last_name))
+    if not os.path.isdir(self.config.lstm_path): os.makedirs(self.config.lstm_path)
     print(" [!!] {} model loaded...".format(D_path))
     # ipdb.set_trace()
     self.G.load_state_dict(torch.load(G_path))
@@ -833,42 +745,40 @@ class Solver(object):
     self.G.eval()
     self.D.eval()
     # ipdb.set_trace()
-    if self.dataset == 'MultiLabelAU' and not self.GOOGLE:
-      data_loader_val = get_loader(self.metadata_path, self.image_size,
-                self.image_size, self.batch_size, 'MultiLabelAU', 'val', shuffling=True)
-      data_loader_test = get_loader(self.metadata_path, self.image_size,
-                self.image_size, self.batch_size, 'MultiLabelAU', 'test', shuffling=True)
-    elif self.dataset == 'au01_fold0':
-      data_loader = self.au_loader  
+    if self.config.dataset == 'MultiLabelAU' and not self.config.GOOGLE:
+      data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
+                self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'val', shuffling=True)
+      data_loader_test = get_loader(self.config.metadata_path, self.config.image_size,
+                self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'test', shuffling=True)
 
-    if self.GOOGLE: 
-      data_loader_google = get_loader('', self.image_size, self.image_size, \
-                      self.batch_size, 'Google',  mode=self.mode_data, shuffling=True)
-      # data_loader_google = get_loader(self.metadata_path, self.image_size, \
-      #           self.image_size, self.batch_size, 'MultiLabelAU', 'test', shuffling=True)     
+    elif self.config.GOOGLE: 
+      # data_loader_google = get_loader('', self.config.image_size, self.config.image_size, \
+      #                 self.config.batch_size, 'Google',  mode=self.config.mode_data, shuffling=True)
+      data_loader_google = get_loader(self.config.metadata_path, self.config.image_size, \
+                self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'train', shuffling=True)     
 
-    if not hasattr(self, 'output_txt'):
+    if not hasattr(self.config, 'output_txt'):
       # ipdb.set_trace()
-      self.output_txt = txt_path
+      self.config.output_txt = txt_path
       try:
-        self.output_txt  = sorted(glob.glob(self.output_txt.format('*')))[-1]
-        number_file = len(glob.glob(self.output_txt))
+        self.config.output_txt  = sorted(glob.glob(self.config.output_txt.format('*')))[-1]
+        number_file = len(glob.glob(self.config.output_txt))
       except:
         number_file = 0
-      self.output_txt = self.output_txt.format(str(number_file).zfill(2)) 
+      self.config.output_txt = self.config.output_txt.format(str(number_file).zfill(2)) 
     
-    self.f=open(self.output_txt, 'a')  
-    self.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
+    self.config.f=open(self.config.output_txt, 'a')  
+    self.config.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
     # ipdb.set_trace()
     # F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
     # _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
-    if self.GOOGLE: 
+    if self.config.GOOGLE: 
       _ = F1_TEST(self, data_loader_google)
     else: 
       F1_real, F1_max, max_thresh_val, _, _  = F1_TEST(self, data_loader_val, mode = 'VAL')
       _ = F1_TEST(self, data_loader_test, thresh = max_thresh_val, show_fake = show_fake) 
       # _ = self.F1_TEST(data_loader_test)
-    self.f.close()
+    self.config.f.close()
 
   #=======================================================================================#
   #=======================================================================================#
@@ -876,7 +786,7 @@ class Solver(object):
   def save_lstm(self, data, files):
     assert data.shape[0]==len(files)
     for i in range(len(files)):
-      name = os.path.join(self.lstm_path, '/'.join(files[i].split('/')[-6:]))
+      name = os.path.join(self.config.lstm_path, '/'.join(files[i].split('/')[-6:]))
       name = name.replace('jpg', 'npy')
       folder = os.path.dirname(name)
       if not os.path.isdir(folder): os.makedirs(folder)
