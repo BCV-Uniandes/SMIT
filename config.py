@@ -113,6 +113,7 @@ def update_config(config):
   if config.LSGAN: update_folder(config, 'LSGAN') 
   if config.L1_LOSS: update_folder(config, 'L1_LOSS') 
   if config.lambda_l1!=0.5: update_folder(config, 'lambda_l1_'+str(config.lambda_l1)) 
+  if config.NO_TANH: update_folder(config, 'NO_TANH') 
   if config.L2_LOSS: update_folder(config, 'L2_LOSS') 
   if config.CelebA_CLS: update_folder(config, 'CelebA_CLS')
   if config.JUST_REAL: update_folder(config, 'JUST_REAL')

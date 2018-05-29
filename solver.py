@@ -76,7 +76,7 @@ class Solver(object):
       self.D = Discriminator(num_classes = self.config.c_dim) 
     else:
       from model import Generator, Discriminator
-      self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num)
+      self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, NO_TANH=self.config.NO_TANH)
       self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, self.config.d_repeat_num) 
 
     # Optimizers
@@ -491,7 +491,7 @@ class Solver(object):
           d_loss.backward()
           self.d_optimizer.step()
         else:
-          d_loss_gp = Variable(torch.FloatTensor([0]), volatile=True)
+          d_loss_gp = self.to_var(torch.FloatTensor([0]))
 
         # Logging
         loss = {}
@@ -534,7 +534,7 @@ class Solver(object):
                  F.l1_loss(rec_x, fake_x)
             # ipdb.set_trace()
           else:
-            g_l1 = 0.0
+            g_l1 = self.to_var(torch.FloatTensor([0]))
 
 
           # Backward + Optimize
@@ -752,10 +752,10 @@ class Solver(object):
                 self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'test', shuffling=True)
 
     elif self.config.GOOGLE: 
-      # data_loader_google = get_loader('', self.config.image_size, self.config.image_size, \
-      #                 self.config.batch_size, 'Google',  mode=self.config.mode_data, shuffling=True)
-      data_loader_google = get_loader(self.config.metadata_path, self.config.image_size, \
-                self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'train', shuffling=True)     
+      data_loader_google = get_loader('', self.config.image_size, self.config.image_size, \
+                      self.config.batch_size, 'Google',  mode=self.config.mode_data, shuffling=True)
+      # data_loader_google = get_loader(self.config.metadata_path, self.config.image_size, \
+      #           self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'train', shuffling=True)     
 
     if not hasattr(self.config, 'output_txt'):
       # ipdb.set_trace()

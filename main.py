@@ -122,6 +122,7 @@ if __name__ == '__main__':
   parser.add_argument('--LSGAN', action='store_true', default=False) 
   parser.add_argument('--L1_LOSS', action='store_true', default=False) 
   parser.add_argument('--L2_LOSS', action='store_true', default=False) 
+  parser.add_argument('--NO_TANH', action='store_true', default=False) 
 
   #Data Normalization
   parser.add_argument('--mean', type=str, default='0.5', choices=['0.5', 'data_image', 'data_full', 'data_full+image'])  
