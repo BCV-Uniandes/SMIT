@@ -4,6 +4,7 @@ import random
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from torchvision.transforms.functional import rotate, adjust_brightness, adjust_contrast, adjust_saturation, to_grayscale
 from torchvision.datasets import ImageFolder
 from PIL import Image
 import ipdb
@@ -134,7 +135,7 @@ class GooglePhotos(Dataset):
     self.lines = open(file_txt, 'r').readlines()
 
     print ('Start preprocessing dataset: Google!')
-    random.seed(111)
+    random.seed(11111)
     # random.seed()
     self.preprocess()
     print ('Finished preprocessing dataset: Google!')
@@ -164,6 +165,10 @@ class GooglePhotos(Dataset):
       # print("Impose histogram from: "+target_file)
       # image = hist_match(image, imageio.imread(target_file))
     image = Image.fromarray(image.astype(np.uint8))
+    # image = rotate(image, -13)
+    # image = adjust_brightness(image, 0.7)
+    # image = adjust_saturation(image, 1.5)
+    # image = to_grayscale(image, num_output_channels=3)
     return self.transform(image), torch.FloatTensor([0]*12), self.filenames[index]
 
   def __len__(self):

@@ -4,6 +4,15 @@ import torch.nn.functional as F
 import numpy as np
 import ipdb
 
+class PrintLayer(nn.Module):
+    def __init__(self):
+        super(PrintLayer, self).__init__()
+    
+    def forward(self, x):
+        # Do your print / debug stuff here
+        print(x)
+        return x
+
 class ResidualBlock(nn.Module):
   """Residual Block."""
   def __init__(self, dim_in, dim_out):
@@ -21,35 +30,48 @@ class ResidualBlock(nn.Module):
 
 class Generator(nn.Module):
   """Generator. Encoder-Decoder Architecture."""
-  def __init__(self, conv_dim=64, c_dim=5, repeat_num=6, NO_TANH=False):
+  def __init__(self, conv_dim=64, c_dim=5, repeat_num=6, NO_TANH=False, DEBUG=True):
     super(Generator, self).__init__()
 
     layers = []
     layers.append(nn.Conv2d(3+c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
+    if DEBUG: layers.append(PrintLayer())
     layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
+    if DEBUG: layers.append(PrintLayer())
     layers.append(nn.ReLU(inplace=True))
+    if DEBUG: layers.append(PrintLayer())
 
     # Down-Sampling
     curr_dim = conv_dim
     for i in range(2):
       layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
+      if DEBUG: layers.append(PrintLayer())
       layers.append(nn.InstanceNorm2d(curr_dim*2, affine=True))
+      if DEBUG: layers.append(PrintLayer())
       layers.append(nn.ReLU(inplace=True))
+      if DEBUG: layers.append(PrintLayer())
       curr_dim = curr_dim * 2
 
     # Bottleneck
     for i in range(repeat_num):
       layers.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim))
+      if DEBUG: layers.append(PrintLayer())
 
     # Up-Sampling
     for i in range(2):
       layers.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
+      if DEBUG: layers.append(PrintLayer())
       layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True))
+      if DEBUG: layers.append(PrintLayer())
       layers.append(nn.ReLU(inplace=True))
+      if DEBUG: layers.append(PrintLayer())
       curr_dim = curr_dim // 2
 
     layers.append(nn.Conv2d(curr_dim, 3, kernel_size=7, stride=1, padding=3, bias=False))
-    if not NO_TANH: layers.append(nn.Tanh())
+    if DEBUG: layers.append(PrintLayer())
+    if not NO_TANH: 
+      layers.append(nn.Tanh())
+      if DEBUG: layers.append(PrintLayer())
     self.main = nn.Sequential(*layers)
 
   def forward(self, x, c):

@@ -9,6 +9,8 @@ import imageio
 import numpy as np
 import config as cfg
 import warnings
+import ipdb
+import sys
 warnings.filterwarnings('ignore')
 
 #./main.py -- --GPU 3 --GRAY --BLUR --L1_LOSS --lambda_l1 5
@@ -175,9 +177,11 @@ if __name__ == '__main__':
 
   config = cfg.update_config(config)
 
-  print(config)
-  main(config)
+  with open('logs/gpu{}.txt'.format(config.GPU), 'wb') as config.log:
+    print >> config.log, ' '.join(sys.argv)
+    config.log.flush()
+    print(config)
+    main(config)
 
   last_sample = sorted(glob.glob(config.sample_path+'/*.jpg'))[-1]
-
   os.system('echo {0} | mail -s "Training done - GPU {1} free" -A "{0}" rv.andres10@uniandes.edu.co'.format(msj, config.GPU))

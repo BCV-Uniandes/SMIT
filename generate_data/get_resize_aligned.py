@@ -62,7 +62,7 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES']=args.gpu
 
     pwd = os.getcwd()
-    os.chdir('/home/afromero/Codes/Face_Alignment/MTCNN_face_detection_alignment/code/codes/MTCNNv2')
+    os.chdir('/home/afromero/datos2/Face_Alignment/MTCNN_face_detection_alignment/code/codes/MTCNNv2')
     future = matlab.engine.connect_matlab(async=True)
     eng = future.result()
     eng = matlab.engine.start_matlab()
