@@ -52,44 +52,47 @@ class Solver(object):
     #pip install git+https://github.com/szagoruyko/pytorchviz
     from graphviz import Digraph
     from torchviz import make_dot, make_dot_from_trace
-    y = self.C(self.to_var(torch.randn(1,3,self.config.image_size,self.config.image_size)))
-    if name=='discriminator':
-      g=make_dot(y, params=dict(self.D.named_parameters()))
-    elif name=='generator':
+    
+    if name=='Discriminator':
+      y1,y2 = self.D(self.to_var(torch.ones(1,3,self.config.image_size,self.config.image_size)))
+      g=make_dot(y1, params=dict(self.D.named_parameters()))
+    elif name=='Generator':
+      y = self.G(self.to_var(torch.ones(1,3,self.config.image_size,self.config.image_size)), self.to_var(torch.zeros(1,12)))
       g=make_dot(y, params=dict(self.G.named_parameters()))
-    filename=name
-    g.filename=filename
+    g.filename=name
     g.render()
-    os.remove(filename)
+    os.remove(name)
 
     from utils import pdf2png
-    pdf2png(filename)
-    self.PRINT('Network saved at {}.png'.format(filename))
+    pdf2png(name)
+    self.PRINT('Network saved at {}.png'.format(name))
 
   #=======================================================================================#
   #=======================================================================================#
   def build_model(self):
     # Define a generator and a discriminator
-    if self.config.DENSENET:
-      from models.densenet import Generator, densenet121 as Discriminator
-      self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num)
-      self.D = Discriminator(num_classes = self.config.c_dim) 
-    else:
+    if not self.config.SAGAN:
       from model import Generator, Discriminator
+      self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, NO_TANH=self.config.NO_TANH, SN=self.config.SpectralNorm)
+      self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, self.config.d_repeat_num, SN=self.config.SpectralNorm) 
+    else:
+      from models.sagan import Generator, Discriminator
       self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, NO_TANH=self.config.NO_TANH)
-      self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, self.config.d_repeat_num) 
-
+      self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, self.config.d_repeat_num)       
     # Optimizers
-    self.g_optimizer = torch.optim.Adam(self.G.parameters(), self.config.g_lr, [self.config.beta1, self.config.beta2])
-    self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.config.d_lr, [self.config.beta1, self.config.beta2])
+    G_parameters = filter(lambda p: p.requires_grad, self.G.parameters())
+    D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
 
-    # self.PRINT networks
-    self.print_network(self.G, 'G')
-    self.print_network(self.D, 'D')
+    self.g_optimizer = torch.optim.Adam(G_parameters, self.config.g_lr, [self.config.beta1, self.config.beta2])
+    self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr, [self.config.beta1, self.config.beta2])
 
     if torch.cuda.is_available():
       self.G.cuda()
       self.D.cuda()
+
+    # self.PRINT networks
+    self.print_network(self.G, 'Generator')
+    self.print_network(self.D, 'Discriminator')
 
   #=======================================================================================#
   #=======================================================================================#
@@ -99,8 +102,9 @@ class Solver(object):
     for p in model.parameters():
       num_params += p.numel()
     # self.PRINT(name)
-    self.PRINT(model)
+    # self.PRINT(model)
     self.PRINT("The number of parameters: {}".format(num_params))
+    # self.display_net(name)
 
   #=======================================================================================#
   #=======================================================================================#

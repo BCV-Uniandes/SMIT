@@ -177,7 +177,7 @@ class GooglePhotos(Dataset):
 def get_loader(metadata_path, crop_size, image_size, batch_size, \
         dataset='MultiLabelAU', mode='train', LSTM=False, \
         shuffling = False, no_flipping=False, color_jitter=False, \
-        mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5), MEAN='', num_workers=0):
+        mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5), num_workers=0):
   """Build and return data loader."""
 
   if mode == 'train':
@@ -208,14 +208,9 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
 
   if dataset=='Google':
     dataset = GooglePhotos(image_size, 'data', transform, mode=mode, shuffling=shuffling)
-  elif dataset=='CelebA':
-    dataset = CelebDataset(image_size, 'data', transform)
-  elif dataset=='MultiLabelAU_FULL':
-    dataset = MultiLabelAU_FULL(image_size, metadata_path, transform, mode, \
-              no_flipping = no_flipping or LSTM, shuffling=shuffling)
   else:
     dataset = MultiLabelAU(image_size, metadata_path, transform, mode, \
-              no_flipping = no_flipping or LSTM, shuffling=shuffling, MEAN=MEAN)
+              no_flipping = no_flipping or LSTM, shuffling=shuffling)
 
   # shuffle = shuffling
   # if mode == 'train' or shuffling:

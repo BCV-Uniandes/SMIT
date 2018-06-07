@@ -42,21 +42,9 @@ def main(config):
   MultiLabelAU_loader = get_loader(config.metadata_path, img_size,
                    img_size, config.batch_size, 'MultiLabelAU', config.mode, \
                    LSTM=config.LSTM, color_jitter=config.COLOR_JITTER, \
-                   mean=config.mean, std=config.std, MEAN=config.MEAN, num_workers=config.num_workers)   
-
-  if config.CLS:
-    config.MultiLabelAU_FULL_loader = get_loader(config.metadata_path, img_size, 
-                   img_size, config.batch_size, 'MultiLabelAU_FULL', config.mode, \
-                   LSTM=config.LSTM, color_jitter=config.COLOR_JITTER, \
                    mean=config.mean, std=config.std, num_workers=config.num_workers)   
 
-  # Solver
-  if config.LSTM:
-    from solver_lstm import Solver
-  elif config.CLS:
-    from solver_cls import Solver
-  else:
-    from solver import Solver    
+  from solver import Solver    
 
   solver = Solver(MultiLabelAU_loader, config)
 
@@ -91,7 +79,7 @@ if __name__ == '__main__':
   parser.add_argument('--g_lr', type=float, default=0.0001)
   parser.add_argument('--d_lr', type=float, default=0.0001)
   parser.add_argument('--lambda_cls', type=float, default=1)
-  parser.add_argument('--lambda_l1', type=float, default=0.5)
+  parser.add_argument('--lambda_l1', type=float, default=10)
   parser.add_argument('--lambda_rec', type=float, default=10)
   parser.add_argument('--lambda_gp', type=float, default=10)
   parser.add_argument('--d_train_repeat', type=int, default=5)
@@ -107,11 +95,6 @@ if __name__ == '__main__':
   parser.add_argument('--beta1', type=float, default=0.5)
   parser.add_argument('--beta2', type=float, default=0.999)
   parser.add_argument('--pretrained_model', type=str, default=None)  
-  parser.add_argument('--FOCAL_LOSS', action='store_true', default=False)
-  parser.add_argument('--JUST_REAL', action='store_true', default=False)
-  parser.add_argument('--FAKE_CLS', action='store_true', default=False)
-  parser.add_argument('--DENSENET', action='store_true', default=False)
-  parser.add_argument('--CLS', action='store_true', default=False)
   parser.add_argument('--COLOR_JITTER', action='store_true', default=False)  
   parser.add_argument('--BLUR', action='store_true', default=False)   
   parser.add_argument('--GRAY', action='store_true', default=False)  
@@ -125,12 +108,9 @@ if __name__ == '__main__':
   parser.add_argument('--L1_LOSS', action='store_true', default=False) 
   parser.add_argument('--L2_LOSS', action='store_true', default=False) 
   parser.add_argument('--NO_TANH', action='store_true', default=False) 
-
-  #Data Normalization
-  parser.add_argument('--mean', type=str, default='0.5', choices=['0.5', 'data_image', 'data_full', 'data_full+image'])  
-  parser.add_argument('--std', type=str, default='0.5', choices=['0.5', 'data_image', 'data_full', 'data_full+image'])  
-  parser.add_argument('--G_norm', action='store_true', default=False)  
-  parser.add_argument('--D_norm', action='store_true', default=False)  
+  parser.add_argument('--NEW_GEN', action='store_true', default=True) 
+  parser.add_argument('--SpectralNorm', action='store_true', default=False) 
+  parser.add_argument('--SAGAN', action='store_true', default=False) 
 
   # Training LSTM
   parser.add_argument('--LSTM', action='store_true', default=False)
