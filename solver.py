@@ -71,15 +71,13 @@ class Solver(object):
   #=======================================================================================#
   def build_model(self):
     # Define a generator and a discriminator
-    if not self.config.SAGAN:
-      from model import Generator, Discriminator
-      self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, NO_TANH=self.config.NO_TANH, SN=self.config.SpectralNorm)
-      self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, self.config.d_repeat_num, SN=self.config.SpectralNorm) 
-    else:
-      from models.sagan import Generator, Discriminator
-      self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, NO_TANH=self.config.NO_TANH)
-      self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, self.config.d_repeat_num)       
-    # Optimizers
+    from model import Generator, Discriminator
+    self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, 
+                       NO_TANH=self.config.NO_TANH, SAGAN=self.config.SAGAN, debug=True)
+    self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, 
+                       self.config.d_repeat_num, SN=self.config.SpectralNorm, SAGAN=self.config.SAGAN,
+                       debug=True) 
+
     G_parameters = filter(lambda p: p.requires_grad, self.G.parameters())
     D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
 
@@ -306,6 +304,8 @@ class Solver(object):
     real_c = []
     for i, (images, labels, files) in enumerate(self.data_loader):
       # ipdb.set_trace()
+      if len(images.size())==3: images = images.unsqueeze(0)
+      if len(labels.size())==3: labels = labels.unsqueeze(0)
       if self.config.BLUR: images = self.blurRANDOM(images)
       fixed_x.append(images)
       real_c.append(labels)
@@ -415,6 +415,8 @@ class Solver(object):
 
         if self.config.LSGAN:
           d_loss_real = F.mse_loss(out_src, torch.ones_like(out_src))
+        elif self.config.HINGE:
+          d_loss_real = torch.mean(F.relu(1-out_src))
         else:
           d_loss_real = - torch.mean(out_src)
 
@@ -428,6 +430,8 @@ class Solver(object):
 
         if self.config.LSGAN:
           d_loss_fake = F.mse_loss(out_src, torch.zeros_like(out_src))
+        elif self.config.HINGE:
+          d_loss_fake = torch.mean(F.relu(1+out_src))          
         else:
           d_loss_fake = torch.mean(out_src)
 
@@ -442,7 +446,7 @@ class Solver(object):
         #=================================== Gradient Penalty ==================================#
         #=======================================================================================#
         # Compute gradient penalty
-        if not self.config.LSGAN:
+        if not self.config.LSGAN or not self.config.HINGE:
           alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
           # ipdb.set_trace()
           interpolated = Variable(alpha * real_x.data + (1 - alpha) * fake_x.data, requires_grad=True)
@@ -496,6 +500,8 @@ class Solver(object):
           
           if self.config.LSGAN:
             g_loss_fake = F.mse_loss(out_src, torch.ones_like(out_src))
+          elif self.config.HINGE:
+            g_loss_fake = torch.mean(F.relu(1-out_src))            
           else:          
             g_loss_fake = - torch.mean(out_src)          
 

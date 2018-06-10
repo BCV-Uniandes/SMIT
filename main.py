@@ -1,4 +1,4 @@
-#!/usr/local/bin/ipython
+#!/usr/bin/ipython
 import os
 import argparse
 from data_loader import get_loader
@@ -85,7 +85,7 @@ if __name__ == '__main__':
   parser.add_argument('--d_train_repeat', type=int, default=5)
 
   # Training settings
-  parser.add_argument('--dataset', type=str, default='MultiLabelAU', choices=['CelebA', 'MultiLabelAU', 'RaFD', 'au01_fold0', 'Both'])
+  parser.add_argument('--dataset', type=str, default='MultiLabelAU', choices=['MultiLabelAU'])
   parser.add_argument('--num_epochs', type=int, default=99)
   parser.add_argument('--num_epochs_decay', type=int, default=100)
   # parser.add_argument('--num_iters', type=int, default=300000)
@@ -108,7 +108,8 @@ if __name__ == '__main__':
   parser.add_argument('--L1_LOSS', action='store_true', default=False) 
   parser.add_argument('--L2_LOSS', action='store_true', default=False) 
   parser.add_argument('--NO_TANH', action='store_true', default=False) 
-  parser.add_argument('--NEW_GEN', action='store_true', default=True) 
+  parser.add_argument('--NEW_GEN', action='store_true', default=False) ################
+  parser.add_argument('--HINGE', action='store_true', default=False) 
   parser.add_argument('--SpectralNorm', action='store_true', default=False) 
   parser.add_argument('--SAGAN', action='store_true', default=False) 
 
@@ -147,9 +148,9 @@ if __name__ == '__main__':
 
 
   # Step size
-  parser.add_argument('--log_step', type=int, default=100)
-  parser.add_argument('--sample_step', type=int, default=1000)
-  parser.add_argument('--model_save_step', type=int, default=20000)
+  parser.add_argument('--log_step', type=int, default=1000)
+  parser.add_argument('--sample_step', type=int, default=100000)
+  parser.add_argument('--model_save_step', type=int, default=200000)
 
   config = parser.parse_args()
 

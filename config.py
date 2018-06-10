@@ -75,16 +75,23 @@ def update_config(config):
     update_folder(config, 'NEW_GEN') 
     config.batch_size=16
 
-  if config.DELETE:
-    remove_folder(config)
-
-  if config.SpectralNorm: 
-    update_folder(config, 'SpectralNorm')
-    config.batch_size=9
-
   if config.SAGAN: 
     update_folder(config, 'SAGAN')
     config.d_lr = 0.0004
+    config.d_train_repeat = 1
+    config.HINGE = True
+    config.SpectralNorm = True
+    config.batch_size=4
+
+  if config.SpectralNorm: 
+    update_folder(config, 'SpectralNorm')
+    if not config.SAGAN: config.batch_size=8
+
+  if config.HINGE: 
+    update_folder(config, 'HINGE') 
+
+  if config.DELETE:
+    remove_folder(config)
 
   if config.pretrained_model is None:
     if config.LSTM:

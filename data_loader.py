@@ -46,14 +46,9 @@ class MultiLabelAU(Dataset):
       filename = filename.replace(name, name+'_'+str(self.image_size))
       # if self.no_flipping and 'flip' in filename: continue
 
-      if self.image_size==512:
-        filename_512 = filename.replace('BP4D_256', 'BP4D_'+str(self.image_size))
-        if not os.path.isfile(filename_512): 
-
-          filename = get_resize(filename_512, self.image_size)
-        else: 
-          filename = filename_512
-      if not os.path.isfile(filename): imageio.imwrite(filename, np.zeros((self.image_size, self.image_size,3)).astype(np.uint8))
+      if not os.path.isfile(filename): 
+        ipdb.set_trace()
+        imageio.imwrite(filename, np.zeros((self.image_size, self.image_size,3)).astype(np.uint8))
       # ipdb.set_trace()
       values = splits[1:]
 
