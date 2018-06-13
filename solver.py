@@ -101,7 +101,7 @@ class Solver(object):
       num_params += p.numel()
     # self.PRINT(name)
     # self.PRINT(model)
-    self.PRINT("The number of parameters: {}".format(num_params))
+    self.PRINT("{} number of parameters: {}".format(name, num_params))
     # self.display_net(name)
 
   #=======================================================================================#
@@ -187,8 +187,8 @@ class Solver(object):
   def imgShow(self, img):
     try:save_image(self.denorm(img).cpu(), 'dummy.jpg')
     except: save_image(self.denorm(img.data).cpu(), 'dummy.jpg')
-    os.system('eog dummy.jpg')  
-    os.remove('dummy.jpg')
+    #os.system('eog dummy.jpg')  
+    #os.remove('dummy.jpg')
 
   #=======================================================================================#
   #=======================================================================================#
@@ -271,10 +271,11 @@ class Solver(object):
       file_name = os.path.join(name_folder, 'tmp_all_'+str(n+1))
       save_image(fake_images, file_name+'.jpg',nrow=1, padding=0)       
     else:
-      file_name = 'tmp_all'
-      save_image(fake_images, file_name+'.jpg',nrow=1, padding=0)
-      os.system('eog tmp_all.jpg')    
-      os.remove('tmp_all.jpg')
+      file_name = os.path.join(self.sample_path, 'tmp_all.jpg')
+      print('Saved at '+file_name)
+      save_image(fake_images, file_name,nrow=1, padding=0)
+      #os.system('eog tmp_all.jpg')    
+      #os.remove('tmp_all.jpg')
 
   #=======================================================================================#
   #=======================================================================================#
@@ -304,8 +305,6 @@ class Solver(object):
     real_c = []
     for i, (images, labels, files) in enumerate(self.data_loader):
       # ipdb.set_trace()
-      if len(images.size())==3: images = images.unsqueeze(0)
-      if len(labels.size())==3: labels = labels.unsqueeze(0)
       if self.config.BLUR: images = self.blurRANDOM(images)
       fixed_x.append(images)
       real_c.append(labels)
@@ -395,6 +394,7 @@ class Solver(object):
         #====================================== DATA2VAR =======================================#
         #=======================================================================================#
         # Generat fake labels randomly (target domain labels)
+
         rand_idx = torch.randperm(real_label.size(0))
         fake_label = real_label[rand_idx]
         
@@ -420,6 +420,7 @@ class Solver(object):
         else:
           d_loss_real = - torch.mean(out_src)
 
+        # ipdb.set_trace()
         d_loss_cls = F.binary_cross_entropy_with_logits(
           out_cls, real_label, size_average=False) / real_x.size(0)
 

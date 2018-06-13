@@ -122,6 +122,8 @@ class Discriminator(nn.Module):
 
   def forward(self, x, lstm=False):
     h = self.main(x)
-    out_real = self.conv1(h)
-    out_aux = self.conv2(h)
-    return out_real.squeeze(), out_aux.squeeze()
+    # ipdb.set_trace()
+    out_real = self.conv1(h).squeeze()
+    out_aux = self.conv2(h).squeeze()
+
+    return out_real.view(x.size(0), out_real.size(-2), out_real.size(-1)), out_aux.view(x.size(0), out_aux.size(-1))
