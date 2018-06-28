@@ -34,6 +34,12 @@ def update_folder(config, folder):
   config.sample_path = os.path.join(config.sample_path, folder)
   config.model_save_path =os.path.join(config.model_save_path, folder)
 
+def replace_dataset(config):
+  config.metadata_path = config.metadata_path.replace('MultiLabelAU', config.dataset)
+  config.log_path = config.log_path.replace('MultiLabelAU', config.dataset)
+  config.sample_path = config.sample_path.replace('MultiLabelAU', config.dataset)
+  config.model_save_path = config.model_save_path.replace('MultiLabelAU', config.dataset)
+
 def remove_folder(config):
   import os
   logs = os.path.join(config.log_path, '*.bcv002')
@@ -48,12 +54,16 @@ def update_config(config):
   if config.GOOGLE or config.TEST: config.mode='test'
   if config.VAL_SHOW: config.mode='val'
 
+  replace_dataset(config)
+
   update_folder(config, os.path.join(config.mode_data, str(config.image_size), 'fold_'+config.fold))
   config.metadata_path = os.path.join(config.metadata_path, config.mode_data, 'fold_'+config.fold, )
   config.g_repeat_num = int(math.log(config.image_size,2)-1)
   config.d_repeat_num = int(math.log(config.image_size,2)-1)
   config.mean=(0.5,0.5,0.5)
   config.std=(0.5,0.5,0.5)
+
+  if config.image_size==128: config.batch_size=32
 
   if config.COLOR_JITTER: update_folder(config, 'COLOR_JITTER')
 
@@ -82,10 +92,13 @@ def update_config(config):
     config.HINGE = True
     config.SpectralNorm = True
     config.batch_size=4
+    if config.image_size==128: config.batch_size=50
 
   if config.SpectralNorm: 
     update_folder(config, 'SpectralNorm')
-    if not config.SAGAN: config.batch_size=8
+    if not config.SAGAN and not config.GOOGLE: 
+      config.batch_size=8
+      if config.image_size==128: config.batch_size=32
 
   if config.HINGE: 
     update_folder(config, 'HINGE') 

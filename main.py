@@ -71,7 +71,7 @@ if __name__ == '__main__':
   # parser.add_argument('--c2_dim', type=int, default=5)
   # parser.add_argument('--celebA_crop_size', type=int, default=178)
   # parser.add_argument('--rafd_crop_size', type=int, default=256)
-  parser.add_argument('--image_size', type=int, default=256)
+  parser.add_argument('--image_size', type=int, default=128)
   parser.add_argument('--g_conv_dim', type=int, default=64)
   parser.add_argument('--d_conv_dim', type=int, default=64)
   parser.add_argument('--g_repeat_num', type=int, default=6)
@@ -79,18 +79,18 @@ if __name__ == '__main__':
   parser.add_argument('--g_lr', type=float, default=0.0001)
   parser.add_argument('--d_lr', type=float, default=0.0001)
   parser.add_argument('--lambda_cls', type=float, default=1)
-  parser.add_argument('--lambda_l1', type=float, default=10)
-  parser.add_argument('--lambda_rec', type=float, default=10)
-  parser.add_argument('--lambda_gp', type=float, default=10)
+  parser.add_argument('--lambda_l1', type=float, default=10.0)
+  parser.add_argument('--lambda_rec', type=float, default=10.0)
+  parser.add_argument('--lambda_gp', type=float, default=10.0)
   parser.add_argument('--d_train_repeat', type=int, default=5)
 
   # Training settings
-  parser.add_argument('--dataset', type=str, default='MultiLabelAU', choices=['MultiLabelAU'])
-  parser.add_argument('--num_epochs', type=int, default=99)
-  parser.add_argument('--num_epochs_decay', type=int, default=100)
+  parser.add_argument('--dataset', type=str, default='MultiLabelAU', choices=['MultiLabelAU', 'EmotionNet'])
+  parser.add_argument('--num_epochs', type=int, default=199)
+  parser.add_argument('--num_epochs_decay', type=int, default=200)
   # parser.add_argument('--num_iters', type=int, default=300000)
   # parser.add_argument('--num_iters_decay', type=int, default=100000)
-  parser.add_argument('--batch_size', type=int, default=12)
+  parser.add_argument('--batch_size', type=int, default=16)
   parser.add_argument('--num_workers', type=int, default=4)
   parser.add_argument('--beta1', type=float, default=0.5)
   parser.add_argument('--beta2', type=float, default=0.999)
@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
   # Training LSTM
   parser.add_argument('--LSTM', action='store_true', default=False)
-  parser.add_argument('--batch_seq', type=int, default=24)    
+  # parser.add_argument('--batch_seq', type=int, default=24)    
 
   # Test settings
   parser.add_argument('--test_model', type=str, default='')
@@ -129,10 +129,6 @@ if __name__ == '__main__':
 
   # Path
   parser.add_argument('--metadata_path', type=str, default='./data/MultiLabelAU')
-  # parser.add_argument('--log_path', type=str, default='./stargan_MultiLabelAU_New/logs')
-  # parser.add_argument('--model_save_path', type=str, default='./stargan_MultiLabelAU_New/models')
-  # parser.add_argument('--sample_path', type=str, default='./stargan_MultiLabelAU_New/samples')
-  # parser.add_argument('--result_path', type=str, default='./stargan_MultiLabelAU_New/results')
   parser.add_argument('--log_path', type=str, default='./stargan_MultiLabelAU/logs')
   parser.add_argument('--model_save_path', type=str, default='./stargan_MultiLabelAU/models')
   parser.add_argument('--sample_path', type=str, default='./stargan_MultiLabelAU/samples')
@@ -140,11 +136,6 @@ if __name__ == '__main__':
   parser.add_argument('--fold', type=str, default='0')
   parser.add_argument('--mode_data', type=str, default='normal', choices=['normal', 'aligned'])  
 
-  # Training Binary Classifier
-  # parser.add_argument('--multi_binary', action='store_true', default=False)
-  # parser.add_argument('--au', type=str, default='1')
-  # parser.add_argument('--au_model', type=str, default='aunet')
-  # parser.add_argument('--pretrained_model_generator', type=str, default='')
 
 
   # Step size
@@ -158,11 +149,13 @@ if __name__ == '__main__':
 
   config = cfg.update_config(config)
 
-  with open('logs/gpu{}.txt'.format(config.GPU), 'wb') as config.log:
-    print >> config.log, ' '.join(sys.argv)
-    config.log.flush()
-    print(config)
+  if not config.GOOGLE:
+    with open('logs/gpu{}.txt'.format(config.GPU), 'wb') as config.log:
+      print >> config.log, ' '.join(sys.argv)
+      config.log.flush()
+      print(config)
+      main(config)
+    last_sample = sorted(glob.glob(config.sample_path+'/*.jpg'))[-1]
+    os.system('echo {0} | mail -s "Training done - GPU {1} free" -A "{0}" rv.andres10@uniandes.edu.co'.format(msj, config.GPU))
+  else:
     main(config)
-
-  last_sample = sorted(glob.glob(config.sample_path+'/*.jpg'))[-1]
-  os.system('echo {0} | mail -s "Training done - GPU {1} free" -A "{0}" rv.andres10@uniandes.edu.co'.format(msj, config.GPU))

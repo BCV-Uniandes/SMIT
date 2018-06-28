@@ -32,7 +32,7 @@ class Self_Attn(nn.Module):
     h_x = self.h_(x)
 
     attn_dist = torch.matmul(f_x.permute(0,1,3,2), g_x).sum(dim=1)
-    attn_soft = F.softmax(attn_dist, dim=2)
+    attn_soft = F.softmax(attn_dist, dim=-1)
     attn_score = attn_soft.unsqueeze(1)
 
     self_attn_map = torch.mul(h_x, attn_score)

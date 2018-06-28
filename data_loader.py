@@ -22,6 +22,8 @@ class MultiLabelAU(Dataset):
     self.shuffling = shuffling
     self.image_size = image_size
     self.MEAN = MEAN
+    if 'emotionnet' in metadata_path.lower(): self.ssd = '/home/afromero/ssd2/EmotionNet2018/'+mode
+    else: self.ssd = ''
     file_txt = os.path.abspath(os.path.join(metadata_path, mode+'.txt'))
     print("Data from: "+file_txt)
     self.lines = open(file_txt, 'r').readlines()
@@ -30,9 +32,9 @@ class MultiLabelAU(Dataset):
     random.seed(1234)
     # random.seed(10)
     self.preprocess()
-    if mode!='val': print ('Finished preprocessing dataset: %s!'%(mode))
-    
     self.num_data = len(self.filenames)
+    if mode!='val': print ('Finished preprocessing dataset: %s (%d)!'%(mode, self.num_data))
+    # ipdb.set_trace()
 
   def preprocess(self):
     self.filenames = []
@@ -43,10 +45,10 @@ class MultiLabelAU(Dataset):
       splits = line.split()
       filename = splits[0]
       name = 'Faces' if not 'aligned' in filename else 'Faces_aligned'
-      filename = filename.replace(name, name+'_'+str(self.image_size))
+      filename = filename.replace(name, name+'_256')#+str(self.image_size))
       # if self.no_flipping and 'flip' in filename: continue
 
-      if not os.path.isfile(filename): 
+      if not os.path.isfile(os.path.join(self.ssd, filename)): 
         ipdb.set_trace()
         imageio.imwrite(filename, np.zeros((self.image_size, self.image_size,3)).astype(np.uint8))
       # ipdb.set_trace()
@@ -61,8 +63,9 @@ class MultiLabelAU(Dataset):
 
   def __getitem__(self, index):
     # ipdb.set_trace()
-    image = Image.open(self.filenames[index])
+    image = Image.open(os.path.join(self.ssd, self.filenames[index])).convert('RGB')
     label = self.labels[index]
+
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
 
   def __len__(self):

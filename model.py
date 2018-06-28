@@ -6,6 +6,7 @@ import numpy as np
 from models.spectral import SpectralNorm as SpectralNormalization
 from models.sagan import Self_Attn
 import ipdb
+import math
 
 def get_SN(bool):
   if bool:
@@ -40,7 +41,7 @@ class ResidualBlock(nn.Module):
 
 class Generator(nn.Module):
   """Generator. Encoder-Decoder Architecture."""
-  def __init__(self, conv_dim=64, c_dim=5, repeat_num=6, NO_TANH=False, SAGAN=False, debug=False):
+  def __init__(self, image_size = 128, conv_dim=64, c_dim=5, repeat_num=6, NO_TANH=False, SAGAN=False, debug=False):
     super(Generator, self).__init__()
     layers = []
     layers.append(nn.Conv2d(3+c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
@@ -52,8 +53,9 @@ class Generator(nn.Module):
     #   attn2 = Self_Attn(int(self.imsize/2), 64, 'relu')      
 
     # Down-Sampling
+    conv_repeat = int(math.log(image_size, 2))-5
     curr_dim = conv_dim
-    for i in range(3):
+    for i in range(conv_repeat):
       layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
       layers.append(nn.InstanceNorm2d(curr_dim*2, affine=True))
       layers.append(nn.ReLU(inplace=True))
@@ -65,7 +67,7 @@ class Generator(nn.Module):
 
     # Up-Sampling
     if SAGAN: self.scores = []
-    for i in range(3):
+    for i in range(conv_repeat):
       layers.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
       layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True))
       layers.append(nn.ReLU(inplace=True))
@@ -79,7 +81,7 @@ class Generator(nn.Module):
     # if SAGAN:
 
     if debug:
-      feed = Variable(torch.ones(1,3+c_dim,256,256), volatile=True)
+      feed = Variable(torch.ones(1,3+c_dim,image_size,image_size), volatile=True)
       print('-- Generator:')
       print_debug(feed, layers)
 
@@ -110,14 +112,15 @@ class Discriminator(nn.Module):
       #   layers.append(Self_Attn(64*(i+1), curr_dim))        
 
     k_size = int(image_size / np.power(2, repeat_num))
+    layers_debug = layers
     self.main = nn.Sequential(*layers)
     self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
     self.conv2 = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
-
+    layers_debug.append(self.conv1)
     if debug:
-      feed = Variable(torch.ones(1,3,256,256), volatile=True)
+      feed = Variable(torch.ones(1,3,image_size,image_size), volatile=True)
       print('-- Discriminator:')
-      print_debug(feed, layers)
+      print_debug(feed, layers_debug)
 
 
   def forward(self, x, lstm=False):

@@ -72,25 +72,25 @@ class Solver(object):
   def build_model(self):
     # Define a generator and a discriminator
     from model import Generator, Discriminator
-    self.G = Generator(self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, 
+    self.G = Generator(self.config.image_size, self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, 
                        NO_TANH=self.config.NO_TANH, SAGAN=self.config.SAGAN, debug=True)
-    self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, 
+    if not self.config.GOOGLE: self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, 
                        self.config.d_repeat_num, SN=self.config.SpectralNorm, SAGAN=self.config.SAGAN,
                        debug=True) 
 
     G_parameters = filter(lambda p: p.requires_grad, self.G.parameters())
-    D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
+    if not self.config.GOOGLE: D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
 
     self.g_optimizer = torch.optim.Adam(G_parameters, self.config.g_lr, [self.config.beta1, self.config.beta2])
-    self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr, [self.config.beta1, self.config.beta2])
+    if not self.config.GOOGLE: self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr, [self.config.beta1, self.config.beta2])
 
     if torch.cuda.is_available():
       self.G.cuda()
-      self.D.cuda()
+      if not self.config.GOOGLE: self.D.cuda()
 
     # self.PRINT networks
     self.print_network(self.G, 'Generator')
-    self.print_network(self.D, 'Discriminator')
+    if not self.config.GOOGLE: self.print_network(self.D, 'Discriminator')
 
   #=======================================================================================#
   #=======================================================================================#
@@ -111,7 +111,7 @@ class Solver(object):
     # ipdb.set_trace()
     self.G.load_state_dict(torch.load(os.path.join(
       self.config.model_save_path, '{}_G.pth'.format(self.config.pretrained_model))))
-    self.D.load_state_dict(torch.load(os.path.join(
+    if not self.config.GOOGLE: self.D.load_state_dict(torch.load(os.path.join(
       self.config.model_save_path, '{}_D.pth'.format(self.config.pretrained_model))))
     self.PRINT('loaded trained models (step: {})..!'.format(self.config.pretrained_model))
 
@@ -177,7 +177,7 @@ class Solver(object):
 
   def get_aus(self):
     resize = lambda x: skimage.transform.resize(imageio.imread(line), (self.config.image_size,self.config.image_size))
-    imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('/home/afromero/datos2/aus_flat/*.jpeg'))]
+    imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('data/{}/aus_flat/*.jpeg'.format(self.config.dataset)))]
     imgs = torch.from_numpy(np.concatenate(imgs, axis=2).astype(np.float32)).unsqueeze(0)
     return imgs
 
@@ -271,7 +271,7 @@ class Solver(object):
       file_name = os.path.join(name_folder, 'tmp_all_'+str(n+1))
       save_image(fake_images, file_name+'.jpg',nrow=1, padding=0)       
     else:
-      file_name = os.path.join(self.sample_path, 'tmp_all.jpg')
+      file_name = os.path.join(self.config.sample_path, self.config.pretrained_model+'_google.jpg')
       print('Saved at '+file_name)
       save_image(fake_images, file_name,nrow=1, padding=0)
       #os.system('eog tmp_all.jpg')    
@@ -290,8 +290,9 @@ class Solver(object):
   #=======================================================================================#
 
   def PRINT(self, str):  
-    print >> self.config.log, str
-    self.config.log.flush()
+    if not self.config.GOOGLE:
+      print >> self.config.log, str
+      self.config.log.flush()
     print(str)
 
   #=======================================================================================#
@@ -447,7 +448,7 @@ class Solver(object):
         #=================================== Gradient Penalty ==================================#
         #=======================================================================================#
         # Compute gradient penalty
-        if not self.config.LSGAN or not self.config.HINGE:
+        if not (self.config.LSGAN or self.config.HINGE):
           alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
           # ipdb.set_trace()
           interpolated = Variable(alpha * real_x.data + (1 - alpha) * fake_x.data, requires_grad=True)
@@ -502,7 +503,7 @@ class Solver(object):
           if self.config.LSGAN:
             g_loss_fake = F.mse_loss(out_src, torch.ones_like(out_src))
           elif self.config.HINGE:
-            g_loss_fake = torch.mean(F.relu(1-out_src))            
+            g_loss_fake = - torch.mean(out_src)
           else:          
             g_loss_fake = - torch.mean(out_src)          
 
@@ -593,7 +594,7 @@ class Solver(object):
       elapsed = time.time() - start_time
       elapsed = str(datetime.timedelta(seconds=elapsed))
       # log = '!Elapsed: %s | [F1_VAL: %0.3f LOSS_VAL: %0.3f]\nTrain'%(elapsed, np.array(f1).mean(), np.array(loss).mean())
-      log = '!Elapsed: %s\nTrain'%(elapsed)
+      log = '!Elapsed (%d/%d) : %s | %s\nTrain'%(e, self.config.num_epochs, elapsed, Log)
       for tag, value in sorted(loss_cum.items()):
         log += ", {}: {:.4f}".format(tag, np.array(value).mean())   
 
@@ -615,7 +616,7 @@ class Solver(object):
     # target_c_list = []
     target_c= torch.from_numpy(np.zeros((real_x.size(0), self.config.c_dim), dtype=np.float32))
     target_c_list = [self.to_var(target_c, volatile=True)]
-    for j in range(self.c_dim):
+    for j in range(self.config.c_dim):
       target_c[:,j]=1       
       target_c_list.append(self.to_var(target_c, volatile=True))
       # target_c = self.one_hot(torch.ones(real_x.size(0)) * j, self.c_dim)
@@ -721,9 +722,9 @@ class Solver(object):
     self.PRINT(" [!!] {} model loaded...".format(D_path))
     # ipdb.set_trace()
     self.G.load_state_dict(torch.load(G_path))
-    self.D.load_state_dict(torch.load(D_path))
+    if not self.config.GOOGLE: self.D.load_state_dict(torch.load(D_path))
     self.G.eval()
-    self.D.eval()
+    if not self.config.GOOGLE: self.D.eval()
     # ipdb.set_trace()
     if self.config.dataset == 'MultiLabelAU' and not self.config.GOOGLE:
       data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
