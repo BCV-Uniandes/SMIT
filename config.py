@@ -56,6 +56,10 @@ def update_config(config):
 
   replace_dataset(config)
 
+  if config.dataset=='EmotionNet':
+    config.num_epochs = 9
+    config.num_epochs_decay = 10
+
   update_folder(config, os.path.join(config.mode_data, str(config.image_size), 'fold_'+config.fold))
   config.metadata_path = os.path.join(config.metadata_path, config.mode_data, 'fold_'+config.fold, )
   config.g_repeat_num = int(math.log(config.image_size,2)-1)
@@ -89,10 +93,15 @@ def update_config(config):
     update_folder(config, 'SAGAN')
     config.d_lr = 0.0004
     config.d_train_repeat = 1
-    config.HINGE = True
+    config.TTUR = True
     config.SpectralNorm = True
     config.batch_size=4
     if config.image_size==128: config.batch_size=50
+
+  if config.TTUR:
+    update_folder(config, 'TTUR') 
+    config.d_lr = 0.0004
+    config.d_train_repeat = 1    
 
   if config.SpectralNorm: 
     update_folder(config, 'SpectralNorm')

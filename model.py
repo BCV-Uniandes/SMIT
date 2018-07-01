@@ -114,6 +114,7 @@ class Discriminator(nn.Module):
     k_size = int(image_size / np.power(2, repeat_num))
     layers_debug = layers
     self.main = nn.Sequential(*layers)
+    # ipdb.set_trace()
     self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
     self.conv2 = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
     layers_debug.append(self.conv1)

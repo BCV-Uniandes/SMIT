@@ -360,12 +360,15 @@ class Solver(object):
     self.PRINT(Log)
     loss_cum = {}
     start_time = time.time()
-    flag_init=True
+    flag_init=True 
+
+
+
     for e in range(start, self.config.num_epochs):
       E = str(e+1).zfill(3)
       self.D.train()
       self.G.train()
-
+      
       # if flag_init:
       #   f1, loss, f1_1 = self.val_cls(init=True)   
       #   log = '[F1_VAL: %0.3f (F1_1: %0.3f) LOSS_VAL: %0.3f]'%(np.mean(f1), np.mean(f1_1), np.mean(loss))
@@ -564,6 +567,7 @@ class Solver(object):
           # ipdb.set_trace()
           shape0 = min(64, fake_images.data.cpu().shape[0])
           img_denorm = self.denorm(fake_images.data.cpu()[:shape0])
+          img_denorm = torch.cat((self.get_aus(), img_denorm), dim=0)
           save_image(img_denorm,
             os.path.join(self.config.sample_path, '{}_{}_fake.jpg'.format(E, i+1)),nrow=1, padding=0)
           # self.PRINT('Translated images and saved into {}..!'.format(self.sample_path))

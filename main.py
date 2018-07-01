@@ -112,6 +112,7 @@ if __name__ == '__main__':
   parser.add_argument('--HINGE', action='store_true', default=False) 
   parser.add_argument('--SpectralNorm', action='store_true', default=False) 
   parser.add_argument('--SAGAN', action='store_true', default=False) 
+  parser.add_argument('--TTUR', action='store_true', default=False) 
 
   # Training LSTM
   parser.add_argument('--LSTM', action='store_true', default=False)

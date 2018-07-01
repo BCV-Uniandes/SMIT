@@ -22,7 +22,7 @@ class MultiLabelAU(Dataset):
     self.shuffling = shuffling
     self.image_size = image_size
     self.MEAN = MEAN
-    if 'emotionnet' in metadata_path.lower(): self.ssd = '/home/afromero/ssd2/EmotionNet2018/'+mode
+    if 'emotionnet' in metadata_path.lower(): self.ssd = '/home/afromero/ssd2/EmotionNet2018/data_128/'+mode
     else: self.ssd = ''
     file_txt = os.path.abspath(os.path.join(metadata_path, mode+'.txt'))
     print("Data from: "+file_txt)
@@ -48,7 +48,9 @@ class MultiLabelAU(Dataset):
       filename = filename.replace(name, name+'_256')#+str(self.image_size))
       # if self.no_flipping and 'flip' in filename: continue
 
-      if not os.path.isfile(os.path.join(self.ssd, filename)): 
+      if not os.path.isfile(os.path.join(self.ssd, filename)) or os.stat(os.path.join(self.ssd, filename)).st_size==0: 
+        
+        # continue
         ipdb.set_trace()
         imageio.imwrite(filename, np.zeros((self.image_size, self.image_size,3)).astype(np.uint8))
       # ipdb.set_trace()
