@@ -131,8 +131,10 @@ class GooglePhotos(Dataset):
     self.shuffling = shuffling
     MODE = '_aligned_{}'.format(image_size) if mode=='aligned' else ''
     file_txt = os.path.abspath(os.path.join('data/Google/data_faces{}.txt'.format(MODE)))
+    # file_txt = os.path.abspath(os.path.join('data/Google/data.txt'))
     print('Images from: '+file_txt)
     self.lines = open(file_txt, 'r').readlines()
+    self.lines = [line.replace('Faces', 'Org') for line in self.lines]
 
     print ('Start preprocessing dataset: Google!')
     random.seed(11111)

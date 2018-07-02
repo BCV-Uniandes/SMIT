@@ -333,9 +333,10 @@ class Solver(object):
     if self.config.pretrained_model:
       start = int(self.config.pretrained_model.split('_')[0])
       for i in range(start):
-        if (i+1) > (self.config.num_epochs - self.config.num_epochs_decay):
-          g_lr -= (self.config.g_lr / float(self.config.num_epochs_decay))
-          d_lr -= (self.config.d_lr / float(self.config.num_epochs_decay))
+        # if (i+1) > (self.config.num_epochs - self.config.num_epochs_decay):
+        if (i+1) %10==0:
+          g_lr -= (self.config.g_lr / 10.)
+          d_lr -= (self.config.d_lr / 10.)
           self.update_lr(g_lr, d_lr)
           self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))     
     else:
@@ -605,9 +606,10 @@ class Solver(object):
       self.PRINT(log)
 
       # Decay learning rate     
-      if (e+1) > (self.config.num_epochs - self.config.num_epochs_decay):
-        g_lr -= (self.config.g_lr / float(self.config.num_epochs_decay))
-        d_lr -= (self.config.d_lr / float(self.config.num_epochs_decay))
+      # if (e+1) > (self.config.num_epochs - self.config.num_epochs_decay):
+      if (e+1) % 10==0:
+        g_lr -= (self.config.g_lr / 10)
+        d_lr -= (self.config.d_lr / 10)
         self.update_lr(g_lr, d_lr)
         # self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 

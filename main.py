@@ -146,7 +146,7 @@ if __name__ == '__main__':
 
   config = parser.parse_args()
 
-  os.environ['CUDA_VISIBLE_DEVICES'] = config.GPU
+  os.environ['CUDA_VISIBLE_DEVICES'] = str(int(float(config.GPU)))
 
   config = cfg.update_config(config)
 

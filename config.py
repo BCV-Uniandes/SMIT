@@ -57,8 +57,8 @@ def update_config(config):
   replace_dataset(config)
 
   if config.dataset=='EmotionNet':
-    config.num_epochs = 9
-    config.num_epochs_decay = 10
+    config.num_epochs = 19
+    config.num_epochs_decay = 20
 
   update_folder(config, os.path.join(config.mode_data, str(config.image_size), 'fold_'+config.fold))
   config.metadata_path = os.path.join(config.metadata_path, config.mode_data, 'fold_'+config.fold, )
@@ -67,7 +67,7 @@ def update_config(config):
   config.mean=(0.5,0.5,0.5)
   config.std=(0.5,0.5,0.5)
 
-  if config.image_size==128: config.batch_size=32
+  if config.image_size<=128: config.batch_size=32
 
   if config.COLOR_JITTER: update_folder(config, 'COLOR_JITTER')
 
@@ -107,7 +107,7 @@ def update_config(config):
     update_folder(config, 'SpectralNorm')
     if not config.SAGAN and not config.GOOGLE: 
       config.batch_size=8
-      if config.image_size==128: config.batch_size=32
+      if config.image_size<=128: config.batch_size=32
 
   if config.HINGE: 
     update_folder(config, 'HINGE') 
