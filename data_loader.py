@@ -272,7 +272,7 @@ class Fusion(Dataset):
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
 
   def __len__(self):
-    return self.filenames   
+    return len(self.filenames)
 
 def get_loader(metadata_path, crop_size, image_size, batch_size, \
         dataset=['BP4D'], mode='train', \

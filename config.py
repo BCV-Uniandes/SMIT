@@ -108,6 +108,9 @@ def update_config(config):
     config.num_epochs = 19
     config.num_epochs_decay = 20
 
+  if config.CLS_options!='':
+    config.mode_train='CLS'
+
   if config.mode_train=='CLS': 
     replace_folder_cls(config)
   else:
@@ -122,11 +125,14 @@ def update_config(config):
 
   if config.mode_train=='CLS': 
     if config.Generator_path=='':
+      config.Generator_path = config.model_save_path.replace(config.model_save_path.split('/')[3], config.model_save_path.split('/')[3].split('_')[0])
       config_GENERATOR(config, update_folder_generator)
-      config.Generator_path = sorted(glob.glob(config.Generator_path+'/*G_.pth'))[-1]
-    config.CLS_options.append('DENSENET')
+      config.Generator_path = config.Generator_path.replace('CLS', 'GAN')
+      # import ipdb;ipdb.set_trace()
+      config.Generator_path = sorted(glob.glob(config.Generator_path+'/*G.pth'))[-1]
+    # config.CLS_options.append('DENSENET')
     config.batch_size=32
-    config.num_epochs = 15
+    config.num_epochs = 5
     config.mean = 0.0
     config.std = 0.0
   else:

@@ -27,6 +27,7 @@ class Solver(object):
     self.data_loader = data_loader
 
     self.config = config
+    self.config.lr = self.config.d_lr
 
     # Build tensorboard if use
     self.build_model()
@@ -77,7 +78,7 @@ class Solver(object):
 
 
     # Optimizers
-    self.d_optimizer = torch.optim.Adam(self.C.parameters(), self.d_lr, [self.beta1, self.beta2])
+    self.d_optimizer = torch.optim.Adam(self.C.parameters(), self.config.lr, [self.config.beta1, self.config.beta2])
 
     # Print networks
     if not 'JUST_REAL' in self.config.CLS_options: self.print_network(self.G, 'Generator')
@@ -102,7 +103,7 @@ class Solver(object):
   #=======================================================================================#
   def load_pretrained_model(self):
     model = os.path.join(
-      self.model_save_path, '{}.pth'.format(self.pretrained_model))
+      self.config.model_save_path, '{}.pth'.format(self.config.pretrained_model))
     self.C.load_state_dict(torch.load(model))
     print('loaded CLS trained model: {}!'.format(model))
 
@@ -110,7 +111,7 @@ class Solver(object):
   #=======================================================================================#
   def build_tensorboard(self):
     from logger import Logger
-    self.logger = Logger(self.log_path)
+    self.logger = Logger(self.config.log_path)
 
   #=======================================================================================#
   #=======================================================================================#
@@ -182,8 +183,7 @@ class Solver(object):
   #=======================================================================================#  
   def train(self):
     # lr cache for decaying
-    g_lr = self.config.g_lr
-    d_lr = self.config.d_lr
+    lr = self.config.lr
 
     # Start with trained model if exists
     if self.config.pretrained_model:
@@ -191,10 +191,9 @@ class Solver(object):
       for i in range(start):
         # if (i+1) > (self.config.num_epochs - self.config.num_epochs_decay):
         if (i+1) %10==0:
-          g_lr = (self.config.g_lr / 10.)
-          d_lr = (self.config.d_lr / 10.)
-          self.update_lr(g_lr, d_lr)
-          self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))     
+          lr = (self.config.lr / 10.)
+          self.update_lr(lr)
+          self.PRINT ('Decay learning rate to lr: {}.'.format(lr))     
     else:
       start = 0
 
@@ -302,15 +301,15 @@ class Solver(object):
   #=======================================================================================#  
   def val(self, init=False, load=False):
     from data_loader import get_loader
-    data_loader_val = get_loader(self.metadata_path, self.image_size,
-                   self.image_size, self.batch_size, self.config.real_dataset, 'val', shuffling=False)
+    data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
+                   self.config.image_size, self.config.batch_size, self.config.real_dataset, 'val', shuffling=False)
 
     if init:
-      txt_path = os.path.join(self.model_save_path, 'init_val.txt')
+      txt_path = os.path.join(self.config.model_save_path, 'init_val.txt')
     else:
-      last_file = sorted(glob.glob(os.path.join(self.model_save_path,  '*.pth')))[-1]
+      last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*.pth')))[-1]
       last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
-      txt_path = os.path.join(self.model_save_path, '{}_{}_val.txt'.format(last_name,'{}'))
+      txt_path = os.path.join(self.config.model_save_path, '{}_{}_val.txt'.format(last_name,'{}'))
       try:
         output_txt  = sorted(glob.glob(txt_path.format('*')))[-1]
         number_file = len(glob.glob(output_txt))
@@ -319,18 +318,18 @@ class Solver(object):
       txt_path = txt_path.format(str(number_file).zfill(2)) 
     
     if load:
-      C_path = os.path.join(self.model_save_path, '{}.pth'.format(last_name))
+      C_path = os.path.join(self.config.model_save_path, '{}.pth'.format(last_name))
       self.C.load_state_dict(torch.load(C_path))
 
     self.C.eval()
 
-    self.f=open(txt_path, 'a')   
-    self.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
+    self.config.f=open(txt_path, 'a')   
+    self.config.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
     # ipdb.set_trace()
     # F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
     # _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
-    f1,_,_ = F1_TEST(self, data_loader_val, thresh = [0.5]*self.config.c_dim, mode='VAL', verbose=load)
-    self.f.close()
+    f1,_,_ = F1_TEST(self.config, data_loader_val, thresh = [0.5]*self.config.c_dim, mode='VAL', verbose=load)
+    self.config.f.close()
     return f1
 
 
@@ -341,37 +340,37 @@ class Solver(object):
   #=======================================================================================#  
   def test(self):
     from data_loader import get_loader
-    if self.pretrained_model=='':
-      last_file = sorted(glob.glob(os.path.join(self.model_save_path,  '*.pth')))[-1]
+    if self.config.pretrained_model=='':
+      last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*.pth')))[-1]
       last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
     else:
-      last_name = self.test_model
+      last_name = self.config.test_model
 
-    C_path = os.path.join(self.model_save_path, '{}.pth'.format(last_name))
-    txt_path = os.path.join(self.model_save_path, '{}_{}.txt'.format(last_name,'{}'))
-    self.pkl_data = os.path.join(self.model_save_path, '{}_{}.pkl'.format(last_name, '{}'))
+    C_path = os.path.join(self.config.model_save_path, '{}.pth'.format(last_name))
+    txt_path = os.path.join(self.config.model_save_path, '{}_{}.txt'.format(last_name,'{}'))
+    self.pkl_data = os.path.join(self.config.model_save_path, '{}_{}.pkl'.format(last_name, '{}'))
     print(" [!!] {} model loaded...".format(C_path))
     self.C.load_state_dict(torch.load(C_path))
     self.C.eval()
-    data_loader_val = get_loader(self.metadata_path, self.image_size,
-                 self.image_size, self.batch_size, self.config.real_dataset, 'val', no_flipping = True)
-    data_loader_test = get_loader(self.metadata_path, self.image_size,
-                 self.image_size, self.batch_size, self.config.real_dataset, 'test')
+    data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
+                 self.config.image_size, self.config.batch_size, self.config.real_dataset, 'val', no_flipping = True)
+    data_loader_test = get_loader(self.config.metadata_path, self.config.image_size,
+                 self.config.image_size, self.config.batch_size, self.config.real_dataset, 'test')
 
     if not hasattr(self, 'output_txt'):
       # ipdb.set_trace()
-      self.output_txt = txt_path
+      self.config.output_txt = txt_path
       try:
-        self.output_txt  = sorted(glob.glob(self.output_txt.format('*')))[-1]
-        number_file = len(glob.glob(self.output_txt))
+        self.config.output_txt  = sorted(glob.glob(self.config.output_txt.format('*')))[-1]
+        number_file = len(glob.glob(self.config.output_txt))
       except:
         number_file = 0
-      self.output_txt = self.output_txt.format(str(number_file).zfill(2)) 
+      self.config.output_txt = self.config.output_txt.format(str(number_file).zfill(2)) 
     
-    self.f=open(self.output_txt, 'a')   
-    self.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
+    self.config.f=open(self.config.output_txt, 'a')   
+    self.config.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
     # ipdb.set_trace()
-    F1_real, F1_max, max_thresh_val  = F1_TEST(self, data_loader_val, mode = 'VAL')
-    _ = F1_TEST(self, data_loader_test, thresh = max_thresh_val)
+    F1_real, F1_max, max_thresh_val  = F1_TEST(self.config, data_loader_val, mode = 'VAL')
+    _ = F1_TEST(self.config, data_loader_test, thresh = max_thresh_val)
    
     self.f.close()
