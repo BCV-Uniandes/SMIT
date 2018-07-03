@@ -72,25 +72,25 @@ class Solver(object):
   def build_model(self):
     # Define a generator and a discriminator
     from model import Generator, Discriminator
-    self.G = Generator(self.config.image_size, self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, 
-                       NO_TANH=self.config.NO_TANH, SAGAN=self.config.SAGAN, debug=True)
-    if not self.config.GOOGLE: self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, 
-                       self.config.d_repeat_num, SN=self.config.SpectralNorm, SAGAN=self.config.SAGAN,
+    self.G = Generator(self.config.image_size, self.config.g_conv_dim, self.config.c_dim, self.config.g_repeat_num, SAGAN='SAGAN' in self.config.GAN_options, debug=True)
+    if not 'GOOGLE' in self.config.GAN_options: self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, 
+                       self.config.d_repeat_num, SN='SpectralNorm' in self.config.GAN_options, SAGAN='SAGAN' in self.config.GAN_options,
                        debug=True) 
 
     G_parameters = filter(lambda p: p.requires_grad, self.G.parameters())
-    if not self.config.GOOGLE: D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
-
     self.g_optimizer = torch.optim.Adam(G_parameters, self.config.g_lr, [self.config.beta1, self.config.beta2])
-    if not self.config.GOOGLE: self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr, [self.config.beta1, self.config.beta2])
+
+    if not 'GOOGLE' in self.config.GAN_options: 
+      D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
+      self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr, [self.config.beta1, self.config.beta2])
 
     if torch.cuda.is_available():
       self.G.cuda()
-      if not self.config.GOOGLE: self.D.cuda()
+      if not 'GOOGLE' in self.config.GAN_options: self.D.cuda()
 
     # self.PRINT networks
     self.print_network(self.G, 'Generator')
-    if not self.config.GOOGLE: self.print_network(self.D, 'Discriminator')
+    if not 'GOOGLE' in self.config.GAN_options: self.print_network(self.D, 'Discriminator')
 
   #=======================================================================================#
   #=======================================================================================#
@@ -111,7 +111,7 @@ class Solver(object):
     # ipdb.set_trace()
     self.G.load_state_dict(torch.load(os.path.join(
       self.config.model_save_path, '{}_G.pth'.format(self.config.pretrained_model))))
-    if not self.config.GOOGLE: self.D.load_state_dict(torch.load(os.path.join(
+    if not 'GOOGLE' in self.config.GAN_options: self.D.load_state_dict(torch.load(os.path.join(
       self.config.model_save_path, '{}_D.pth'.format(self.config.pretrained_model))))
     self.PRINT('loaded trained models (step: {})..!'.format(self.config.pretrained_model))
 
@@ -177,7 +177,7 @@ class Solver(object):
 
   def get_aus(self):
     resize = lambda x: skimage.transform.resize(imageio.imread(line), (self.config.image_size,self.config.image_size))
-    imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('data/{}/aus_flat/*.jpeg'.format(self.config.dataset)))]
+    imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('data/{}/aus_flat/*.jpeg'.format(self.config.dataset_fake)))]
     imgs = torch.from_numpy(np.concatenate(imgs, axis=2).astype(np.float32)).unsqueeze(0)
     return imgs
 
@@ -223,7 +223,7 @@ class Solver(object):
     conv_img = torch.zeros_like(img.clone())
     for i in range(img.size(0)):    
       # ipdb.set_trace()
-      if gray[i] and self.config.GRAY:
+      if gray[i] and 'GRAY' in self.config.GAN_options:
         conv_img[i] = torch.from_numpy(filters.gaussian_filter(img[i], sigma=sigma[i], truncate=trunc[i]))
       else:
         for j in range(img.size(1)):
@@ -290,7 +290,7 @@ class Solver(object):
   #=======================================================================================#
 
   def PRINT(self, str):  
-    if not self.config.GOOGLE:
+    if not 'GOOGLE' in self.config.GAN_options:
       print >> self.config.log, str
       self.config.log.flush()
     print(str)
@@ -306,7 +306,7 @@ class Solver(object):
     real_c = []
     for i, (images, labels, files) in enumerate(self.data_loader):
       # ipdb.set_trace()
-      if self.config.BLUR: images = self.blurRANDOM(images)
+      if 'BLIR' in self.config.GAN_options: images = self.blurRANDOM(images)
       fixed_x.append(images)
       real_c.append(labels)
       if i == 1:
@@ -335,8 +335,8 @@ class Solver(object):
       for i in range(start):
         # if (i+1) > (self.config.num_epochs - self.config.num_epochs_decay):
         if (i+1) %10==0:
-          g_lr -= (self.config.g_lr / 10.)
-          d_lr -= (self.config.d_lr / 10.)
+          g_lr = (self.config.g_lr / 10.)
+          d_lr = (self.config.d_lr / 10.)
           self.update_lr(g_lr, d_lr)
           self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))     
     else:
@@ -348,33 +348,21 @@ class Solver(object):
 
     self.PRINT("Log path: "+self.config.log_path)
 
-    Log = "---> batch size: {}, fold: {}, img: {}, GPU: {}, !{}".format(\
+    Log = "---> batch size: {}, fold: {}, img: {}, GPU: {}, !{}\n-> GAN_options:".format(\
         self.config.batch_size, self.config.fold, self.config.image_size, \
         self.config.GPU, self.config.mode_data) 
 
-    if self.config.COLOR_JITTER: Log += ' [*COLOR_JITTER]'
-    if self.config.BLUR: Log += ' [*BLUR]'
-    if self.config.GRAY: Log += ' [*GRAY]'
-    if self.config.LSGAN: Log += ' [*LSGAN]'
-    if self.config.L1_LOSS: Log += ' [*L1_LOSS]'
-    if self.config.L2_LOSS: Log += ' [*L2_LOSS]'
+    for item in self.config.GAN_options:
+      Log += ' [*{}]'.format(item.upper())
     self.PRINT(Log)
     loss_cum = {}
     start_time = time.time()
     flag_init=True 
 
-
-
     for e in range(start, self.config.num_epochs):
       E = str(e+1).zfill(3)
       self.D.train()
       self.G.train()
-      
-      # if flag_init:
-      #   f1, loss, f1_1 = self.val_cls(init=True)   
-      #   log = '[F1_VAL: %0.3f (F1_1: %0.3f) LOSS_VAL: %0.3f]'%(np.mean(f1), np.mean(f1_1), np.mean(loss))
-      #   self.PRINT(log)
-      #   flag_init = False
 
       desc_bar = 'Epoch: %d/%d'%(e,self.config.num_epochs)
       progress_bar = tqdm(enumerate(self.data_loader), \
@@ -386,7 +374,7 @@ class Solver(object):
         #========================================== BLUR =======================================#
         #=======================================================================================#
         np.random.seed(i+(e*len(self.data_loader)))
-        if self.config.BLUR and np.random.randint(0,2,1)[0]:
+        if 'BLUR' in self.config.GAN_options and np.random.randint(0,2,1)[0]:
           # for i in range(3,27,2):
           #   for j in range(1,10):
           #     save_image(self.denorm(self.blur(real_x,i,j)), 'dummy%s_%s_color.jpg'%(i,j))      
@@ -418,9 +406,9 @@ class Solver(object):
         #=======================================================================================#
         out_src, out_cls = self.D(real_x)
 
-        if self.config.LSGAN:
+        if 'LSGAN' in self.config.GAN_options:
           d_loss_real = F.mse_loss(out_src, torch.ones_like(out_src))
-        elif self.config.HINGE:
+        elif 'HINGE' in self.config.GAN_options:
           d_loss_real = torch.mean(F.relu(1-out_src))
         else:
           d_loss_real = - torch.mean(out_src)
@@ -434,9 +422,9 @@ class Solver(object):
         fake_x_D = Variable(fake_x.data)
         out_src, out_cls = self.D(fake_x)
 
-        if self.config.LSGAN:
+        if 'LSGAN' in self.config.GAN_options:
           d_loss_fake = F.mse_loss(out_src, torch.zeros_like(out_src))
-        elif self.config.HINGE:
+        elif 'HINGE' in self.config.GAN_options:
           d_loss_fake = torch.mean(F.relu(1+out_src))          
         else:
           d_loss_fake = torch.mean(out_src)
@@ -452,7 +440,7 @@ class Solver(object):
         #=================================== Gradient Penalty ==================================#
         #=======================================================================================#
         # Compute gradient penalty
-        if not (self.config.LSGAN or self.config.HINGE):
+        if not ('LSGAN' in self.config.GAN_options or 'HINGE' in self.config.GAN_options):
           alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
           # ipdb.set_trace()
           interpolated = Variable(alpha * real_x.data + (1 - alpha) * fake_x.data, requires_grad=True)
@@ -504,9 +492,9 @@ class Solver(object):
           rec_x = self.G(fake_x, real_c)
           out_src, out_cls = self.D(fake_x)
           
-          if self.config.LSGAN:
+          if 'LSGAN' in self.config.GAN_options:
             g_loss_fake = F.mse_loss(out_src, torch.ones_like(out_src))
-          elif self.config.HINGE:
+          elif 'HINGE' in self.config.GAN_options:
             g_loss_fake = - torch.mean(out_src)
           else:          
             g_loss_fake = - torch.mean(out_src)          
@@ -514,7 +502,7 @@ class Solver(object):
           g_loss_cls = F.binary_cross_entropy_with_logits(
             out_cls, fake_label, size_average=False) / fake_x.size(0)
 
-          if self.config.L1_LOSS:
+          if 'L1_LOSS' in self.config.GAN_options:
             g_loss_rec = F.l1_loss(real_x, fake_x) + \
                          F.l1_loss(fake_x, rec_x)
             # ipdb.set_trace()
@@ -577,23 +565,7 @@ class Solver(object):
         os.path.join(self.config.model_save_path, '{}_{}_G.pth'.format(E, i+1)))
       torch.save(self.D.state_dict(),
         os.path.join(self.config.model_save_path, '{}_{}_D.pth'.format(E, i+1)))
-
-
-      #=======================================================================================#
-      #=========================================METRICS=======================================#
-      #=======================================================================================#
-      #F1 val
-      # f1, loss,_ = self.val_cls()
-      # if self.use_tensorboard:
-      #   # self.PRINT("Log path: "+self.log_path)
-      #   for idx, au in enumerate(cfg.AUs):
-      #     self.logger.scalar_summary('F1_val_'+str(au).zfill(2), f1[idx], e * iters_per_epoch + i + 1)      
-      #     self.logger.scalar_summary('Loss_val_'+str(au).zfill(2), loss[idx], e * iters_per_epoch + i + 1)      
-      #   self.logger.scalar_summary('F1_val_mean', np.array(f1).mean(), e * iters_per_epoch + i + 1)     
-      #   self.logger.scalar_summary('Loss_val_mean', np.array(loss).mean(), e * iters_per_epoch + i + 1)     
-
-      #   for tag, value in loss_cum.items():
-      #     self.logger.scalar_summary(tag, np.array(value).mean(), e * iters_per_epoch + i + 1)   
+ 
                  
       #Stats per epoch
       elapsed = time.time() - start_time
@@ -608,8 +580,8 @@ class Solver(object):
       # Decay learning rate     
       # if (e+1) > (self.config.num_epochs - self.config.num_epochs_decay):
       if (e+1) % 10==0:
-        g_lr -= (self.config.g_lr / 10)
-        d_lr -= (self.config.d_lr / 10)
+        g_lr = (self.config.g_lr / 10)
+        d_lr = (self.config.d_lr / 10)
         self.update_lr(g_lr, d_lr)
         # self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
@@ -641,8 +613,6 @@ class Solver(object):
   #=======================================================================================#
 
   def test(self):
-    """Facial attribute transfer on CelebA or facial expression synthesis on RaFD."""
-    # Load trained parameters
     from data_loader import get_loader
     if self.config.pretrained_model=='':
       last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*_D.pth')))[-1]
@@ -656,126 +626,11 @@ class Solver(object):
     # ipdb.set_trace()
 
     data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
-                 self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'val')   
+                 self.config.image_size, self.config.batch_size, config.dataset_real, 'val')   
 
     for i, (real_x, org_c, files) in enumerate(data_loader_val):
-      save_path = os.path.join(self.config.sample_path, '{}_fake_val_{}.jpg'.format(last_name, i+1))
+      save_path = os.path.join(self.config.sample_path, '{}_fake_val_{}_{}.jpg'.format(last_name, config.dataset_real, i+1))
       self.save_fake_output(real_x, save_path)
       self.PRINT('Translated test images and saved into "{}"..!'.format(save_path))
       if i==3: break
-
-  #=======================================================================================#
-  #=======================================================================================#
-
-  def val_cls(self, init=False, load=False):
-    """Facial attribute transfer on CelebA or facial expression synthesis on RaFD."""
-    # Load trained parameters
-    if init:
-
-      from data_loader import get_loader
-      # ipdb.set_trace()
-      self.data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
-                   self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'val', shuffling=True)
-
-      txt_path = os.path.join(self.config.model_save_path, 'init_val.txt')
-    else:
-      last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*_D.pth')))[-1]
-      last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
-      txt_path = os.path.join(self.config.model_save_path, '{}_{}_val.txt'.format(last_name,'{}'))
-      try:
-        output_txt  = sorted(glob.glob(txt_path.format('*')))[-1]
-        number_file = len(glob.glob(output_txt))
-      except:
-        number_file = 0
-      txt_path = txt_path.format(str(number_file).zfill(2)) 
-    
-    if load:
-      D_path = os.path.join(self.config.model_save_path, '{}_D.pth'.format(last_name))
-      self.D.load_state_dict(torch.load(D_path))
-
-    self.D.eval()
-
-    self.config.f=open(txt_path, 'a')   
-    self.config.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
-    # ipdb.set_trace()
-    # F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
-    # _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
-    f1,_,_, loss, f1_1 = F1_TEST(self, self.data_loader_val, thresh = [0.5]*12, mode='VAL', verbose=load)
-    # f1,_,_ = self.F1_TEST(self.data_loader_val, thresh = [0.5]*12, mode='VAL', verbose=load)
-    self.f.close()
-    return f1, loss, f1_1
-
-  #=======================================================================================#
-  #=======================================================================================#
-
-  def test_cls(self):
-    """Facial attribute transfer on CelebA or facial expression synthesis on RaFD."""
-    # Load trained parameters
-    from data_loader import get_loader
-    if self.config.pretrained_model=='':
-      last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*_D.pth')))[-1]
-      last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
-    else:
-      last_name = self.config.pretrained_model
-
-    G_path = os.path.join(self.config.model_save_path, '{}_G.pth'.format(last_name))
-    D_path = os.path.join(self.config.model_save_path, '{}_D.pth'.format(last_name))
-    txt_path = os.path.join(self.config.model_save_path, '{}_{}_test.txt'.format(last_name,'{}'))
-    show_fake = os.path.join(self.config.sample_path, '{}_fake_{}_{}.jpg'.format(last_name,'{}', '{}'))
-    self.config.pkl_data = os.path.join(self.config.model_save_path, '{}_{}.pkl'.format(last_name, '{}'))
-    self.config.lstm_path = os.path.join(self.config.model_save_path, '{}_lstm'.format(last_name))
-    if not os.path.isdir(self.config.lstm_path): os.makedirs(self.config.lstm_path)
-    self.PRINT(" [!!] {} model loaded...".format(D_path))
-    # ipdb.set_trace()
-    self.G.load_state_dict(torch.load(G_path))
-    if not self.config.GOOGLE: self.D.load_state_dict(torch.load(D_path))
-    self.G.eval()
-    if not self.config.GOOGLE: self.D.eval()
-    # ipdb.set_trace()
-    if self.config.dataset == 'MultiLabelAU' and not self.config.GOOGLE:
-      data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
-                self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'val', shuffling=True)
-      data_loader_test = get_loader(self.config.metadata_path, self.config.image_size,
-                self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'test', shuffling=True)
-
-    elif self.config.GOOGLE: 
-      data_loader_google = get_loader('', self.config.image_size, self.config.image_size, \
-                      self.config.batch_size, 'Google',  mode=self.config.mode_data, shuffling=True)
-      # data_loader_google = get_loader(self.config.metadata_path, self.config.image_size, \
-      #           self.config.image_size, self.config.batch_size, 'MultiLabelAU', 'val', shuffling=True)     
-
-    if not hasattr(self.config, 'output_txt'):
-      # ipdb.set_trace()
-      self.config.output_txt = txt_path
-      try:
-        self.config.output_txt  = sorted(glob.glob(self.config.output_txt.format('*')))[-1]
-        number_file = len(glob.glob(self.config.output_txt))
-      except:
-        number_file = 0
-      self.config.output_txt = self.config.output_txt.format(str(number_file).zfill(2)) 
-    
-    self.config.f=open(self.config.output_txt, 'a')  
-    self.config.thresh = np.linspace(0.01,0.99,200).astype(np.float32)
-    # ipdb.set_trace()
-    # F1_real, F1_max, max_thresh_train  = self.F1_TEST(data_loader_train, mode = 'TRAIN')
-    # _ = self.F1_TEST(data_loader_test, thresh = max_thresh_train)
-    if self.config.GOOGLE: 
-      _ = F1_TEST(self, data_loader_google)
-    else: 
-      F1_real, F1_max, max_thresh_val, _, _  = F1_TEST(self, data_loader_val, mode = 'VAL')
-      _ = F1_TEST(self, data_loader_test, thresh = max_thresh_val, show_fake = show_fake) 
-      # _ = self.F1_TEST(data_loader_test)
-    self.config.f.close()
-
-  #=======================================================================================#
-  #=======================================================================================#
-
-  def save_lstm(self, data, files):
-    assert data.shape[0]==len(files)
-    for i in range(len(files)):
-      name = os.path.join(self.config.lstm_path, '/'.join(files[i].split('/')[-6:]))
-      name = name.replace('jpg', 'npy')
-      folder = os.path.dirname(name)
-      if not os.path.isdir(folder): os.makedirs(folder)
-      np.save(name, data[i])
 

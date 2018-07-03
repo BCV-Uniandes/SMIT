@@ -92,7 +92,7 @@ def F1_TEST(config, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs), sho
         fake_c_ = fake_c.clone()
 
         fake_list.append(fake_c_)
-      config.show_img(real_x, labels_dummy, fake_list, ppt=config.config.PPT)
+      config.show_img(real_x, labels_dummy, fake_list, ppt='PPT' in config.config.GAN_options)
       sys.exit("Done")      
     ######################################################
     
