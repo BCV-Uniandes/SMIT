@@ -25,13 +25,15 @@ import skimage.transform
 import math
 from scipy.ndimage import filters
 import warnings
+import pytz
+
 warnings.filterwarnings('ignore')
 
 class Solver(object):
 
   def __init__(self, data_loader, config):
     # Data loader
-    self.data_loader = data_loader
+    self.data_loader = data_loader[0]
     self.config = config
 
     self.blurrandom = 0
@@ -160,7 +162,6 @@ class Solver(object):
     out = (x + 1) / 2
     return out.clamp_(0, 1)
 
-
   #=======================================================================================#
   #=======================================================================================#
 
@@ -279,6 +280,12 @@ class Solver(object):
 
   #=======================================================================================#
   #=======================================================================================#
+  @property
+  def TimeNow(self):
+    return str(datetime.datetime.now(pytz.timezone('Europe/Amsterdam'))).split('.')[0]
+
+  #=======================================================================================#
+  #=======================================================================================#
 
   def show_img_single(self, img):  
     img_ = self.denorm(img.data.cpu())
@@ -306,7 +313,7 @@ class Solver(object):
     real_c = []
     for i, (images, labels, files) in enumerate(self.data_loader):
       # ipdb.set_trace()
-      if 'BLIR' in self.config.GAN_options: images = self.blurRANDOM(images)
+      if 'BLUR' in self.config.GAN_options: images = self.blurRANDOM(images)
       fixed_x.append(images)
       real_c.append(labels)
       if i == 1:
@@ -354,6 +361,7 @@ class Solver(object):
 
     for item in self.config.GAN_options:
       Log += ' [*{}]'.format(item.upper())
+    Log += ' [*{}]'.format(self.config.dataset_fake)
     self.PRINT(Log)
     loss_cum = {}
     start_time = time.time()
@@ -368,7 +376,7 @@ class Solver(object):
       progress_bar = tqdm(enumerate(self.data_loader), \
           total=len(self.data_loader), desc=desc_bar, ncols=10)
       for i, (real_x, real_label, files) in progress_bar:
-        
+        # ipdb.set_trace()   
         # save_image(self.denorm(real_x.cpu()), 'dm1.png',nrow=1, padding=0)
         #=======================================================================================#
         #========================================== BLUR =======================================#
@@ -409,7 +417,10 @@ class Solver(object):
         if 'LSGAN' in self.config.GAN_options:
           d_loss_real = F.mse_loss(out_src, torch.ones_like(out_src))
         elif 'HINGE' in self.config.GAN_options:
-          d_loss_real = torch.mean(F.relu(1-out_src))
+          try:
+            d_loss_real = torch.mean(F.relu(1-out_src))
+          except:
+            ipdb.set_trace()
         else:
           d_loss_real = - torch.mean(out_src)
 
@@ -571,7 +582,7 @@ class Solver(object):
       elapsed = time.time() - start_time
       elapsed = str(datetime.timedelta(seconds=elapsed))
       # log = '!Elapsed: %s | [F1_VAL: %0.3f LOSS_VAL: %0.3f]\nTrain'%(elapsed, np.array(f1).mean(), np.array(loss).mean())
-      log = '!Elapsed (%d/%d) : %s | %s\nTrain'%(e, self.config.num_epochs, elapsed, Log)
+      log = '--> %s | Elapsed (%d/%d) : %s | %s\nTrain'%(self.TimeNow, e, self.config.num_epochs, elapsed, Log)
       for tag, value in sorted(loss_cum.items()):
         log += ", {}: {:.4f}".format(tag, np.array(value).mean())   
 
@@ -595,6 +606,7 @@ class Solver(object):
     target_c= torch.from_numpy(np.zeros((real_x.size(0), self.config.c_dim), dtype=np.float32))
     target_c_list = [self.to_var(target_c, volatile=True)]
     for j in range(self.config.c_dim):
+      target_c[:]=0 
       target_c[:,j]=1       
       target_c_list.append(self.to_var(target_c, volatile=True))
       # target_c = self.one_hot(torch.ones(real_x.size(0)) * j, self.c_dim)
@@ -606,15 +618,17 @@ class Solver(object):
     for target_c in target_c_list:       
       fake_x = self.G(real_x, target_c)
       fake_image_list.append(fake_x)
-    fake_images = torch.cat(fake_image_list, dim=3)
-    save_image(self.denorm(fake_images.data), save_path, nrow=1, padding=0)
+    fake_images = self.denorm(torch.cat(fake_image_list, dim=3).data.cpu())
+    fake_images = torch.cat((self.get_aus(), fake_images), dim=0)
+    save_image(fake_images, save_path, nrow=1, padding=0)
 
   #=======================================================================================#
   #=======================================================================================#
 
-  def test(self):
+  def test(self, dataset='', load=False):
     from data_loader import get_loader
-    if self.config.pretrained_model=='':
+    if dataset=='': dataset = 'BP4D'
+    if self.config.pretrained_model=='' or load:
       last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*_D.pth')))[-1]
       last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
     else:
@@ -626,11 +640,30 @@ class Solver(object):
     # ipdb.set_trace()
 
     data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
-                 self.config.image_size, self.config.batch_size, config.dataset_real, 'val')   
+                 self.config.image_size, self.config.batch_size, shuffling = True,
+                 dataset=[dataset], mode='test', AU=self.config.AUs)[0]  
 
     for i, (real_x, org_c, files) in enumerate(data_loader_val):
-      save_path = os.path.join(self.config.sample_path, '{}_fake_val_{}_{}.jpg'.format(last_name, config.dataset_real, i+1))
+      save_path = os.path.join(self.config.sample_path, '{}_fake_val_{}_{}.jpg'.format(last_name, dataset, i+1))
       self.save_fake_output(real_x, save_path)
       self.PRINT('Translated test images and saved into "{}"..!'.format(save_path))
       if i==3: break
 
+    # config.save_fake_output(real_x, show_fake.format(mode.lower(), i))
+
+    # ######################################################
+    # if 'GOOGLE' in config.config.GAN_options:
+    #   labels_dummy = config.to_var(labels, volatile=True)
+
+    #   fake_c=labels_dummy.clone()*0
+    #   fake_list = [fake_c.clone()]
+    #   for i in range(len(config.AUs_common)):
+    #     fake_c=labels_dummy.clone()*0
+    #     fake_c[:,i]=1
+
+    #     fake_c_ = fake_c.clone()
+
+    #     fake_list.append(fake_c_)
+    #   config.show_img(real_x, labels_dummy, fake_list, ppt='PPT' in config.config.GAN_options)
+    #   sys.exit("Done")      
+    # ######################################################

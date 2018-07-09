@@ -56,7 +56,7 @@ def f1_score(gt, pred, F1_Thresh=0.5, median=False):
   else:
     return [F1], F1_MAX, F1_Thresh 
 
-def F1_TEST(config, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs), show_fake='', verbose=True):
+def F1_TEST(config, data_loader, mode = 'TEST', thresh = [0.5]*12, show_fake='', verbose=True, index_au=None):
   import torch
   import torch.nn as nn
   import torch.nn.functional as F
@@ -65,51 +65,32 @@ def F1_TEST(config, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs), sho
   total_idx=int(len(data_loader)/config.config.batch_size)  
   count = 0
   loss = []
-  for i, (real_x, org_c, files) in enumerate(data_loader):
-
-    if mode=='TEST' and not config.config.GOOGLE and i<2: 
-      config.save_fake_output(real_x, show_fake.format(mode.lower(), i))
-
-    if mode!='VAL' and os.path.isfile(config.config.pkl_data.format(mode.lower())): 
-      PREDICTION, GROUNDTRUTH = pickle.load(open(config.config.pkl_data.format(mode.lower())))
-      break
-    # ipdb.set_trace()
-    # if config.config.BLUR: real_x = config.blurRANDOM(real_x)
+  for i, (real_x, labels, files) in enumerate(data_loader):
 
     real_x = config.to_var(real_x, volatile=True)
-    labels = org_c
 
-    ######################################################
-    if config.config.GOOGLE:
-      labels_dummy = config.to_var(org_c, volatile=True)
-
-      fake_c=labels_dummy.clone()*0
-      fake_list = [fake_c.clone()]
-      for i in range(12):
-        fake_c=labels_dummy.clone()*0
-        fake_c[:,i]=1
-
-        fake_c_ = fake_c.clone()
-
-        fake_list.append(fake_c_)
-      config.show_img(real_x, labels_dummy, fake_list, ppt='PPT' in config.config.GAN_options)
-      sys.exit("Done")      
-    ######################################################
+    # index_au = config.index_aus
+    if index_au is not None:
+      labels = config.reduce_label(labels, index_au)
+    # labels_temp = labels[:,:len(index_au)]
+    # for idx, au in enumerate(index_au):
+    #   labels_temp[:,idx] = labels[:,au]
+    # labels = labels_temp
     
-    _, out_cls_temp, lstm_input = config.D(real_x, lstm=True)
-    if mode!='VAL': config.save_lstm(lstm_input.data.cpu().numpy(), files)
+    try: _, out_cls_temp = config.D(real_x)
+    except:  out_cls_temp = config.C(real_x)
     # output = ((F.sigmoid(out_cls_temp)>=0.5)*1.).data.cpu().numpy()
     output = F.sigmoid(out_cls_temp)
 
     loss.append(F.binary_cross_entropy_with_logits(
-      out_cls_temp, config.to_var(org_c), size_average=False) / org_c.size(0))
+      out_cls_temp, config.to_var(labels), size_average=False) / labels.size(0))
 
     if i==0 and verbose:
-      print(mode.upper())
-      print("Predicted:   "+str((output>=0.5)*1))
-      print("Groundtruth: "+str(org_c))
+      config.PRINT(mode.upper())
+      # config.PRINT("Predicted:   "+str((output>=0.5)*1))
+      # config.PRINT("Groundtruth: "+str(labels))
 
-    count += org_c.shape[0]
+    count += labels.shape[0]
     if verbose:
       string_ = str(count)+' / '+str(len(data_loader)*config.config.batch_size)
       sys.stdout.write("\r%s" % string_)
@@ -119,25 +100,25 @@ def F1_TEST(config, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs), sho
     PREDICTION.append(output.data.cpu().numpy().tolist())
     GROUNDTRUTH.append(labels.cpu().numpy().astype(np.uint8).tolist())
 
-  if mode!='VAL' and not os.path.isfile(config.config.pkl_data.format(mode.lower())): 
-    pickle.dump([PREDICTION, GROUNDTRUTH], open(config.config.pkl_data.format(mode.lower()), 'w'))
-  if verbose: print("")
+  # if mode!='VAL' and not os.path.isfile(config.config.pkl_data.format(mode.lower())): 
+  #   pickle.dump([PREDICTION, GROUNDTRUTH], open(config.config.pkl_data.format(mode.lower()), 'w'))
+  if verbose: config.PRINT("")
   print >>config.config.f, ""
-  # print("[Min and Max predicted: "+str(min(prediction))+ " " + str(max(prediction))+"]")
+  # config.PRINT("[Min and Max predicted: "+str(min(prediction))+ " " + str(max(prediction))+"]")
   # print >>config.config.f, "[Min and Max predicted: "+str(min(prediction))+ " " + str(max(prediction))+"]"
-  if verbose: print("")
+  if verbose: config.PRINT("")
 
   PREDICTION = np.vstack(PREDICTION)
   GROUNDTRUTH = np.vstack(GROUNDTRUTH)
 
-  F1_real5 = [0]*len(cfg.AUs); F1_Thresh5 = [0]*len(cfg.AUs); F1_real = [0]*len(cfg.AUs)
-  F1_Thresh = [0]*len(cfg.AUs); F1_0 = [0]*len(cfg.AUs); F1_1 = [0]*len(cfg.AUs)
-  F1_Thresh_0 = [0]*len(cfg.AUs); F1_Thresh_1 = [0]*len(cfg.AUs); F1_MAX = [0]*len(cfg.AUs)
-  F1_Thresh_max = [0]*len(cfg.AUs); F1_median5 = [0]*len(cfg.AUs); F1_median7 = [0]*len(cfg.AUs)
-  F1_median3 = [0]*len(cfg.AUs); F1_median3_th = [0]*len(cfg.AUs); F1_median5_th = [0]*len(cfg.AUs);
-  F1_median7_th = [0]*len(cfg.AUs);
+  F1_real5 = [0]*len(config.AUs_common); F1_Thresh5 = [0]*len(config.AUs_common); F1_real = [0]*len(config.AUs_common)
+  F1_Thresh = [0]*len(config.AUs_common); F1_0 = [0]*len(config.AUs_common); F1_1 = [0]*len(config.AUs_common)
+  F1_Thresh_0 = [0]*len(config.AUs_common); F1_Thresh_1 = [0]*len(config.AUs_common); F1_MAX = [0]*len(config.AUs_common)
+  F1_Thresh_max = [0]*len(config.AUs_common); F1_median5 = [0]*len(config.AUs_common); F1_median7 = [0]*len(config.AUs_common)
+  F1_median3 = [0]*len(config.AUs_common); F1_median3_th = [0]*len(config.AUs_common); F1_median5_th = [0]*len(config.AUs_common);
+  F1_median7_th = [0]*len(config.AUs_common);
   # ipdb.set_trace()
-  for i in xrange(len(cfg.AUs)):
+  for i in xrange(len(config.AUs_common)):
     prediction = PREDICTION[:,i]
     groundtruth = GROUNDTRUTH[:,i]
     if mode=='TEST':
@@ -148,108 +129,108 @@ def F1_TEST(config, data_loader, mode = 'TEST', thresh = [0.5]*len(cfg.AUs), sho
     _, F1_MAX[i], F1_Thresh_max[i] = f1_score_max(np.array(groundtruth), np.array(prediction), config.config.thresh)  
 
 
-  for i, au in enumerate(cfg.AUs):
+  for i, au in enumerate(config.AUs_common):
     string = "---> [%s - 0] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_0[i], F1_Thresh_0[i])
-    if verbose: print(string)
+    if verbose: config.PRINT(string)
     print >>config.config.f, string
   string = "F1 Mean: %.4f\n"%np.mean(F1_0)
-  if verbose: print(string)
+  if verbose: config.PRINT(string)
   print >>config.config.f, string
 
-  for i, au in enumerate(cfg.AUs):
+  for i, au in enumerate(config.AUs_common):
     string = "---> [%s - 1] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_1[i], F1_Thresh_1[i])
-    if verbose: print(string)
+    if verbose: config.PRINT(string)
     print >>config.config.f, string
   string = "F1 Mean: %.4f\n"%np.mean(F1_1)
-  if verbose: print(string)
+  if verbose: config.PRINT(string)
   print >>config.config.f, string
 
   string = "###############################\n#######  Threshold 0.5 ########\n###############################\n"
-  if verbose: print(string)
+  if verbose: config.PRINT(string)
   print >>config.config.f, string
 
   if mode=='TEST':
-    for i, au in enumerate(cfg.AUs):
+    for i, au in enumerate(config.AUs_common):
       string = "---> [%s] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_real5[i], F1_Thresh5[i])
-      if verbose: print(string)
+      if verbose: config.PRINT(string)
       print >>config.config.f, string
     string = "F1 Mean: %.4f\n"%np.mean(F1_real5)
-    if verbose: print(string)
+    if verbose: config.PRINT(string)
     print >>config.config.f, string
 
-    for i, au in enumerate(cfg.AUs):
+    for i, au in enumerate(config.AUs_common):
       string = "---> [%s] AU%s F1_median3: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median3[i], F1_Thresh5[i])
-      if verbose: print(string)
+      if verbose: config.PRINT(string)
       print >>config.config.f, string
     string = "F1_median3 Mean: %.4f\n"%np.mean(F1_median3)
-    if verbose: print(string)
+    if verbose: config.PRINT(string)
     print >>config.config.f, string
 
-    for i, au in enumerate(cfg.AUs):
+    for i, au in enumerate(config.AUs_common):
       string = "---> [%s] AU%s F1_median5: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median5[i], F1_Thresh5[i])
-      if verbose: print(string)
+      if verbose: config.PRINT(string)
       print >>config.config.f, string
     string = "F1_median5 Mean: %.4f\n"%np.mean(F1_median5)
-    if verbose: print(string)
+    if verbose: config.PRINT(string)
     print >>config.config.f, string
 
-    for i, au in enumerate(cfg.AUs):
+    for i, au in enumerate(config.AUs_common):
       string = "---> [%s] AU%s F1_median7: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median7[i], F1_Thresh5[i])
-      if verbose: print(string)
+      if verbose: config.PRINT(string)
       print >>config.config.f, string
     string = "F1_median7 Mean: %.4f\n"%np.mean(F1_median7)
-    if verbose: print(string)
+    if verbose: config.PRINT(string)
     print >>config.config.f, string
 
-  if mode=='TEST':
-    string = "###############################\n######  Threshold VAL #######\n###############################\n"
-    if verbose: print(string)
-    print >>config.config.f, string 
+  # if mode=='TEST':
+  #   string = "###############################\n######  Threshold VAL #######\n###############################\n"
+  #   if verbose: config.PRINT(string)
+  #   print >>config.config.f, string 
 
-  for i, au in enumerate(cfg.AUs):
+  for i, au in enumerate(config.AUs_common):
     string = "---> [%s] AU%s F1: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_real[i], F1_Thresh_0[i])
-    if verbose: print(string)
+    if verbose: config.PRINT(string)
     print >>config.config.f, string
   string = "F1 Mean: %.4f\n"%np.mean(F1_real)
-  if verbose: print(string)
+  if verbose: config.PRINT(string)
   print >>config.config.f, string
 
-  if mode=='TEST':
-    for i, au in enumerate(cfg.AUs):
-      string = "---> [%s] AU%s F1_median3: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median3_th[i], F1_Thresh[i])
-      if verbose: print(string)
-      print >>config.config.f, string
-    string = "F1_median3 Mean: %.4f\n"%np.mean(F1_median3_th)
-    if verbose: print(string)
-    print >>config.config.f, string
+  # if mode=='TEST':
+  #   for i, au in enumerate(config.AUs_common):
+  #     string = "---> [%s] AU%s F1_median3: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median3_th[i], F1_Thresh[i])
+  #     if verbose: config.PRINT(string)
+  #     print >>config.config.f, string
+  #   string = "F1_median3 Mean: %.4f\n"%np.mean(F1_median3_th)
+  #   if verbose: config.PRINT(string)
+  #   print >>config.config.f, string
 
-    for i, au in enumerate(cfg.AUs):
-      string = "---> [%s] AU%s F1_median5: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median5_th[i], F1_Thresh[i])
-      if verbose: print(string)
-      print >>config.config.f, string
-    string = "F1_median5 Mean: %.4f\n"%np.mean(F1_median5_th)
-    if verbose: print(string)
-    print >>config.config.f, string
+  #   for i, au in enumerate(config.AUs_common):
+  #     string = "---> [%s] AU%s F1_median5: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median5_th[i], F1_Thresh[i])
+  #     if verbose: config.PRINT(string)
+  #     print >>config.config.f, string
+  #   string = "F1_median5 Mean: %.4f\n"%np.mean(F1_median5_th)
+  #   if verbose: config.PRINT(string)
+  #   print >>config.config.f, string
 
-    for i, au in enumerate(cfg.AUs):
-      string = "---> [%s] AU%s F1_median7: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median7_th[i], F1_Thresh[i])
-      if verbose: print(string)
-      print >>config.config.f, string
-    string = "F1_median7 Mean: %.4f\n"%np.mean(F1_median7_th)
-    if verbose: print(string)
-    print >>config.config.f, string
+  #   for i, au in enumerate(config.AUs_common):
+  #     string = "---> [%s] AU%s F1_median7: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_median7_th[i], F1_Thresh[i])
+  #     if verbose: config.PRINT(string)
+  #     print >>config.config.f, string
+  #   string = "F1_median7 Mean: %.4f\n"%np.mean(F1_median7_th)
+  #   if verbose: config.PRINT(string)
+  #   print >>config.config.f, string
 
   string = "###############################\n#######  Threshold MAX ########\n###############################\n"
-  if verbose: print(string)
+  if verbose: config.PRINT(string)
   print >>config.config.f, string
 
-  for i, au in enumerate(cfg.AUs):
+  for i, au in enumerate(config.AUs_common):
     #REAL F1_MAX
     string = "---> [%s] AU%s F1_MAX: %.4f, Threshold: %.4f <---" % (mode, str(au).zfill(2), F1_MAX[i], F1_Thresh_max[i])
-    if verbose: print(string)
+    if verbose: config.PRINT(string)
     print >>config.config.f, string
   string = "F1 Mean: %.4f\n"%np.mean(F1_MAX)
-  if verbose: print(string)
+  if verbose: config.PRINT(string)
   print >>config.config.f, string
 
   if mode=='VAL':

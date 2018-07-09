@@ -15,8 +15,17 @@ warnings.filterwarnings('ignore')
 
 #./main.py -- --GPU 3 --GRAY --BLUR --L1_LOSS --lambda_l1 5
 
-def str2bool(v):
-  return v.lower() in ('true')
+def PRINT(config):
+  string ='------------ Options -------------'
+  print(string)
+  print >> config.log, string
+  for k, v in sorted(vars(config).items()):
+    string = '%s: %s' % (str(k), str(v))
+    print(string)
+    print >> config.log, string
+  string='-------------- End ----------------'
+  print(string)     
+  print >> config.log, string
 
 def main(config):
   from torch.backends import cudnn
@@ -31,8 +40,8 @@ def main(config):
 
   data_loader = get_loader(config.metadata_path, config.image_size,
                    config.image_size, config.batch_size, config.dataset, config.mode, \
-                   color_jitter='COLOR_JITTER' in config.GAN_options, \
-                   mean=config.mean, std=config.std, num_workers=config.num_workers)   
+                   color_jitter='COLOR_JITTER' in config.GAN_options, AU=config.AUs, \
+                   mean=config.mean, std=config.std, num_workers=config.num_workers, ratio=config.ratio)   
 
 
   if config.mode_train=='CLS':
@@ -52,12 +61,12 @@ def main(config):
 
   if config.mode == 'train':
     solver.train()
-    solver.test()
+    solver.test(dataset=config.dataset_real, load=True)
     # solver.test_cls()
   elif config.mode == 'val':
-    solver.val()
+    solver.val(load=True)
   elif config.mode == 'test':
-    solver.test()
+    solver.test(dataset=config.dataset_real)
     # solver.val_cls(load=True)
     # solver.test_cls()
 
@@ -76,7 +85,7 @@ if __name__ == '__main__':
   parser.add_argument('--batch_size',       type=int, default=16)
   parser.add_argument('--num_workers',      type=int, default=4)
   parser.add_argument('--num_epochs',       type=int, default=199)
-  parser.add_argument('--num_epochs_decay', type=int, default=200)
+  parser.add_argument('--num_epochs_decay', type=int, default=50)
   parser.add_argument('--beta1',            type=float, default=0.5)
   parser.add_argument('--beta2',            type=float, default=0.999)
   parser.add_argument('--pretrained_model', type=str, default=None)  
@@ -120,9 +129,12 @@ if __name__ == '__main__':
   # parser.add_argument('--TTUR',         action='store_true', default=False) 
 
   # Classifier Settings
-  parser.add_argument('--CLS_options',  type=str, default='')
+  parser.add_argument('--CLS_options',     type=str, default='')
+  parser.add_argument('--c_lr',            type=float, default=0.0001)
   parser.add_argument('--DENSENET',        action='store_true', default=False)  
   parser.add_argument('--Generator_path',  type=str, default='')
+  parser.add_argument('--ratio',           type=int, default=0)
+  parser.add_argument('--stop_training',   type=int, default=15, help='How many epochs of plateau before stop')
 
   # Misc
   parser.add_argument('--use_tensorboard', action='store_true', default=False)
@@ -133,8 +145,8 @@ if __name__ == '__main__':
 
   # Step size
   parser.add_argument('--log_step',        type=int, default=1000)
-  parser.add_argument('--sample_step',     type=int, default=100000)
-  parser.add_argument('--model_save_step', type=int, default=200000)
+  parser.add_argument('--sample_step',     type=int, default=1000000)
+  parser.add_argument('--model_save_step', type=int, default=2000000)
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
@@ -143,8 +155,11 @@ if __name__ == '__main__':
 
   config = cfg.update_config(config)
 
-  if config.mode_train=='CLS':
+  if config.mode_train=='CLS' and 'JUST_REAL' not in config.CLS_options and 'JUST_FAKE' not in config.CLS_options:
+    assert ratio>0, "ratio must be possitive for training with fake images"
     config.dataset = [config.dataset_fake, config.dataset_real]
+  elif config.mode_train=='CLS' and 'JUST_REAL' in config.CLS_options:
+    config.dataset = [config.dataset_real]
   else:
     config.dataset = [config.dataset_fake]
 
@@ -157,7 +172,8 @@ if __name__ == '__main__':
     with open(file_log, 'wb') as config.log:
       print >> config.log, ' '.join(sys.argv)
       config.log.flush()
-      print(config)
+      PRINT(config) 
+      # print(config)
       main(config)
     # last_sample = sorted(glob.glob(config.sample_path+'/*.jpg'))[-1]
     # os.system('echo {0} | mail -s "Training done - GPU {1} free" -A "{0}" rv.andres10@uniandes.edu.co'.format(msj, config.GPU))
