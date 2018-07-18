@@ -190,7 +190,11 @@ class DenseNet(nn.Module):
   def forward(self, x):
     features = self.features(x)
     out = F.relu(features, inplace=True)
-    out = F.avg_pool2d(out, kernel_size=7, stride=1).view(features.size(0), -1)
+    # ipdb.set_trace() 
+    try: 
+      out = F.avg_pool2d(out, kernel_size=7, stride=1).view(features.size(0), -1)
+    except RuntimeError:
+      out = F.avg_pool2d(out, kernel_size=3, stride=1).view(features.size(0), -1)
     # ipdb.set_trace() 
     out = self.classifier(out)
     # ipdb.set_trace()    

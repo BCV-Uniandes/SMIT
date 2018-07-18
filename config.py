@@ -4,6 +4,13 @@ def config_GENERATOR(config, update_folder):
   if 'COLOR_JITTER' in config.GAN_options: update_folder(config, 'COLOR_JITTER')
   if 'BLUR' in config.GAN_options: update_folder(config, 'BLUR') 
   if 'GRAY' in config.GAN_options: update_folder(config, 'GRAY') 
+
+  if 'RaGAN' in config.GAN_options: 
+    update_folder(config, 'RaGAN')
+    config.batch_size=8
+    # config.d_train_repeat = 1
+    if config.image_size<=128: config.batch_size=32
+
   if 'LSGAN' in config.GAN_options: 
     update_folder(config, 'LSGAN') 
     config.d_train_repeat = 1
@@ -35,6 +42,9 @@ def config_GENERATOR(config, update_folder):
   if 'HINGE' in config.GAN_options: 
     update_folder(config, 'HINGE') 
 
+  if int(config.lambda_cls)!=1:
+    update_folder(config, 'lambda_cls_'+str(config.lambda_cls))     
+
 def update_folder(config, folder):
   import os
   config.log_path = os.path.join(config.log_path, folder)
@@ -56,11 +66,14 @@ def replace_folder_gan(config):
 def replace_folder_cls(config):
   import os
   if 'DENSENET' in config.CLS_options:
-    config.model_CLS = 'DENSENET'
+    config.model_CLS = 'DENSENET201'
   elif 'RESNET' in config.CLS_options:
     config.model_CLS = 'RESNET'
   replaced = 'snapshot'
-  replace = os.path.join(replaced, config.mode_train, '{}_to_{}'.format(config.dataset_fake, config.dataset_real), config.model_CLS)
+  replace = os.path.join(replaced, 
+      config.mode_train, 
+      '{}_to_{}'.format(config.dataset_fake, config.dataset_real), config.model_CLS)
+  replace = replace if config.ratio==0 else os.path.join(replace, 'ratio_{}_{}'.format(int(config.ratio), int(100-config.ratio)))
   config.log_path = config.log_path.replace(replaced, replace)
   config.sample_path = config.sample_path.replace(replaced, replace)
   config.model_save_path = config.model_save_path.replace(replaced, replace)
@@ -75,18 +88,19 @@ def remove_folder(config):
   os.system("rm {} {} {}".format(logs, samples, models))
 
 def update_config(config):
-  import os, glob, math, imageio
+  import os, glob, math, imageio, ipdb
   if 'GOOGLE' in config.GAN_options or 'TEST' in config.GAN_options: config.mode='test'
   if 'VAL_SHOW' in config.GAN_options: config.mode='val'
 
   config.AUs = {'EMOTIONNET': [1, 2, 4, 5, 6, 9, 12, 17, 20, 25, 26, 43],
                 'BP4D': [1, 2, 4, 6, 7, 10, 12, 14, 15, 17, 23, 24],
-                'CELEBA': [1, 2, 4, 6, 7, 10, 12, 14, 15, 17, 23, 24]} #CelebA are for training framework
+                'CELEBA': [1, 2, 4, 5, 6, 9, 12, 17, 20, 25, 26, 43],
+                'DEMO': []} #CelebA AUs are for training framework
   config.AUs_Common=  [1, 2, 4, 6, 12, 17]
 
   if config.dataset_fake=='EmotionNet':
-    config.num_epochs = 50
-    config.num_epochs_decay = 10
+    config.num_epochs = 200
+    config.num_epochs_decay = 50
 
   if len(config.CLS_options[0])>0:
     # import ipdb; ipdb.set_trace()
@@ -105,25 +119,27 @@ def update_config(config):
   config.std=(0.5,0.5,0.5)
 
   if config.mode_train=='CLS': 
-    # import ipdb;ipdb.set_trace()
+    # ;ipdb.set_trace()
     config.Generator_path = config.model_save_path.replace(config.model_save_path.split('/')[3], 'EmotionNet')
     if 'JUST_FAKE' in config.CLS_options:
-      config_GENERATOR(config, update_folder_generator)
-      config.model_save_path = config.Generator_path.replace(config.dataset_fake, os.path.join(config.dataset_real, 'JUST_FAKE', config.dataset_fake))
+      # ipdb.set_trace()
+      config.model_save_path = config.Generator_path.replace('EmotionNet', os.path.join(config.dataset_real, 'JUST_FAKE', config.dataset_fake))
       config.log_path = config.model_save_path.replace('models', 'logs')
       config.sample_path = config.model_save_path.replace('models', 'samples')
+      config_GENERATOR(config, update_folder_generator)
       config.Generator_path = config.Generator_path.replace(config.Generator_path.split('/')[4]+'/', '')
       config.Generator_path = config.Generator_path.replace('CLS', 'GAN')
       # import ipdb;ipdb.set_trace()
-      config.Generator_path = sorted(glob.glob(config.Generator_path+'/*G.pth'))[-2]
+      config.Generator_path = sorted(glob.glob(config.Generator_path+'/*G.pth'))[-1]
     elif 'JUST_REAL' in config.CLS_options: 
-      config.model_save_path = config.Generator_path.replace(config.dataset_fake, os.path.join(config.dataset_real, 'JUST_REAL'))
+      config.model_save_path = config.Generator_path.replace(config.dataset_fake, os.path.join('BP4D', 'JUST_REAL', config.dataset_real))
       config.log_path = config.model_save_path.replace('models', 'logs')
       config.sample_path = config.model_save_path.replace('models', 'samples')
       config.Generator_path = config.Generator_path.replace(config.Generator_path.split('/')[4]+'/', '')
       config.Generator_path = config.Generator_path.replace('CLS', 'GAN')
     else:
       config_GENERATOR(config, update_folder_generator)
+      config.Generator_path = config.model_save_path.replace(config.dataset_fake, 'EmotionNet')
       config.Generator_path = config.Generator_path.replace('CLS', 'GAN')
       # import ipdb;ipdb.set_trace()
       config.Generator_path = sorted(glob.glob(config.Generator_path+'/*G.pth'))[-1]   
@@ -133,8 +149,8 @@ def update_config(config):
     config.batch_size=32
     config.num_epochs = 40
     config.num_epochs_decay = 10
-    config.mean = (0.0, 0.0, 0.0)
-    config.std = (1.0, 1.0, 1.0)
+    # config.mean = (0.0, 0.0, 0.0)
+    # config.std = (1.0, 1.0, 1.0)
     # config.mean=(0.485, 0.456, 0.406)
     # config.std=(0.229, 0.224, 0.225)    
   else:
@@ -143,6 +159,18 @@ def update_config(config):
   if config.DELETE:
     remove_folder(config)
 
+  if config.mode_train=='CLS' and 'JUST_REAL' not in config.CLS_options and 'JUST_FAKE' not in config.CLS_options:
+    assert ratio>0, "ratio must be possitive for training with fake images"
+    config.dataset = [config.dataset_fake, config.dataset_real]
+  elif config.mode_train=='CLS' and 'JUST_REAL' in config.CLS_options:
+    config.dataset = [config.dataset_real]
+  else:
+    config.dataset = [config.dataset_fake]
+
+  if os.path.isdir('/home/afromero'):
+    config.PLACE='BCV'
+  else:
+    config.PLACE='ETHZ'
 
   if config.pretrained_model is None:  
     try:

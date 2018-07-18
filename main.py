@@ -11,6 +11,7 @@ import config as cfg
 import warnings
 import ipdb
 import sys
+import torch
 warnings.filterwarnings('ignore')
 
 #./main.py -- --GPU 3 --GRAY --BLUR --L1_LOSS --lambda_l1 5
@@ -40,12 +41,14 @@ def main(config):
 
   data_loader = get_loader(config.metadata_path, config.image_size,
                    config.image_size, config.batch_size, config.dataset, config.mode, \
-                   color_jitter='COLOR_JITTER' in config.GAN_options, AU=config.AUs, \
+                   color_jitter='COLOR_JITTER' in config.GAN_options, AU=config.AUs, fake_label=config.mode_train=='CLS' and 'JUST_REAL' not in config.CLS_options,\
                    mean=config.mean, std=config.std, num_workers=config.num_workers, ratio=config.ratio)   
 
 
   if config.mode_train=='CLS':
     from solver_cls import Solver
+  elif 'RaGAN' in config.GAN_options:
+    from rsolver import Solver
   else:
     from solver import Solver
 
@@ -66,7 +69,11 @@ def main(config):
   elif config.mode == 'val':
     solver.val(load=True)
   elif config.mode == 'test':
-    solver.test(dataset=config.dataset_real)
+    if config.DEMO_path:
+      solver.DEMO(config.DEMO_path)    
+    else:
+      solver.test(dataset=config.dataset_real)
+
     # solver.val_cls(load=True)
     # solver.test_cls()
 
@@ -95,6 +102,7 @@ if __name__ == '__main__':
   parser.add_argument('--log_path',         type=str, default='./snapshot/logs')
   parser.add_argument('--model_save_path',  type=str, default='./snapshot/models')
   parser.add_argument('--sample_path',      type=str, default='./snapshot/samples')
+  parser.add_argument('--DEMO_path',      type=str, default='')
   # parser.add_argument('--result_path', type=str, default='./snapshot/results')  
 
   # Generative 
@@ -127,6 +135,7 @@ if __name__ == '__main__':
   # parser.add_argument('--SpectralNorm', action='store_true', default=False) 
   # parser.add_argument('--SAGAN',        action='store_true', default=False) 
   # parser.add_argument('--TTUR',         action='store_true', default=False) 
+  # parser.add_argument('--REAL_LABELS',action='store_true', default=False)   
 
   # Classifier Settings
   parser.add_argument('--CLS_options',     type=str, default='')
@@ -151,20 +160,19 @@ if __name__ == '__main__':
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
   config.CLS_options = config.CLS_options.split(',')
+  # ipdb.set_trace()
   os.environ['CUDA_VISIBLE_DEVICES'] = str(int(float(config.GPU)))
+  if not torch.cuda.is_available():
+    config.GPU='no_cuda'
 
   config = cfg.update_config(config)
 
-  if config.mode_train=='CLS' and 'JUST_REAL' not in config.CLS_options and 'JUST_FAKE' not in config.CLS_options:
-    assert ratio>0, "ratio must be possitive for training with fake images"
-    config.dataset = [config.dataset_fake, config.dataset_real]
-  elif config.mode_train=='CLS' and 'JUST_REAL' in config.CLS_options:
-    config.dataset = [config.dataset_real]
-  else:
-    config.dataset = [config.dataset_fake]
 
   if config.mode=='train':
-    file_log = 'logs/gpu{}_{}.txt'.format(config.GPU, config.mode_train)
+    if config.PLACE=='BCV':
+      file_log = 'logs/gpu{}_{}.txt'.format(config.GPU, config.mode_train)
+    else:
+      file_log = 'logs/gpu{}_{}_{}.txt'.format(config.GPU, config.PLACE, config.mode_train)
   else:
     file_log = 'logs/dummy.txt'
 

@@ -13,26 +13,46 @@ import imageio
 import scipy.misc
 import glob
 
+def get_aus_emotionnet(metadata_path, mode):
+  lines_aus = os.path.abspath(os.path.join(metadata_path.format('EmotionNet'), mode+'.txt'))
+  lines_aus = [lines.strip().split(' ')[1:] for lines in open(lines_aus, 'r').readlines()]
+  lines_aus = map(list,set(map(tuple, lines_aus)))
+
+  labels_au = []
+  for au in lines_aus:
+    labels_au.append([])
+    for value in au:
+        if value == '1':
+          labels_au[-1].append(1)
+        else:
+          labels_au[-1].append(0)
+
+  return labels_au
+
+######################################################################################################
+###                                                BP4D                                            ###
+######################################################################################################
 class BP4D(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, no_flipping = False, shuffling = False, AUs=[]):
+  def __init__(self, image_size, metadata_path, transform, mode, fake_label = False, shuffling = False, AUs=[]):
     # ipdb.set_trace()
     self.transform = transform
     self.mode = mode
-    self.no_flipping = no_flipping
+    self.fake_label = fake_label
     self.shuffling = shuffling
     self.image_size = image_size
     self.AUs = AUs
     self.name = 'BP4D'
+    self.labels_au = get_aus_emotionnet(metadata_path, mode)
     file_txt = os.path.abspath(os.path.join(metadata_path.format('BP4D'), mode+'.txt'))
     if mode!='val': print("Data from: "+file_txt)
     self.lines = open(file_txt, 'r').readlines()
 
-    if mode!='val': print ('Start preprocessing BP4D: %s!'%(mode))
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
     # random.seed(10)
     self.preprocess()
     self.num_data = len(self.filenames)
-    if mode!='val': print ('Finished preprocessing BP4D: %s (%d)!'%(mode, self.num_data))
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
     # ipdb.set_trace()
 
   def preprocess(self):
@@ -43,9 +63,9 @@ class BP4D(Dataset):
     for i, line in enumerate(lines):
       splits = line.split()
       filename = splits[0]
-      # name = 'Faces' if not 'aligned' in filename else 'Faces_aligned'
-      # filename = filename.replace(name, name+'_256')#+str(self.image_size))
-      filename = filename.replace('Faces', 'Sequences_400')#+str(self.image_size))
+      name = 'Faces' if not 'aligned' in filename else 'Faces_aligned'
+      filename = filename.replace(name, name+'_256')#+str(self.image_size))
+      # filename = filename.replace('Faces', 'Sequences_400')#+str(self.image_size))
       if not os.path.isfile(filename) or os.stat(filename).st_size==0: 
         # continue
         ipdb.set_trace()
@@ -66,12 +86,19 @@ class BP4D(Dataset):
   def __getitem__(self, index):
     # ipdb.set_trace()
     image = Image.open(self.filenames[index])
-    label = self.labels[index]
+    if not self.fake_label: 
+      label = self.labels[index]
+    else:
+      # np.random.seed(index)
+      label = self.labels_au[np.random.randint(0,len(self.labels_au),1)[0]]
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
 
   def __len__(self):
     return self.num_data
 
+######################################################################################################
+###                                           BP4D_FULL                                            ###
+######################################################################################################
 class BP4D_FULL(Dataset):
   def __init__(self, image_size, metadata_path, transform, mode, no_flipping = False, shuffling = False, AUs=[]):
     # ipdb.set_trace()
@@ -126,6 +153,9 @@ class BP4D_FULL(Dataset):
   def __len__(self):
     return self.num_data
 
+######################################################################################################
+###                                              Google                                            ###
+######################################################################################################
 class GooglePhotos(Dataset):
   def __init__(self, image_size, metadata_path, transform, mode='aligned', shuffling=False):
     # ipdb.set_trace()
@@ -148,8 +178,11 @@ class GooglePhotos(Dataset):
     
     self.num_data = len(self.filenames)
 
+######################################################################################################
+###                                            EmotionNet                                          ###
+######################################################################################################
 class EmotionNet(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling = False, AUs=[]):
+  def __init__(self, image_size, metadata_path, transform, mode, fake_label = False, shuffling = False, AUs=[]):
     # ipdb.set_trace()
     self.transform = transform
     self.mode = mode
@@ -157,17 +190,21 @@ class EmotionNet(Dataset):
     self.AUs = AUs
     self.name = 'EmotionNet'
     self.image_size = image_size if image_size>=128 else 128
-    self.ssd = '/home/afromero/ssd2/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
+    if os.path.isdir('/home/afromero/ssd2/EmotionNet2018'):
+      self.ssd = '/home/afromero/ssd2/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
+    else:
+      self.ssd = '/scratch_net/pengyou/Felipe/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
+
     file_txt = os.path.abspath(os.path.join(metadata_path.format('EmotionNet'), mode+'.txt'))
     if mode!='val': print("Data from: "+file_txt)
     self.lines = open(file_txt, 'r').readlines()
 
-    if mode!='val': print ('Start preprocessing EmotionNet: %s!'%(mode))
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
     # random.seed(10)
     self.preprocess()
     self.num_data = len(self.filenames)
-    if mode!='val': print ('Finished preprocessing EmotionNet: %s (%d)!'%(mode, self.num_data))
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
     # ipdb.set_trace()
 
   def preprocess(self):
@@ -178,7 +215,7 @@ class EmotionNet(Dataset):
     for i, line in enumerate(lines):
       splits = line.split()
       filename = os.path.join(self.ssd, splits[0])
-      if not os.path.isfile(filename) or os.stat(filename).st_size==0: 
+      if not os.path.isfile(filename):# or os.stat(filename).st_size==0: 
         # continue
         ipdb.set_trace()
         imageio.imwrite(filename, np.zeros((self.image_size, self.image_size,3)).astype(np.uint8))
@@ -203,22 +240,30 @@ class EmotionNet(Dataset):
   def __len__(self):
     return self.num_data
 
+
+######################################################################################################
+###                                              CelebA                                            ###
+######################################################################################################
 class CelebA(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, AUs=[]):
+  def __init__(self, image_size, metadata_path, transform, mode, fake_label = False, shuffling=False, AUs=[]):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
+    self.fake_label = fake_label
     self.AUs = AUs
     self.name = 'CelebA'
     # self.lines = open(metadata_path, 'r').readlines()
     # self.lines = open('/home/afromero/datos2/CelebA/Img/img_align_celeba/_data_aligned.txt').readlines()
-    self.lines = open('data/CelebA/list_attr_celeba.txt').readlines()
+    self.lines = open(os.path.abspath('data/CelebA/list_attr_celeba.txt')).readlines()
+    self.labels_au = get_aus_emotionnet(metadata_path, mode)
     self.attr2idx = {}
     self.idx2attr = {}
 
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
     self.preprocess()
-    print ('Finished preprocessing dataset..!')
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
+
 
   def preprocess(self):
     attrs = self.lines[1].split()
@@ -237,23 +282,31 @@ class CelebA(Dataset):
 
       splits = line.split()
       img_size = '_'+str(self.image_size) if self.image_size==128 else '' 
-      filename = os.path.abspath('/home/afromero/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
+      if os.path.isdir('/home/afromero/ssd2/CelebA'):
+        # filename = os.path.abspath('/home/afromero/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
+        filename = os.path.abspath('/home/afromero/ssd2/CelebA/Faces/{}'.format(splits[0]))
+      else:
+        filename = os.path.abspath('/home/roandres/bcv002/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
       # ipdb.set_trace()
       if not os.path.isfile(filename): continue
       values = splits[1:]
 
       label = []
+      smile = False
       for idx, value in enumerate(values):
         attr = self.idx2attr[idx]
-
+        if attr=='Smiling' and value=='1': 
+          smile=True
+          break
         if attr in self.selected_attrs:
           if value == '1':
             label.append(1)
           else:
             label.append(0)
-
+      if smile: continue
       self.filenames.append(filename)
       self.labels.append(label)
+
     self.num_data = len(self.filenames)
 
   def get_data(self):
@@ -262,14 +315,43 @@ class CelebA(Dataset):
   def __getitem__(self, index):
     # ipdb.set_trace()
     image = Image.open(self.filenames[index])
-    label = self.labels[index]
+    if not self.fake_label: 
+      label = self.labels[index]
+    else:
+      # np.random.seed(index)
+      label = self.labels_au[np.random.randint(0,len(self.labels_au),1)[0]]
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
 
   def __len__(self):
     return self.num_data    
 
+######################################################################################################
+###                                              DEMO                                              ###
+######################################################################################################
+class DEMO(Dataset):
+  def __init__(self, image_size, img_path, transform, mode, fake_label=False,shuffling=False, AUs=[]):
+    self.img_path = img_path
+    self.transform = transform
+
+    if os.path.isdir(img_path):
+      self.lines = glob.glob(os.path.join(img_path, '*.jpg'))+glob.glob(os.path.join(img_path, '*.png'))
+    else:
+      self.lines = [self.img_path]
+    self.len = len(self.lines)
+
+  def __getitem__(self, index):
+    # ipdb.set_trace()
+    image = Image.open(self.lines[index]).convert('RGB')
+    return self.transform(image)
+
+  def __len__(self):
+    return self.len
+
+######################################################################################################
+###                                              LOADER                                            ###
+######################################################################################################
 def get_loader(metadata_path, crop_size, image_size, batch_size, \
-        dataset=['BP4D'], mode='train', ratio=0,\
+        dataset=['BP4D'], mode='train', ratio=0, fake_label=False,\
         shuffling = False, color_jitter=False, AU=dict,\
         mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5), num_workers=0):
   """Build and return data loader."""
@@ -305,7 +387,7 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
 
   elif len(dataset)==1:
     # ipdb.set_trace()
-    dataset = globals()[dataset[0]](image_size, metadata_path, transform, mode, shuffling=shuffling, AUs=AU[dataset[0].upper()])
+    dataset = globals()[dataset[0]](image_size, metadata_path, transform, mode, shuffling=shuffling, fake_label = fake_label, AUs=AU[dataset[0].upper()])
     data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     return [data_loader]
 
@@ -313,7 +395,7 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
     # dataset1 -> fake, dataset2 -> real. Ratio: fake/real over batch
     assert ratio%1==0, "Ratio must be [0,100] integer."   
      
-    dataset1 = globals()[dataset[0]](image_size, metadata_path, transform, mode, shuffling=shuffling, AUs=AU[dataset[0].upper()])
+    dataset1 = globals()[dataset[0]](image_size, metadata_path, transform, mode, fake_label=fake_label, shuffling=shuffling, AUs=AU[dataset[0].upper()])
     batch_size1 = int(batch_size*ratio/100)
     # images1, labels1 = dataset1.get_data()
     dataset2 = globals()[dataset[1]](image_size, metadata_path, transform, mode, shuffling=shuffling, AUs=AU[dataset[1].upper()])
@@ -327,3 +409,6 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
       return [data_loader2, data_loader1]
     else:
       return [data_loader1, data_loader2]
+
+######################################################################################################
+######################################################################################################

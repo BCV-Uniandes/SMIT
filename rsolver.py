@@ -377,6 +377,7 @@ class Solver(object):
           total=len(self.data_loader), desc=desc_bar, ncols=10)
       for i, (real_x, real_label, files) in progress_bar:
         # ipdb.set_trace()   
+        if real_x.size(0)!=self.config.batch_size: continue
         # save_image(self.denorm(real_x.cpu()), 'dm1.png',nrow=1, padding=0)
         #=======================================================================================#
         #========================================== BLUR =======================================#
@@ -408,41 +409,45 @@ class Solver(object):
         fake_c = self.to_var(fake_c)
         real_label = self.to_var(real_label)   # this is same as real_c if dataset == 'CelebA'
         fake_label = self.to_var(fake_label)
-        
+
+        split = lambda x: (x[:x.size(0)//2], x[x.size(0)//2:])
+        real_x0, real_x1 = split(real_x)
+        real_label0, real_label1 = split(real_label)
+        real_c0, real_c1 = split(real_c)
+        fake_c0, fake_c1 = split(fake_c)
+        fake_label0, fake_label1 = split(fake_label)
+        fake_x0 = self.G(real_x0, fake_c0)        
+        # real_x0 = self.to_var(real_x0)
+        # real_x1 = self.to_var(real_x1)        
+        # real_x0 = real_x1 = real_x
+        # fake_x0 = fake_x1 = fake_x
+        # real_label0 = real_label1 = real_label
+        # fake_label0 = fake_label1 = fake_label
         #=======================================================================================#
         #======================================== Train D ======================================#
         #=======================================================================================#
-        out_src, out_cls = self.D(real_x)
+        out_src_real, out_cls_real = self.D(real_x0)
+        out_src_fake, out_cls_fake = self.D(fake_x0)
 
-        if 'LSGAN' in self.config.GAN_options:
-          d_loss_real = F.mse_loss(out_src, torch.ones_like(out_src))
-        elif 'HINGE' in self.config.GAN_options:
+        if 'HINGE' in self.config.GAN_options:
           try:
-            d_loss_real = torch.mean(F.relu(1-out_src))
+            # d_loss_real = torch.mean(F.relu(1-out_src_real))
+            d_loss_src = (torch.mean(torch.nn.ReLU()(1.0 - (out_src_real - torch.mean(out_src_fake)))) \
+                          + torch.mean(torch.nn.ReLU()(1.0 + (out_src_fake - torch.mean(out_src_real)))))/2         
           except:
             ipdb.set_trace()
         else:
-          d_loss_real = - torch.mean(out_src)
+          # d_loss_real = - torch.mean(out_src_real)
+          d_loss_src = (torch.mean(- (out_src_real - torch.mean(out_src_fake))) \
+                        + torch.mean(out_src_fake - torch.mean(out_src_real)))/2          
 
         # ipdb.set_trace()
         d_loss_cls = F.binary_cross_entropy_with_logits(
-          out_cls, real_label, size_average=False) / real_x.size(0)
+          out_cls_real, real_label0, size_average=False) / real_x0.size(0)
 
-        # Compute loss with fake images    
-        fake_x = self.G(real_x, fake_c)
-        fake_x_D = Variable(fake_x.data)
-        out_src, out_cls = self.D(fake_x)
 
-        if 'LSGAN' in self.config.GAN_options:
-          d_loss_fake = F.mse_loss(out_src, torch.zeros_like(out_src))
-        elif 'HINGE' in self.config.GAN_options:
-          d_loss_fake = torch.mean(F.relu(1+out_src))          
-        else:
-          d_loss_fake = torch.mean(out_src)
-
-        # Backward + Optimize
-        
-        d_loss = d_loss_real + d_loss_fake + self.config.lambda_cls * d_loss_cls
+        # Backward + Optimize       
+        d_loss = d_loss_src + self.config.lambda_cls * d_loss_cls
         self.reset_grad()
         d_loss.backward()
         self.d_optimizer.step()
@@ -451,10 +456,10 @@ class Solver(object):
         #=================================== Gradient Penalty ==================================#
         #=======================================================================================#
         # Compute gradient penalty
-        if not ('LSGAN' in self.config.GAN_options or 'HINGE' in self.config.GAN_options):
-          alpha = torch.rand(real_x.size(0), 1, 1, 1).cuda().expand_as(real_x)
+        if not 'HINGE' in self.config.GAN_options:
+          alpha = torch.rand(real_x0.size(0), 1, 1, 1).cuda().expand_as(real_x0)
           # ipdb.set_trace()
-          interpolated = Variable(alpha * real_x.data + (1 - alpha) * fake_x.data, requires_grad=True)
+          interpolated = Variable(alpha * real_x0.data + (1 - alpha) * fake_x0.data, requires_grad=True)
           out, out_cls = self.D(interpolated)
 
           grad = torch.autograd.grad(outputs=out,
@@ -478,18 +483,16 @@ class Solver(object):
 
         # Logging
         loss = {}
-        loss['D/real'] = d_loss_real.data[0]
-        loss['D/fake'] = d_loss_fake.data[0]
+        loss['D/src'] = d_loss_src.data[0]
         loss['D/cls'] = d_loss_cls.data[0]*self.config.lambda_cls
         loss['D/gp'] = d_loss_gp.data[0]*self.config.lambda_gp
         if len(loss_cum.keys())==0: 
-          loss_cum['D/real'] = []; loss_cum['D/fake'] = []
+          loss_cum['D/src'] = [];
           loss_cum['D/cls'] = []; loss_cum['G/cls'] = []
-          loss_cum['G/fake'] = []; loss_cum['G/rec'] = []
+          loss_cum['G/src'] = []; loss_cum['G/rec'] = []
           loss_cum['D/gp'] = []; 
           # loss_cum['G/l1'] = []
-        loss_cum['D/real'].append(d_loss_real.data[0])
-        loss_cum['D/fake'].append(d_loss_fake.data[0])
+        loss_cum['D/src'].append(d_loss_src.data[0])
         loss_cum['D/cls'].append(d_loss_cls.data[0]*self.config.lambda_cls)
         loss_cum['D/gp'].append(d_loss_gp.data[0]*self.config.lambda_gp)
 
@@ -499,30 +502,38 @@ class Solver(object):
         if (i+1) % self.config.d_train_repeat == 0:
 
           # Original-to-target and target-to-original domain
-          fake_x = self.G(real_x, fake_c)
-          rec_x = self.G(fake_x, real_c)
-          out_src, out_cls = self.D(fake_x)
-          
-          if 'LSGAN' in self.config.GAN_options:
-            g_loss_fake = F.mse_loss(out_src, torch.ones_like(out_src))
-          elif 'HINGE' in self.config.GAN_options:
-            g_loss_fake = - torch.mean(out_src)
+
+          out_src_real, out_cls_real = self.D(real_x1)
+
+          fake_x1 = self.G(real_x1, fake_c1)
+          rec_x1 = self.G(fake_x1, real_c1)   
+          # rec_x0 = rec_x1 = rec_x
+          # fake_x0 = fake_x1 = fake_x
+
+          out_src_fake, out_cls_fake = self.D(fake_x1)
+
+          if 'HINGE' in self.config.GAN_options:
+            # g_loss_fake = - torch.mean(out_src_fake)
+            g_loss_src = (torch.mean(torch.nn.ReLU()(1.0 + (out_src_real - torch.mean(out_src_fake)))) \
+                          + torch.mean(torch.nn.ReLU()(1.0 - (out_src_fake - torch.mean(out_src_real)))))/2            
           else:          
-            g_loss_fake = - torch.mean(out_src)          
+            # g_loss_fake = - torch.mean(out_src_fake)          
+            g_loss_src = (torch.mean(out_src_real - torch.mean(out_src_fake))) \
+                          + torch.mean(- (out_src_fake - torch.mean(out_src_real)))/2             
 
           g_loss_cls = F.binary_cross_entropy_with_logits(
-            out_cls, fake_label, size_average=False) / fake_x.size(0)
+            out_cls_fake, fake_label1, size_average=False) / fake_x1.size(0)
 
           if 'L1_LOSS' in self.config.GAN_options:
-            g_loss_rec = F.l1_loss(real_x, fake_x) + \
-                         F.l1_loss(fake_x, rec_x)
+            g_loss_rec = F.l1_loss(real_x1, fake_x1) + \
+                         F.l1_loss(fake_x1, rec_x1)
             # ipdb.set_trace()
           else:
-            g_loss_rec = F.l1_loss(real_x, rec_x)
+            g_loss_rec = F.l1_loss(real_x1, rec_x1)
 
 
           # Backward + Optimize
-          g_loss = g_loss_fake \
+          g_loss = g_loss_src \
                    + self.config.lambda_rec * g_loss_rec \
                    + self.config.lambda_cls * g_loss_cls \
                    # + self.config.lambda_l1 * g_l1
@@ -531,13 +542,13 @@ class Solver(object):
           self.g_optimizer.step()
 
           # Logging
-          loss['G/fake'] = g_loss_fake.data[0]
+          loss['G/src'] = g_loss_src.data[0]
           loss['G/rec'] = g_loss_rec.data[0]*self.config.lambda_rec
           loss['G/cls'] = g_loss_cls.data[0]*self.config.lambda_cls
           # loss['G/l1'] = g_l1.data[0]*self.config.lambda_l1
 
 
-          loss_cum['G/fake'].append(g_loss_fake.data[0])
+          loss_cum['G/src'].append(g_loss_src.data[0])
           loss_cum['G/rec'].append(g_loss_rec.data[0]*self.config.lambda_rec)
           loss_cum['G/cls'].append(g_loss_cls.data[0]*self.config.lambda_cls)
           # loss_cum['G/l1'].append(g_l1.data[0]*self.config.lambda_l1)
@@ -556,21 +567,21 @@ class Solver(object):
             for tag, value in loss.items():
               self.logger.scalar_summary(tag, value, e * iters_per_epoch + i + 1)
 
-        # Translate fixed images for debugging
-        if (i+1) % self.config.sample_step == 0 or (i+1)==last_model_step or i+e==0:
-          self.G.eval()
-          fake_image_list = [fixed_x]
-          # ipdb.set_trace()
-          for fixed_c in fixed_c_list:
-            fake_image_list.append(self.G(fixed_x, fixed_c))
-          fake_images = torch.cat(fake_image_list, dim=3)
-          # ipdb.set_trace()
-          shape0 = min(64, fake_images.data.cpu().shape[0])
-          img_denorm = self.denorm(fake_images.data.cpu()[:shape0])
-          img_denorm = torch.cat((self.get_aus(), img_denorm), dim=0)
-          save_image(img_denorm,
-            os.path.join(self.config.sample_path, '{}_{}_fake.jpg'.format(E, i+1)),nrow=1, padding=0)
-          # self.PRINT('Translated images and saved into {}..!'.format(self.sample_path))
+    # Translate fixed images for debugging
+    # if (i+1) % self.config.sample_step == 0 or (i+1)==last_model_step or i+e==0:
+      self.G.eval()
+      fake_image_list = [fixed_x]
+      # ipdb.set_trace()
+      for fixed_c in fixed_c_list:
+        fake_image_list.append(self.G(fixed_x, fixed_c))
+      fake_images = torch.cat(fake_image_list, dim=3)
+      # ipdb.set_trace()
+      shape0 = min(64, fake_images.data.cpu().shape[0])
+      img_denorm = self.denorm(fake_images.data.cpu()[:shape0])
+      img_denorm = torch.cat((self.get_aus(), img_denorm), dim=0)
+      save_image(img_denorm,
+        os.path.join(self.config.sample_path, '{}_{}_fake.jpg'.format(E, i+1)),nrow=1, padding=0)
+      # self.PRINT('Translated images and saved into {}..!'.format(self.sample_path))
 
       torch.save(self.G.state_dict(),
         os.path.join(self.config.model_save_path, '{}_{}_G.pth'.format(E, i+1)))
@@ -590,34 +601,40 @@ class Solver(object):
 
       # Decay learning rate     
       # if (e+1) > (self.config.num_epochs - self.config.num_epochs_decay):
-      if (e+1) % self.config.num_epochs_decay==0:
+      if (e+1) % self.config.num_epochs_decay ==0:
         g_lr = (g_lr / 10)
         d_lr = (d_lr / 10)
         self.update_lr(g_lr, d_lr)
-        # self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
+        self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
   #=======================================================================================#
   #=======================================================================================#
 
-  def save_fake_output(self, real_x, save_path):
+  def save_fake_output(self, real_x, save_path, label=None):
     real_x = self.to_var(real_x, volatile=True)
 
     # target_c_list = []
     target_c= torch.from_numpy(np.zeros((real_x.size(0), self.config.c_dim), dtype=np.float32))
-    target_c_list = [self.to_var(target_c, volatile=True)]
-    for j in range(self.config.c_dim):
-      target_c[:]=0 
-      target_c[:,j]=1       
-      target_c_list.append(self.to_var(target_c, volatile=True))
-      # target_c = self.one_hot(torch.ones(real_x.size(0)) * j, self.c_dim)
-      # target_c_list.append(self.to_var(target_c, volatile=True))
+    fake_image_list = [real_x]    
 
+    target_c_list = [self.to_var(target_c, volatile=True)]
+
+    for j in range(self.config.c_dim):
+      if label is None:
+        target_c[:]=0 
+        target_c[:,j]=1       
+      else:
+        # ipdb.set_trace()
+        print(j+1, sorted(list(set(map(int, (self.config.AUs['EMOTIONNET']*label[j].cpu().numpy()).tolist())))))
+        target_c=label[j].repeat(label.size(0),1)      
+      target_c_list.append(self.to_var(target_c, volatile=True))      
     # Start translations
     fake_image_list = [real_x]
 
     for target_c in target_c_list:       
       fake_x = self.G(real_x, target_c)
       fake_image_list.append(fake_x)
+
     fake_images = self.denorm(torch.cat(fake_image_list, dim=3).data.cpu())
     fake_images = torch.cat((self.get_aus(), fake_images), dim=0)
     save_image(fake_images, save_path, nrow=1, padding=0)
@@ -644,8 +661,10 @@ class Solver(object):
                  dataset=[dataset], mode='test', AU=self.config.AUs)[0]  
 
     for i, (real_x, org_c, files) in enumerate(data_loader_val):
+      # ipdb.set_trace()
       save_path = os.path.join(self.config.sample_path, '{}_fake_val_{}_{}.jpg'.format(last_name, dataset, i+1))
-      self.save_fake_output(real_x, save_path)
+      if 'REAL_LABELS' in self.config.GAN_options: self.save_fake_output(real_x, save_path, label=org_c)
+      else: self.save_fake_output(real_x, save_path)
       self.PRINT('Translated test images and saved into "{}"..!'.format(save_path))
       if i==3: break
 
@@ -667,29 +686,11 @@ class Solver(object):
     # ipdb.set_trace()
 
     data_loader = get_loader(path, self.config.image_size,
-                 self.config.image_size, 1, shuffling = True,
+                 self.config.image_size, self.config.batch_size, shuffling = True,
                  dataset=['DEMO'], mode='test', AU=self.config.AUs)[0]  
 
     for real_x in data_loader:
+      # ipdb.set_trace()
       save_path = os.path.join(self.config.sample_path, '{}_fake_val_DEMO_{}.jpg'.format(last_name, re.sub('\D','_',self.TimeNow)))
       self.save_fake_output(real_x, save_path)
       self.PRINT('Translated test images and saved into "{}"..!'.format(save_path))
-
-    # config.save_fake_output(real_x, show_fake.format(mode.lower(), i))
-
-    # ######################################################
-    # if 'GOOGLE' in config.config.GAN_options:
-    #   labels_dummy = config.to_var(labels, volatile=True)
-
-    #   fake_c=labels_dummy.clone()*0
-    #   fake_list = [fake_c.clone()]
-    #   for i in range(len(config.AUs_common)):
-    #     fake_c=labels_dummy.clone()*0
-    #     fake_c[:,i]=1
-
-    #     fake_c_ = fake_c.clone()
-
-    #     fake_list.append(fake_c_)
-    #   config.show_img(real_x, labels_dummy, fake_list, ppt='PPT' in config.config.GAN_options)
-    #   sys.exit("Done")      
-    # ######################################################

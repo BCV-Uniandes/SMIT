@@ -84,16 +84,19 @@ class Solver(object):
 
     if 'DENSENET' in self.config.CLS_options:
       # from models.densenet import densenet121 as Classifier
-      model = 'densenet121'
+      model = self.config.model_CLS.lower()#'densenet201'
       exec('from models.densenet import {} as Classifier'.format(model))
-      self.config.model_save_path = self.config.model_save_path.replace('DENSENET', model.upper())
-      self.config.log_path = self.config.log_path.replace('DENSENET', model.upper())
-      self.C = Classifier(num_classes = len(self.AUs_common), pretrained=True) 
-      print("Building DENSENET with {} outputs".format(len(self.AUs_common)))
+      # self.config.model_save_path = self.config.model_save_path.replace('DENSENET', model.upper())
+      # self.config.log_path = self.config.log_path.replace('DENSENET', model.upper())
+
+      # self.C = Classifier(num_classes = len(self.AUs_common), pretrained=True) 
+      self.C = Classifier(num_classes = len(self.AUs_common)) 
+      print("Building {} with {} outputs".format(self.config.model_CLS.upper(), len(self.AUs_common)))
 
     elif 'RESNET' in self.config.CLS_options:
       from models.resnet import resnet50 as Classifier
-      self.C = Classifier(num_classes = len(self.AUs_common), pretrained=True) 
+      # self.C = Classifier(num_classes = len(self.AUs_common), pretrained=True)
+      self.C = Classifier(num_classes = len(self.AUs_common))
       print("Building RESNET with {} outputs".format(len(self.AUs_common)))
 
     else:
@@ -162,14 +165,35 @@ class Solver(object):
 
   #=======================================================================================#
   #=======================================================================================#
-  def denorm_GAN(self, x, img_org=None):   
+  def to_tensor(self, x):
+    # ipdb.set_trace()
+    return torch.FloatTensor(x).view(1,-1,1,1)
+
+  #=======================================================================================#
+  #=======================================================================================#
+  def denorm_CLS(self, x):   
+    # ipdb.set_trace()
+    out = (x * self.to_tensor(self.config.std)) + self.to_tensor(self.config.mean)
+    return out.clamp_(0, 1)
+
+  #=======================================================================================#
+  #=======================================================================================#
+  def norm_CLS(self, x):   
+    out = (x - self.to_tensor(self.config.mean)) / self.to_tensor(self.config.std)
+    return out
+
+  #=======================================================================================#
+  #=======================================================================================#
+  def denorm_GAN(self, x):   
+    # ipdb.set_trace()
     out = (x + 1) / 2
     return out.clamp_(0, 1)
 
   #=======================================================================================#
   #=======================================================================================#
-  def norm_GAN(self, x, img_org=None):   
-    out = (x - 0.5) * 2
+  def norm_GAN(self, x):   
+    # ipdb.set_trace()
+    out = (self.denorm_CLS(x) - 0.5) * 2
     return out.clamp_(-1, 1)
 
   #=======================================================================================#
@@ -231,6 +255,9 @@ class Solver(object):
   def show_ONEimg(self, real_img, fake_label):          
     import matplotlib.pyplot as plt
     # ipdb.set_trace()
+    print("")
+    string = [map(int,i) for i in (self.config.AUs['EMOTIONNET']*fake_label.cpu().numpy()).tolist()]
+    for idx, s in enumerate(string): print(idx+1, sorted(list(set(s))))
     real_img = self.to_var(real_img, volatile=True)
     fake_label = self.to_var(fake_label, volatile=True)
     fake_image = self.G(real_img, fake_label)
@@ -241,6 +268,7 @@ class Solver(object):
     # print("Fake Label: \n"+str(fake_label.data.cpu().numpy()))
     # os.system('eog _temp.jpg')    
     # os.remove('_temp.jpg')
+    
 
   #=======================================================================================#
   #=======================================================================================#
@@ -265,7 +293,7 @@ class Solver(object):
       for i in range(start):
         # if (i+1) > (self.config.num_epochs - self.config.num_epochs_decay):
         if (i+1) %self.config.num_epochs_decay==0:
-          lr = (self.config.lr / 10.)
+          lr = (lr / 10.)
           self.update_lr(lr)
           self.PRINT ('Decay learning rate to lr: {}.'.format(lr))     
     else:
@@ -275,9 +303,9 @@ class Solver(object):
 
     # Start training
     self.PRINT("Log path: "+self.config.log_path)
-    Log = "---> {} | batch size: {}, fold: {}, img: {}, GPU: {}, !{}\n-> GAN_options:".format(\
+    Log = "---> {} | batch size: {}, fold: {}, img: {}, GPU: {}, !{}, [{}]\n-> GAN_options:".format(\
         self.TimeNow, self.config.batch_size, self.config.fold, self.config.image_size, \
-        self.config.GPU, self.config.mode_data) 
+        self.config.GPU, self.config.mode_data, self.config.PLACE) 
 
     for item in self.config.GAN_options:
       Log += ' [*{}]'.format(item.upper())
@@ -312,9 +340,10 @@ class Solver(object):
       progress_bar = tqdm(enumerate(self.data_loader[0]), \
           total=len(self.data_loader[0]), desc=desc_bar, ncols=10)
       for i, (real_x0, real_label0, files0) in progress_bar:      
-        ipdb.set_trace()
+        # ipdb.set_trace()
         if self.data_loader[0].dataset.name==self.config.dataset_fake:
-          label_gan = self.fake_label(batch_size=real_label0.size(0))
+          # label_gan = self.fake_label(batch_size=real_label0.size(0))
+          label_gan = real_label0
           # fl_au = label_gan*torch.FloatTensor(self.config.AUs['EMOTIONNET'])
           real_label0 = self.reduce_label(label_gan, self.index_aus[0])
         else:         
@@ -341,15 +370,20 @@ class Solver(object):
           real_label = real_label0
         else:
           # fake_label = self.fake_label(batch_size=real_label0.size(0))
-          real_x_gan = self.norm_GAN(real_x)
-          self.show_ONEimg(real_x_gan, label_gan)
-          print(label_gan*torch.FloatTensor(self.config.AUs['EMOTIONNET']))
-          ipdb.set_trace()
-          real_x_gan = self.to_var(real_x_gan, volatile=True) 
-          label_gan = self.to_var(label_gan, volatile=True)
-          fake_x = self.G(real_x_gan, label_gan)
-          real_x = self.denorm_GAN(fake_x)
-          real_label = self.reduce_label(fake_label, self.index_aus[0])
+          if not self.config.dataset_fake=='EmotionNet':
+            # ipdb.set_trace()
+            # real_x_gan = self.norm_GAN(real_x)
+            real_x_gan = real_x.clone()
+            # self.show_ONEimg(real_x_gan, label_gan)
+            # ipdb.set_trace()
+            real_x_gan = self.to_var(real_x_gan, volatile=True) 
+            label_gan = self.to_var(label_gan, volatile=True)
+            fake_x = self.G(real_x_gan, label_gan)
+            # real_x = self.denorm_GAN(fake_x.data.cpu())
+            real_x = fake_x.data.cpu()
+            real_label = self.reduce_label(label_gan.data, self.index_aus[0])
+
+            # ipdb.set_trace()
           
         real_x = self.to_var(real_x)
         real_label = self.to_var(real_label) 
@@ -394,14 +428,14 @@ class Solver(object):
       log = '!%s | [F1_VAL: %0.3f] | Train'%(self.TimeNow, F1_MEAN)
       for tag, value in loss_cum.items():
         log += ", {}: {:.4f}".format(tag, np.array(value).mean())    
-      print(log)
+      self.PRINT(log)
 
       # if loss_val<loss_val_prev:
       if F1_MEAN>f1_val_prev:
         torch.save(self.C.state_dict(), os.path.join(self.config.model_save_path, '{}_{}.pth'.format(E, i+1)))   
         # os.system('rm -vf {}'.format(os.path.join(self.config.model_save_path, '{}_{}.pth'.format(str(int(E)-1).zfill(2), i+1))))
         # loss_val_prev = loss_val
-        print("! Saving model")
+        self.PRINT("! Saving model")
         f1_val_prev = F1_MEAN
         non_decreasing = 0
 
@@ -413,7 +447,7 @@ class Solver(object):
 
       # Decay learning rate
       if (e+1) % self.config.num_epochs_decay==0:
-        lr = (self.config.lr / 10.0)
+        lr = (lr / 10.0)
         self.update_lr(lr)
         print ('Decay learning rate to lr: {}.'.format(lr))
 
@@ -467,9 +501,10 @@ class Solver(object):
   def test(self, dataset='', load=False):
     if dataset=='': dataset='BP4D'
     from data_loader import get_loader
-    if self.config.pretrained_model=='' or load:
+    # ipdb.set_trace()
+    if self.config.pretrained_model in ['',None] or load:
       last_file = sorted(glob.glob(os.path.join(self.config.model_save_path,  '*.pth')))[-1]
-      last_name = '_'.join(last_file.split('/')[-1].split('_')[:2])
+      last_name = os.path.basename(last_file).split('.')[0]
     else:
       last_name = self.config.pretrained_model
 
