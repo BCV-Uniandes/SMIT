@@ -587,7 +587,7 @@ class Solver(object):
         log += ", {}: {:.4f}".format(tag, np.array(value).mean())   
 
       self.PRINT(log)
-
+      self.data_loader.dataset.shuffle(e)
       # Decay learning rate     
       # if (e+1) > (self.config.num_epochs - self.config.num_epochs_decay):
       if (e+1) % self.config.num_epochs_decay==0:

@@ -48,7 +48,7 @@ def main(config):
   if config.mode_train=='CLS':
     from solver_cls import Solver
   elif 'RaGAN' in config.GAN_options:
-    from rsolver import Solver
+    from rasolver import Solver
   else:
     from solver import Solver
 
@@ -116,6 +116,7 @@ if __name__ == '__main__':
   parser.add_argument('--lambda_l1',        type=float, default=10.0)
   parser.add_argument('--lambda_rec',       type=float, default=10.0)
   parser.add_argument('--lambda_gp',        type=float, default=10.0)
+  parser.add_argument('--lambda_style',     type=float, default=5.0)
   parser.add_argument('--d_train_repeat',   type=int, default=5)
 
   # Generative settings

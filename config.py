@@ -45,6 +45,28 @@ def config_GENERATOR(config, update_folder):
   if int(config.lambda_cls)!=1:
     update_folder(config, 'lambda_cls_'+str(config.lambda_cls))     
 
+  if 'Attention' in config.GAN_options: 
+    config.lambda_mask = 1
+    config.lambda_mask_smooth = 0.0001
+    update_folder(config, 'Attention')  
+
+  if 'Stochastic' in config.GAN_options:
+    # config.lambda_style = 1
+    if not 'AdaIn' in config.GAN_options: config.GAN_options.append('AdaIn')    
+    update_folder(config, 'Stochastic') 
+    update_folder(config, 'style_'+str(int(config.lambda_style)))
+    if 'style_labels' in config.GAN_options:
+      update_folder(config, 'style_labels') 
+
+  if 'AdaIn' in config.GAN_options or 'Stochastic' in config.GAN_options:
+    config.mlp_dim=256
+    config.style_dim=16
+    if 'kl_loss' in config.GAN_options: 
+      config.lambda_kl = 1
+      update_folder(config, 'kl_loss_'+str(config.lambda_kl))
+    if not 'Stochastic' in config.GAN_options: 
+      update_folder(config, 'AdaIn')    
+
 def update_folder(config, folder):
   import os
   config.log_path = os.path.join(config.log_path, folder)

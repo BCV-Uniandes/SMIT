@@ -63,9 +63,9 @@ class BP4D(Dataset):
     for i, line in enumerate(lines):
       splits = line.split()
       filename = splits[0]
-      name = 'Faces' if not 'aligned' in filename else 'Faces_aligned'
-      filename = filename.replace(name, name+'_256')#+str(self.image_size))
-      # filename = filename.replace('Faces', 'Sequences_400')#+str(self.image_size))
+      # name = 'Faces' if not 'aligned' in filename else 'Faces_aligned'
+      # filename = filename.replace('Faces', 'Faces_256')#+str(self.image_size))
+      filename = filename.replace('Faces', 'Sequences_400')#+str(self.image_size))
       if not os.path.isfile(filename) or os.stat(filename).st_size==0: 
         # continue
         ipdb.set_trace()
@@ -95,6 +95,12 @@ class BP4D(Dataset):
 
   def __len__(self):
     return self.num_data
+
+  def shuffle(self, seed):
+    random.seed(seed)
+    random.shuffle(self.filenames)
+    random.seed(seed)
+    random.shuffle(self.labels)  
 
 ######################################################################################################
 ###                                           BP4D_FULL                                            ###
@@ -189,7 +195,7 @@ class EmotionNet(Dataset):
     self.shuffling = shuffling
     self.AUs = AUs
     self.name = 'EmotionNet'
-    self.image_size = image_size if image_size>=128 else 128
+    self.image_size = image_size if image_size>=128 else 130
     if os.path.isdir('/home/afromero/ssd2/EmotionNet2018'):
       self.ssd = '/home/afromero/ssd2/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
     else:
@@ -240,6 +246,12 @@ class EmotionNet(Dataset):
   def __len__(self):
     return self.num_data
 
+  def shuffle(self, seed):
+    random.seed(seed)
+    random.shuffle(self.filenames)
+    random.seed(seed)
+    random.shuffle(self.labels)
+
 
 ######################################################################################################
 ###                                              CelebA                                            ###
@@ -283,8 +295,8 @@ class CelebA(Dataset):
       splits = line.split()
       img_size = '_'+str(self.image_size) if self.image_size==128 else '' 
       if os.path.isdir('/home/afromero/ssd2/CelebA'):
-        # filename = os.path.abspath('/home/afromero/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
-        filename = os.path.abspath('/home/afromero/ssd2/CelebA/Faces/{}'.format(splits[0]))
+        filename = os.path.abspath('/home/afromero/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
+        # filename = os.path.abspath('/home/afromero/ssd2/CelebA/Faces/{}'.format(splits[0]))
       else:
         filename = os.path.abspath('/home/roandres/bcv002/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
       # ipdb.set_trace()
@@ -295,9 +307,9 @@ class CelebA(Dataset):
       smile = False
       for idx, value in enumerate(values):
         attr = self.idx2attr[idx]
-        if attr=='Smiling' and value=='1': 
-          smile=True
-          break
+        # if attr=='Smiling' and value=='1': 
+        #   smile=True
+        #   break
         if attr in self.selected_attrs:
           if value == '1':
             label.append(1)
@@ -324,6 +336,12 @@ class CelebA(Dataset):
 
   def __len__(self):
     return self.num_data    
+
+  def shuffle(self, seed):
+    random.seed(seed)
+    random.shuffle(self.filenames)
+    random.seed(seed)
+    random.shuffle(self.labels)
 
 ######################################################################################################
 ###                                              DEMO                                              ###
@@ -356,19 +374,22 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
         mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5), num_workers=0):
   """Build and return data loader."""
 
+  # resize = image_size + (image_size//20)
+  crop_size = image_size 
+
   if mode == 'train':
     if color_jitter:
       transform = transforms.Compose([
-        # transforms.CenterCrop(crop_size),
-        transforms.Resize((image_size,image_size), interpolation=Image.ANTIALIAS),
+        # transforms.Resize(resize, interpolation=Image.ANTIALIAS),
+        transforms.CenterCrop((crop_size, crop_size)),
         transforms.RandomHorizontalFlip(),
         transforms.ColorJitter(brightness=0.6, contrast=0.3, saturation=0.3, hue=0),
         transforms.ToTensor(),
         transforms.Normalize(mean, std)])  
     else:
       transform = transforms.Compose([
-        # transforms.CenterCrop(crop_size),
-        transforms.Resize((image_size,image_size), interpolation=Image.ANTIALIAS),
+        # transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS),
+        transforms.CenterCrop((crop_size, crop_size)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean, std)])  
@@ -376,7 +397,7 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
 
   else:
     transform = transforms.Compose([
-      transforms.Resize((image_size,image_size), interpolation=Image.ANTIALIAS),
+      transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS),
       transforms.ToTensor(),
       transforms.Normalize(mean, std)])
   # ipdb.set_trace()
