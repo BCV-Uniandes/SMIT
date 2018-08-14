@@ -24,6 +24,7 @@ def print_debug(feed, layers):
                                     or isinstance(layer, LinearBlock) \
                                     or isinstance(layer, SpectralNormalization):
       print(str(layer).split('(')[0], feed.size())
+  print(' ')
   return feed
 
 class ResidualBlock(nn.Module):
@@ -64,12 +65,12 @@ class Discriminator(nn.Module):
     # ipdb.set_trace()
     self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
     self.conv2 = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
-    layers_debug.append(self.conv1)
     if debug:
       feed = Variable(torch.ones(1,3,image_size,image_size), volatile=True)
       print('-- Discriminator:')
-      _ = print_debug(feed, layers_debug)
-
+      features = print_debug(feed, layers_debug)
+      _ = print_debug(features, [self.conv1])
+      _ = print_debug(features, [self.conv2])      
 
   def forward(self, x):
     h = self.main(x)
@@ -82,7 +83,7 @@ class Discriminator(nn.Module):
 
 class Generator(nn.Module):
   """Generator. Encoder-Decoder Architecture."""
-  def __init__(self, image_size = 128, conv_dim=64, c_dim=5, repeat_num=6, Attention=False, AdaIn=False, SAGAN=False, debug=False):
+  def __init__(self, image_size = 128, conv_dim=64, c_dim=5, repeat_num=6, Attention=False, AdaIn=False, SAGAN=False, style_label_net=False, vae_like=False, debug=False):
     super(Generator, self).__init__()
     layers = []
     self.Attention = Attention
@@ -192,21 +193,27 @@ class Generator(nn.Module):
     c = c.unsqueeze(2).unsqueeze(3)
     c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
     # ipdb.set_trace()
-    x = torch.cat([x, c], dim=1)
+    x_cat = torch.cat([x, c], dim=1)
     if self.Attention: 
-      features = self.main(x)
-      return self.img_reg(features), self.attetion_reg(features)
+      features = self.main(x_cat)
+      fake_img = self.img_reg(features)
+      mask_img = self.attetion_reg(features)
+      fake_img = mask_img * x + (1 - mask_img) * fake_img            
+      return fake_img, mask_img
+
     elif self.AdaIn is not None:  
-      features = self.main(x)
+      features = self.main(x_cat)
       return self.img_reg(features)         
+
     else: 
       return self.main(x)
 
 class StyleEncoder(nn.Module):
   """Generator. Encoder-Decoder Architecture."""
-  def __init__(self, image_size=128, mlp_dim=256, style_dim=8, c_dim=12, conv_dim=64, debug=False):
+  def __init__(self, image_size=128, mlp_dim=256, style_dim=8, c_dim=12, conv_dim=64, style_label_net=False, debug=False):
     super(StyleEncoder, self).__init__()
     self.c_dim = c_dim
+    self.style_label_net = style_label_net
     layers = []
     layers.append(nn.Conv2d(3, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
@@ -225,28 +232,75 @@ class StyleEncoder(nn.Module):
       layers.append(nn.ReLU(inplace=True))
       curr_dim = curr_dim * 2
 
-    layers.append(nn.Conv2d(curr_dim, c_dim, kernel_size=7, stride=1, padding=3, bias=False))
     self.main = nn.Sequential(*layers)
+    self.style = nn.Conv2d(curr_dim, c_dim, kernel_size=7, stride=1, padding=3, bias=False)
+    if self.style_label_net: 
+      k_size = int(image_size / np.power(2, conv_repeat))
+      self.cls = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
 
     if debug:
       feed = Variable(torch.ones(1,3,image_size,image_size), volatile=True)
       print('-- StyleEncoder:')
+      features = print_debug(feed, layers)
+      _ = print_debug(features, [self.style]) 
+      if self.style_label_net: 
+        _ = print_debug(features, [self.cls]) 
+
+  def forward(self, x):
+    features = self.main(x)
+    style = self.style(features).view(features.size(0), self.c_dim, -1)
+    cls = self.cls(features).view(features.size(0), self.c_dim) if self.style_label_net else None
+    return style, cls
+    # style = style*cls.unsqueeze(2)
+
+class StyleDecoder(nn.Module):
+  def __init__(self, image_size=128, c_dim=12, conv_dim=64, debug=False):
+    super(StyleDecoder, self).__init__()
+
+    conv_repeat = int(math.log(image_size, 2))-2
+    layers = []
+    conv_dim = conv_dim*int(math.pow(2,conv_repeat))
+    layers.append(nn.ConvTranspose2d(c_dim, conv_dim, kernel_size=3, stride=1, padding=1, bias=False))
+    layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
+    layers.append(nn.ReLU(inplace=True))
+
+    for i in range(conv_repeat):
+      layers.append(nn.ConvTranspose2d(conv_dim, conv_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
+      layers.append(nn.InstanceNorm2d(conv_dim//2, affine=True))
+      layers.append(nn.ReLU(inplace=True))
+      conv_dim = conv_dim // 2
+    
+    layers.append(nn.Conv2d(conv_dim, 3, kernel_size=7, stride=1, padding=3, bias=False))
+    layers.append(nn.Tanh())
+    self.main = nn.Sequential(*layers)
+    self.style_size = int(image_size//math.pow(2,int(math.log(image_size, 2))-2))
+    self.c_dim = c_dim
+
+    if debug:
+      feed = Variable(torch.ones(1, self.c_dim, self.style_size, self.style_size), volatile=True)
+      print('-- StyleDecoder:')
       _ = print_debug(feed, layers)
 
   def forward(self, x):
-    x = self.main(x)
-    x = x.view(x.size(0), self.c_dim, -1)
-    return x
+    return self.main(x)
+
+  def random_noise(self, batchSize):
+    z = torch.cuda.FloatTensor(batchSize, self.c_dim, self.style_size, self.style_size)
+    z.copy_(torch.randn(batchSize, self.c_dim, self.style_size, self.style_size))
+    return z    
+
 
 class AdaInGEN(nn.Module):
-  def __init__(self, image_size = 128, conv_dim=64, c_dim=12, repeat_num=6, mlp_dim=256, style_dim=8, Attention=False, debug=False):
+  def __init__(self, image_size = 128, conv_dim=64, c_dim=12, repeat_num=6, mlp_dim=256, style_dim=8, Attention=False, style_label_net=False, vae_like=False, debug=False):
     super(AdaInGEN, self).__init__()
 
     self.image_size = image_size
     self.style_dim = style_dim
     self.c_dim = c_dim
+    self.vae_like = vae_like
     # style encoder
-    self.enc_style = StyleEncoder(image_size, mlp_dim, style_dim, c_dim, conv_dim, debug=True)
+    self.enc_style = StyleEncoder(image_size, mlp_dim, style_dim, c_dim, conv_dim, style_label_net=style_label_net, debug=True)
+    if vae_like: self.dec_style = StyleDecoder(image_size, c_dim, conv_dim, debug=True)
 
     self.generator = Generator(image_size, conv_dim, c_dim, repeat_num, Attention, AdaIn=True, debug=False)
 
@@ -256,13 +310,15 @@ class AdaInGEN(nn.Module):
   def debug(self):
     feed = Variable(torch.ones(1,3,self.image_size,self.image_size), volatile=True)
     # print('-- Generator:')    
-    style = self.get_style(feed)
+    style, _ = self.get_style(feed)
+    # if self.vae_like:
+      # _ = self.dec_style(style)
     self.apply_style(feed, style)
     self.generator.debug()
     
   def forward(self, x, c, stochastic=None):
     if stochastic is None:
-      style = self.get_style(x)
+      style, _ = self.get_style(x)
     else:
       style = stochastic
     self.apply_style(x, style)

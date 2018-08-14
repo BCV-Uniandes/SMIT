@@ -17,7 +17,7 @@ def config_GENERATOR(config, update_folder):
 
   if 'L1_LOSS' in config.GAN_options: 
     update_folder(config, 'L1_LOSS') 
-    if config.lambda_l1!=0.5: update_folder(config, 'lambda_l1_'+str(config.lambda_l1)) 
+    update_folder(config, 'lambda_l1_10.0') 
 
   if 'SAGAN' in config.GAN_options: 
     update_folder(config, 'SAGAN')
@@ -57,6 +57,15 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'style_'+str(int(config.lambda_style)))
     if 'style_labels' in config.GAN_options:
       update_folder(config, 'style_labels') 
+    if 'style_pseudo_random' in config.GAN_options:
+      update_folder(config, 'style_pseudo_random')       
+    if 'style_label_net' in config.GAN_options:
+      if not 'style_labels' in config.GAN_options and 'style_pseudo_random' not in config.GAN_options: config.GAN_options.append('style_labels')
+      update_folder(config, 'style_label_net')       
+
+    if 'vae_like' in config.GAN_options:
+      update_folder(config, 'vae_like') 
+      if not 'kl_loss' in config.GAN_options: config.GAN_options.append('kl_loss')  
 
   if 'AdaIn' in config.GAN_options or 'Stochastic' in config.GAN_options:
     config.mlp_dim=256

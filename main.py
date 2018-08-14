@@ -34,11 +34,6 @@ def main(config):
   # For fast training
   cudnn.benchmark = True
 
-  # Create directories if not exist
-  if not os.path.exists(config.log_path): os.makedirs(config.log_path)
-  if not os.path.exists(config.model_save_path): os.makedirs(config.model_save_path)
-  if not os.path.exists(config.sample_path): os.makedirs(config.sample_path)
-
   data_loader = get_loader(config.metadata_path, config.image_size,
                    config.image_size, config.batch_size, config.dataset, config.mode, \
                    color_jitter='COLOR_JITTER' in config.GAN_options, AU=config.AUs, fake_label=config.mode_train=='CLS' and 'JUST_REAL' not in config.CLS_options,\
@@ -113,10 +108,10 @@ if __name__ == '__main__':
   parser.add_argument('--g_lr',             type=float, default=0.0001)
   parser.add_argument('--d_lr',             type=float, default=0.0001)
   parser.add_argument('--lambda_cls',       type=float, default=1)
-  parser.add_argument('--lambda_l1',        type=float, default=10.0)
   parser.add_argument('--lambda_rec',       type=float, default=10.0)
   parser.add_argument('--lambda_gp',        type=float, default=10.0)
-  parser.add_argument('--lambda_style',     type=float, default=5.0)
+  parser.add_argument('--lambda_style',     type=float, default=1.0)
+  # parser.add_argument('--lambda_style_cls', type=float, default=5.0)
   parser.add_argument('--d_train_repeat',   type=int, default=5)
 
   # Generative settings
@@ -154,7 +149,7 @@ if __name__ == '__main__':
   parser.add_argument('--GPU',             type=str, default='0')
 
   # Step size
-  parser.add_argument('--log_step',        type=int, default=1000)
+  parser.add_argument('--log_step',        type=int, default=2000)
   parser.add_argument('--sample_step',     type=int, default=1000000)
   parser.add_argument('--model_save_step', type=int, default=2000000)
 
@@ -170,15 +165,28 @@ if __name__ == '__main__':
 
 
   if config.mode=='train':
+
+    # Create directories if not exist
+    if not os.path.exists(config.log_path): os.makedirs(config.log_path)
+    if not os.path.exists(config.model_save_path): os.makedirs(config.model_save_path)
+    if not os.path.exists(config.sample_path): os.makedirs(config.sample_path)
+
+    org_log = os.path.abspath(os.path.join(config.sample_path, 'log.txt'))
+    os.system('touch '+org_log)
     if config.PLACE=='BCV':
       file_log = 'logs/gpu{}_{}.txt'.format(config.GPU, config.mode_train)
     else:
       file_log = 'logs/gpu{}_{}_{}.txt'.format(config.GPU, config.PLACE, config.mode_train)
+    if os.path.isfile(file_log): os.remove(file_log)
+    # ipdb.set_trace()
+    os.symlink(org_log, file_log)
+
   else:
     file_log = 'logs/dummy.txt'
 
   if not 'GOOGLE' in config.GAN_options:
-    with open(file_log, 'wb') as config.log:
+    of = 'a' if os.path.isfile(file_log) else 'wb'
+    with open(file_log, of) as config.log:
       print >> config.log, ' '.join(sys.argv)
       config.log.flush()
       PRINT(config) 
