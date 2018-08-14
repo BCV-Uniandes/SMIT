@@ -19,7 +19,7 @@ import config as cfg
 import glob
 import pickle
 from tqdm import tqdm
-from utils import f1_score, f1_score_max, F1_TEST
+from misc.utils import f1_score, f1_score_max, F1_TEST
 import imageio
 import skimage.transform
 import math
@@ -133,7 +133,7 @@ class Solver(object):
 
   def build_tensorboard(self):
     # ipdb.set_trace()
-    from logger import Logger
+    from misc.logger import Logger
     self.logger = Logger(self.config.log_path)
 
   #=======================================================================================#
@@ -546,13 +546,11 @@ class Solver(object):
             if 'Stochastic' in self.config.GAN_options:
               style_real, _ = self.G.get_style(real_x1)
               if 'style_pseudo_random' in self.config.GAN_options:
-                # ipdb.set_trace()
                 style_fake = style_real[self.to_cuda(rand_idx)]
 
               else:
                 style_fake = self.to_var(self.G.random_style(real_x1))
               # if 'style_labels' in self.config.GAN_options and 'style_pseudo_random' not in self.config.GAN_options:
-                # ipdb.set_trace()
                 # if 'style_label_net' not in self.config.GAN_options: 
                 #   style_real *= real_c1.unsqueeze(2)
                 # style_fake *= fake_c1.unsqueeze(2)
