@@ -8,8 +8,8 @@ def config_GENERATOR(config, update_folder):
   if 'RaGAN' in config.GAN_options: 
     update_folder(config, 'RaGAN')
     config.batch_size=8
-    # config.d_train_repeat = 1
-    if config.image_size<=128: config.batch_size=32
+    config.d_train_repeat = 1
+    if config.image_size<=128: config.batch_size=64
 
   if 'LSGAN' in config.GAN_options: 
     update_folder(config, 'LSGAN') 
@@ -37,7 +37,7 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'SpectralNorm')
     if not 'SAGAN' in config.GAN_options and not 'GOOGLE' in config.GAN_options: 
       config.batch_size=8
-      if config.image_size<=128: config.batch_size=32
+      if config.image_size<=128: config.batch_size=64
 
   if 'HINGE' in config.GAN_options: 
     update_folder(config, 'HINGE') 
@@ -52,9 +52,11 @@ def config_GENERATOR(config, update_folder):
 
   if 'Stochastic' in config.GAN_options:
     # config.lambda_style = 1
-    if not 'AdaIn' in config.GAN_options: config.GAN_options.append('AdaIn')    
+    if not 'AdaIn' in config.GAN_options and not 'info_like' in config.GAN_options: config.GAN_options.append('AdaIn')    
     update_folder(config, 'Stochastic') 
     update_folder(config, 'style_'+str(int(config.lambda_style)))
+    if 'mono_style' in config.GAN_options:
+      update_folder(config, 'mono_style')     
     if 'style_labels' in config.GAN_options:
       update_folder(config, 'style_labels') 
     if 'style_pseudo_random' in config.GAN_options:
@@ -67,11 +69,15 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'vae_like') 
       if not 'kl_loss' in config.GAN_options: config.GAN_options.append('kl_loss')  
 
+    if 'info_like' in config.GAN_options:
+      update_folder(config, 'info_like') 
+      if not 'kl_loss' in config.GAN_options: config.GAN_options.append('kl_loss')        
+
   if 'AdaIn' in config.GAN_options or 'Stochastic' in config.GAN_options:
     config.mlp_dim=256
     config.style_dim=16
     if 'kl_loss' in config.GAN_options: 
-      config.lambda_kl = 1
+      # config.lambda_kl = 10
       update_folder(config, 'kl_loss_'+str(config.lambda_kl))
     if not 'Stochastic' in config.GAN_options: 
       update_folder(config, 'AdaIn')    

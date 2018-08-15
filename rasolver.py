@@ -79,7 +79,9 @@ class Solver(object):
       self.G = AdaInGEN(self.config.image_size, self.config.g_conv_dim, self.config.c_dim, \
                    self.config.g_repeat_num, mlp_dim=self.config.mlp_dim, \
                    style_dim=self.config.style_dim, Attention='Attention' in self.config.GAN_options, \
-                   style_label_net= 'style_label_net' in self.config.GAN_options, 
+                   style_label_net= 'style_label_net' in self.config.GAN_options,
+                   style_label= 'style_labels' in self.config.GAN_options, 
+                   mono_style= 'mono_style' in self.config.GAN_options, 
                    vae_like= 'vae_like' in self.config.GAN_options, debug=True)
     else: 
       from model import Generator
@@ -238,7 +240,7 @@ class Solver(object):
   def update_loss(self, loss, value):
     try:
       self.LOSS[loss].append(value)
-    else:
+    except:
       self.LOSS[loss] = []
       self.LOSS[loss].append(value)
 
@@ -445,6 +447,9 @@ class Solver(object):
           total=len(self.data_loader), desc=desc_bar, ncols=10)
       for i, (real_x, real_label, files) in progress_bar:
         # ipdb.set_trace()   
+        name = os.path.join(self.config.sample_path, 'current_fake.jpg')
+        # self.save_fake_output(fixed_x, name)        
+        # ipdb.set_trace()   
         if real_x.size(0)==self.config.batch_size:
 
           # save_image(self.denorm(real_x.cpu()), 'dm1.png',nrow=1, padding=0)
@@ -472,8 +477,8 @@ class Solver(object):
           real_label = self.to_var(real_label)   # this is same as real_c if dataset == 'CelebA'
           fake_label = self.to_var(fake_label)
 
-          # split = lambda x: (x[:x.size(0)//2], x[x.size(0)//2:])
-          split = lambda x: (x, x)
+          split = lambda x: (x[:x.size(0)//2], x[x.size(0)//2:])
+          # split = lambda x: (x, x)
           real_x0, real_x1 = split(real_x)
           real_label0, real_label1 = split(real_label)
           real_c0, real_c1 = split(real_c)
@@ -550,10 +555,11 @@ class Solver(object):
 
               else:
                 style_fake = self.to_var(self.G.random_style(real_x1))
-              # if 'style_labels' in self.config.GAN_options and 'style_pseudo_random' not in self.config.GAN_options:
+              if 'style_labels' in self.config.GAN_options and 'style_pseudo_random' not in self.config.GAN_options:
                 # if 'style_label_net' not in self.config.GAN_options: 
-                #   style_real *= real_c1.unsqueeze(2)
-                # style_fake *= fake_c1.unsqueeze(2)
+                # ipdb.set_trace()
+                style_real *= real_c1.unsqueeze(2)
+                style_fake *= fake_c1.unsqueeze(2)
             else:
               style_real = style_fake = None
 
@@ -602,32 +608,37 @@ class Solver(object):
             g_loss += g_loss_src + g_loss_rec + g_loss_cls 
 
             # loss KL style
-            ############################## KL Part ###################################
-            if 'AdaIn' in self.config.GAN_options and 'kl_loss' in self.config.GAN_options:
+            ############################## Style Part ###################################
+            if 'AdaIn' in self.config.GAN_options or 'info_like' in config.GAN_options :
               _style_fake, _style_cls_fake = self.G.get_style(fake_x1)
               _style_rec, _style_cls_real = self.G.get_style(rec_x1)
-              # if 'style_labels' in self.config.GAN_options and 'style_label_net' not in  self.config.GAN_options  and 'style_pseudo_random' not in self.config.GAN_options:
+              if 'style_labels' in self.config.GAN_options:
               #   # ipdb.set_trace()
-              #   style_real *= real_c1.unsqueeze(2)
-              #   _style_fake *= fake_c1.unsqueeze(2)
-              #   _style_rec *= real_c1.unsqueeze(2)              
-              g_loss_kl = self.config.lambda_kl * (#self.compute_kl(style_real) +\
-                                                   self.compute_kl(_style_fake) +
-                                                   self.compute_kl(_style_rec))
-              loss['G/kl'] = g_loss_kl.data[0]
-              self.update_loss('G/kl', loss['G/kl'])
+                # style_real *= real_c1.unsqueeze(2)
+                _style_fake *= fake_c1.unsqueeze(2)
+                _style_rec *= real_c1.unsqueeze(2)              
 
-              g_loss += g_loss_kl
+
+              ############################## KL Part ###################################
+              if 'kl_loss' in self.config.GAN_options:
+                g_loss_kl = self.config.lambda_kl * (self.compute_kl(style_real) +\
+                                                     self.compute_kl(_style_fake) +
+                                                     self.compute_kl(_style_rec))
+                loss['G/kl'] = g_loss_kl.data[0]
+                self.update_loss('G/kl', loss['G/kl'])
+
+                g_loss += g_loss_kl
 
               ############################## VAE Part ###################################
               if 'vae_like' in self.config.GAN_options:
+                # ipdb.set_trace()
                 rand = self.to_var(self.G.dec_style.random_noise(style_real.size(0)))
                 rec_real_vae = self.G.dec_style(style_real.view(*rand.shape) + rand)
 
                 rand = self.to_var(self.G.dec_style.random_noise(_style_fake.size(0)))
                 rec_fake_vae = self.G.dec_style(_style_fake.view(*rand.shape) + rand)                
                 
-                g_loss_vae = self.config.lambda_kl * (#self.compute_kl(style_real) +\
+                g_loss_vae = self.config.lambda_kl * (
                                                      F.l1_loss(real_x1, rec_real_vae) +
                                                      F.l1_loss(fake_x1, rec_fake_vae)
                                                      )
@@ -664,7 +675,7 @@ class Solver(object):
         #=======================================================================================#
 
         # self.PRINT out log info
-        if (i+1) % self.config.log_step == 0 or (i+1)==last_model_step:
+        if (i+1) % self.config.log_step == 0 or (i+1)==last_model_step or i+e==0:
           # progress_bar.set_postfix(G_loss_rec=np.array(self.LOSS['G/rec']).mean())
           progress_bar.set_postfix(**loss)
           if (i+1)==last_model_step: progress_bar.set_postfix('')
@@ -730,7 +741,7 @@ class Solver(object):
     # Start translations
     fake_image_list = [real_x]
     if Stochastic: 
-      n_rep = 5
+      n_rep = 7
       n_img = 5
       real_x0 = real_x[n_img].repeat(n_rep,1,1,1)
       fake_rand_list = [real_x0]
@@ -739,7 +750,7 @@ class Solver(object):
         # ipdb.set_trace()
     if Attention: 
       fake_attn_list = [self.to_var(self.denorm(real_x.data), volatile=True)]
-    for target_c in target_c_list:   
+    for target_c in target_c_list:
       if Stochastic: 
         style, _ = self.G.get_style(real_x)
         style_rand=self.to_var(self.G.random_style(real_x0), volatile=True)
@@ -754,27 +765,36 @@ class Solver(object):
         style_rand[0] = style[n_img] #Compare with the original style
         style_rand[1] = style[6]
         style_rand[2] = style[9]
+        if 'mono_style' not in self.config.GAN_options:        
+          style_rand[3] = style_rand[3]*target_c0[0].unsqueeze(1)
+          style_rand[4] = style_rand[4]*target_c0[0].unsqueeze(1)        
         # fake_x0, fake_attn0 = self.G(real_x0, target_c0, stochastic=style_rand*target_c0.unsqueeze(2))
         fake_x0, fake_attn0 = self.G(real_x0, target_c0, stochastic=style_rand)
         # fake_x0 = fake_attn0 * real_x0 + (1 - fake_attn0) * fake_x0 
         
-        rand_idx = torch.randperm(real_label.size(0))        
+        # rand_idx = torch.randperm(real_label.size(0))    
+        fake_rand_list.append(fake_x0)        
         rand_attn_list.append(fake_attn0.repeat(1,3,1,1))
-      elif Stochastic:
+      elif Stochastic and not Attention:
         fake_x = self.G(real_x, target_c, stochastic=style)
         target_c0 = target_c[:n_rep]
         # ipdb.set_trace()
+                
         style_rand[0] = style[n_img] #Compare with the original style
         style_rand[1] = style[6]
         style_rand[2] = style[9]     
+        # ipdb.set_trace()
+        if 'mono_style' not in self.config.GAN_options:
+          style_rand[3] = style_rand[3]*target_c0[0].unsqueeze(1)
+          style_rand[4] = style_rand[4]*target_c0[0].unsqueeze(1)
         # fake_x0 = self.G(real_x0, target_c0, stochastic=style_rand*target_c0.unsqueeze(2))   
         fake_x0 = self.G(real_x0, target_c0, stochastic=style_rand)   
         fake_rand_list.append(fake_x0)    
       elif Attention:
-        fake_x, fake_attn = self.G(real_x, target_c, stochastic=style)
+        fake_x, fake_attn = self.G(real_x, target_c)
         # fake_x = fake_attn * real_x + (1 - fake_attn) * fake_x 
       else:
-        fake_x = self.G(real_x, target_c, stochastic=style)
+        fake_x = self.G(real_x, target_c)
       # ipdb.set_trace()
       fake_image_list.append(fake_x)
       if Attention: fake_attn_list.append(fake_attn.repeat(1,3,1,1))
@@ -794,7 +814,7 @@ class Solver(object):
       if Attention:
         fake_attn = torch.cat(rand_attn_list, dim=3).data.cpu()
         fake_attn = torch.cat((self.get_aus(), fake_attn), dim=0)
-        save_image(fake_attn, save_path.replace('fake', 'attn'), nrow=1, padding=0)        
+        save_image(fake_attn, save_path.replace('fake', 'style_attn'), nrow=1, padding=0)        
     self.G.train()
 
   #=======================================================================================#

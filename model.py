@@ -194,11 +194,12 @@ class Generator(nn.Module):
     c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
     # ipdb.set_trace()
     x_cat = torch.cat([x, c], dim=1)
+
     if self.Attention: 
       features = self.main(x_cat)
       fake_img = self.img_reg(features)
       mask_img = self.attetion_reg(features)
-      fake_img = mask_img * x + (1 - mask_img) * fake_img            
+      fake_img = (mask_img * x) + ((1 - mask_img) * fake_img)
       return fake_img, mask_img
 
     elif self.AdaIn is not None:  
@@ -206,14 +207,16 @@ class Generator(nn.Module):
       return self.img_reg(features)         
 
     else: 
-      return self.main(x)
+      return self.main(x_cat)
 
 class StyleEncoder(nn.Module):
   """Generator. Encoder-Decoder Architecture."""
-  def __init__(self, image_size=128, mlp_dim=256, style_dim=8, c_dim=12, conv_dim=64, style_label_net=False, debug=False):
+  def __init__(self, image_size=128, mlp_dim=256, style_dim=8, c_dim=12, conv_dim=64, mono_style=False, style_label=False, style_label_net=False, debug=False):
     super(StyleEncoder, self).__init__()
     self.c_dim = c_dim
+    self.style_label = style_label
     self.style_label_net = style_label_net
+    self.mono_style = mono_style
     layers = []
     layers.append(nn.Conv2d(3, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
@@ -232,8 +235,12 @@ class StyleEncoder(nn.Module):
       layers.append(nn.ReLU(inplace=True))
       curr_dim = curr_dim * 2
 
+    if mono_style: 
+      layers.append(nn.AdaptiveAvgPool2d(1)) # global average pooling
+      self.style = nn.Conv2d(curr_dim, style_dim, kernel_size=1, stride=1, padding=0, bias=False)
+    else:
+      self.style = nn.Conv2d(curr_dim, c_dim, kernel_size=1, stride=1, padding=0, bias=False)
     self.main = nn.Sequential(*layers)
-    self.style = nn.Conv2d(curr_dim, c_dim, kernel_size=7, stride=1, padding=3, bias=False)
     if self.style_label_net: 
       k_size = int(image_size / np.power(2, conv_repeat))
       self.cls = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
@@ -248,18 +255,24 @@ class StyleEncoder(nn.Module):
 
   def forward(self, x):
     features = self.main(x)
-    style = self.style(features).view(features.size(0), self.c_dim, -1)
+    if self.mono_style:
+      style = self.style(features).view(features.size(0), self.c_dim, -1)
+    else:
+      style = self.style(features).view(features.size(0), -1)
     cls = self.cls(features).view(features.size(0), self.c_dim) if self.style_label_net else None
+    style = style*cls.unsqueeze(2) if cls is not None and self.style_label else style
     return style, cls
-    # style = style*cls.unsqueeze(2)
+    
 
 class StyleDecoder(nn.Module):
-  def __init__(self, image_size=128, c_dim=12, conv_dim=64, debug=False):
+  def __init__(self, image_size=128, style_dim=16, c_dim=12, conv_dim=64, debug=False):
     super(StyleDecoder, self).__init__()
 
     conv_repeat = int(math.log(image_size, 2))-2
     layers = []
     conv_dim = conv_dim*int(math.pow(2,conv_repeat))
+    # ipdb.set_trace()
+
     layers.append(nn.ConvTranspose2d(c_dim, conv_dim, kernel_size=3, stride=1, padding=1, bias=False))
     layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
     layers.append(nn.ReLU(inplace=True))
@@ -277,34 +290,47 @@ class StyleDecoder(nn.Module):
     self.c_dim = c_dim
 
     if debug:
-      feed = Variable(torch.ones(1, self.c_dim, self.style_size, self.style_size), volatile=True)
+      if self.c_dim==1:
+        feed = Variable(torch.ones(1, 1, self.style_size, self.style_size), volatile=True)
+      else:
+        feed = Variable(torch.ones(1, self.c_dim, self.style_size, self.style_size), volatile=True)
       print('-- StyleDecoder:')
       _ = print_debug(feed, layers)
 
   def forward(self, x):
+    if self.c_dim==1:
+      x = x.view(x.size(0), -1, self.style_size, self.style_size)
     return self.main(x)
 
   def random_noise(self, batchSize):
-    z = torch.cuda.FloatTensor(batchSize, self.c_dim, self.style_size, self.style_size)
-    z.copy_(torch.randn(batchSize, self.c_dim, self.style_size, self.style_size))
+    # ipdb.set_trace()
+    if self.c_dim==1:
+      z = torch.cuda.FloatTensor(batchSize, self.style_size*self.style_size, 1, 1)
+      z.copy_(torch.randn(batchSize, self.style_size*self.style_size, 1, 1))
+    else:
+      z = torch.cuda.FloatTensor(batchSize, self.c_dim, self.style_size, self.style_size)
+      z.copy_(torch.randn(batchSize, self.c_dim, self.style_size, self.style_size))
     return z    
 
 
 class AdaInGEN(nn.Module):
-  def __init__(self, image_size = 128, conv_dim=64, c_dim=12, repeat_num=6, mlp_dim=256, style_dim=8, Attention=False, style_label_net=False, vae_like=False, debug=False):
+  def __init__(self, image_size = 128, conv_dim=64, c_dim=12, repeat_num=6, mlp_dim=256, mono_style=False, style_label=False, style_dim=8, Attention=False, style_label_net=False, vae_like=False, debug=False):
     super(AdaInGEN, self).__init__()
 
     self.image_size = image_size
     self.style_dim = style_dim
-    self.c_dim = c_dim
+    self.style_label = style_label
+    self.c_dim = c_dim if not mono_style else 1
     self.vae_like = vae_like
+    self.mono_style = mono_style
     # style encoder
-    self.enc_style = StyleEncoder(image_size, mlp_dim, style_dim, c_dim, conv_dim, style_label_net=style_label_net, debug=True)
-    if vae_like: self.dec_style = StyleDecoder(image_size, c_dim, conv_dim, debug=True)
+    # ipdb.set_trace()
+    self.enc_style = StyleEncoder(image_size, mlp_dim, style_dim, self.c_dim, conv_dim, mono_style=mono_style, style_label=style_label, style_label_net=style_label_net, debug=True)
+    if vae_like: self.dec_style = StyleDecoder(image_size, style_dim, self.c_dim, conv_dim, debug=True)
 
     self.generator = Generator(image_size, conv_dim, c_dim, repeat_num, Attention, AdaIn=True, debug=False)
 
-    self.adain_net = MLP(style_dim*c_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=True)
+    self.adain_net = MLP(style_dim*self.c_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=True)
     self.debug()
 
   def debug(self):
@@ -325,7 +351,11 @@ class AdaInGEN(nn.Module):
     return self.generator(x, c)
 
   def random_style(self,x):
-    return torch.randn(x.size(0), self.c_dim, self.style_dim)
+    if not self.mono_style: 
+      z = torch.randn(x.size(0), self.c_dim, self.style_dim)
+    else:
+      z = torch.randn(x.size(0), self.style_dim)
+    return z
 
   def get_style(self, x):
     style = self.enc_style(x)
