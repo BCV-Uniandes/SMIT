@@ -42,6 +42,9 @@ def config_GENERATOR(config, update_folder):
   if 'HINGE' in config.GAN_options: 
     update_folder(config, 'HINGE') 
 
+  if 'InterLabels' in config.GAN_options: 
+    update_folder(config, 'InterLabels')     
+
   if int(config.lambda_cls)!=1:
     update_folder(config, 'lambda_cls_'+str(config.lambda_cls))     
 

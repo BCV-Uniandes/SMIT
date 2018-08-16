@@ -83,14 +83,20 @@ class Discriminator(nn.Module):
 
 class Generator(nn.Module):
   """Generator. Encoder-Decoder Architecture."""
-  def __init__(self, image_size = 128, conv_dim=64, c_dim=5, repeat_num=6, Attention=False, AdaIn=False, SAGAN=False, style_label_net=False, vae_like=False, debug=False):
+  def __init__(self, image_size = 128, conv_dim=64, c_dim=5, repeat_num=6, style_gen=False,
+                InterLabels=False, Attention=False, AdaIn=False, SAGAN=False, 
+                style_label_net=False, vae_like=False, debug=False):
     super(Generator, self).__init__()
     layers = []
     self.Attention = Attention
     self.AdaIn = AdaIn
     self.image_size = image_size
     self.c_dim = c_dim
-    layers.append(nn.Conv2d(3+c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
+    self.InterLabels = InterLabels
+    self.style_gen = style_gen
+    if InterLabels: layers.append(nn.Conv2d(3, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
+    elif style_gen: layers.append(nn.Conv2d(3+c_dim+c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
+    else: layers.append(nn.Conv2d(3+c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
     layers.append(nn.ReLU(inplace=True))
 
@@ -99,7 +105,7 @@ class Generator(nn.Module):
     #   attn2 = Self_Attn(int(self.imsize/2), 64, 'relu')      
 
     # Down-Sampling
-    conv_repeat = int(math.log(image_size, 2))-5
+    conv_repeat = int(math.log(image_size, 2))-5 if image_size!=64 else 2
     curr_dim = conv_dim
     for i in range(conv_repeat):
       layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
@@ -110,6 +116,10 @@ class Generator(nn.Module):
     # Bottleneck
     for i in range(repeat_num):
       layers.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim))
+      if i==int(repeat_num/2)-1 and InterLabels:
+        self.content = nn.Sequential(*layers)
+        layers = []
+        curr_dim = curr_dim+c_dim      
 
     # Up-Sampling
     if SAGAN: self.scores = []
@@ -168,20 +178,21 @@ class Generator(nn.Module):
       self.main = nn.Sequential(*layers)
 
     if debug and not AdaIn:
-      feed = Variable(torch.ones(1,3+c_dim,image_size,image_size), volatile=True)
-      print('-- Generator:')
-      features = print_debug(feed, layers)
-      if self.Attention: 
-        _ = print_debug(features, layers0)
-        _ = print_debug(features, layers1)
-
-      elif self.AdaIn is not None: 
-        _ = print_debug(features, layers0)
+      self.debug()
 
   def debug(self):
-      feed = Variable(torch.ones(1,3+self.c_dim,self.image_size,self.image_size), volatile=True)
       print('-- Generator:')
+      if self.InterLabels: 
+        feed = Variable(torch.ones(1,3,self.image_size,self.image_size), volatile=True)
+        feed = print_debug(feed, self.content)
+        c = Variable(torch.ones(1, self.c_dim, feed.size(2), feed.size(3)), volatile=True)
+        feed = torch.cat([feed, c], dim=1)
+        # ipdb.set_trace()
+      else: 
+        feed = Variable(torch.ones(1,3+self.c_dim,self.image_size,self.image_size), volatile=True)
+      
       features = print_debug(feed, self.layers)
+
       if self.Attention: 
         _ = print_debug(features, self.layers0)
         _ = print_debug(features, self.layers1)
@@ -190,10 +201,16 @@ class Generator(nn.Module):
 
   def forward(self, x, c, stochastic=None):
     # replicate spatially and concatenate domain information
-    c = c.unsqueeze(2).unsqueeze(3)
-    c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
-    # ipdb.set_trace()
-    x_cat = torch.cat([x, c], dim=1)
+    if self.InterLabels:
+      content = self.content(x)
+      c = c.unsqueeze(2).unsqueeze(3)
+      c = c.expand(c.size(0), c.size(1), content.size(2), content.size(3))
+      x_cat = torch.cat([content, c], dim=1)      
+    else:
+      c = c.unsqueeze(2).unsqueeze(3)
+      c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
+      # ipdb.set_trace()
+      x_cat = torch.cat([x, c], dim=1)
 
     if self.Attention: 
       features = self.main(x_cat)
@@ -314,7 +331,9 @@ class StyleDecoder(nn.Module):
 
 
 class AdaInGEN(nn.Module):
-  def __init__(self, image_size = 128, conv_dim=64, c_dim=12, repeat_num=6, mlp_dim=256, mono_style=False, style_label=False, style_dim=8, Attention=False, style_label_net=False, vae_like=False, debug=False):
+  def __init__(self, image_size = 128, conv_dim=64, c_dim=12, repeat_num=6, mlp_dim=256, 
+               mono_style=False, style_label=False, style_dim=8, Attention=False, 
+               style_label_net=False, vae_like=False, InterLabels=False, debug=False):
     super(AdaInGEN, self).__init__()
 
     self.image_size = image_size
@@ -328,7 +347,8 @@ class AdaInGEN(nn.Module):
     self.enc_style = StyleEncoder(image_size, mlp_dim, style_dim, self.c_dim, conv_dim, mono_style=mono_style, style_label=style_label, style_label_net=style_label_net, debug=True)
     if vae_like: self.dec_style = StyleDecoder(image_size, style_dim, self.c_dim, conv_dim, debug=True)
 
-    self.generator = Generator(image_size, conv_dim, c_dim, repeat_num, Attention, AdaIn=True, debug=False)
+    self.generator = Generator(image_size, conv_dim, c_dim, repeat_num, Attention, 
+                     AdaIn=True, InterLabels=InterLabels, debug=False)
 
     self.adain_net = MLP(style_dim*self.c_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=True)
     self.debug()

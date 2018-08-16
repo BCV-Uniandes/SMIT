@@ -82,11 +82,14 @@ class Solver(object):
                    style_label_net= 'style_label_net' in self.config.GAN_options,
                    style_label= 'style_labels' in self.config.GAN_options, 
                    mono_style= 'mono_style' in self.config.GAN_options, 
+                   InterLabels= 'InterLabels' in self.config.GAN_options, 
                    vae_like= 'vae_like' in self.config.GAN_options, debug=True)
     else: 
       from model import Generator
       self.G = Generator(self.config.image_size, self.config.g_conv_dim, self.config.c_dim, \
-                       self.config.g_repeat_num, Attention='Attention' in self.config.GAN_options, debug=True)
+                       self.config.g_repeat_num, Attention='Attention' in self.config.GAN_options, 
+                       InterLabels= 'InterLabels' in self.config.GAN_options, 
+                       debug=True)
     if not 'GOOGLE' in self.config.GAN_options: 
       self.D = Discriminator(self.config.image_size, self.config.d_conv_dim, self.config.c_dim, 
                        self.config.d_repeat_num, SN='SpectralNorm' in self.config.GAN_options, SAGAN='SAGAN' in self.config.GAN_options,
@@ -609,7 +612,7 @@ class Solver(object):
 
             # loss KL style
             ############################## Style Part ###################################
-            if 'AdaIn' in self.config.GAN_options or 'info_like' in config.GAN_options :
+            if 'AdaIn' in self.config.GAN_options or 'info_like' in self.config.GAN_options :
               _style_fake, _style_cls_fake = self.G.get_style(fake_x1)
               _style_rec, _style_cls_real = self.G.get_style(rec_x1)
               if 'style_labels' in self.config.GAN_options:
