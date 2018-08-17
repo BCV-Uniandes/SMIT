@@ -1,12 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
+# from torch.autograd import Variable
 import numpy as np
 from models.spectral import SpectralNorm as SpectralNormalization
 from models.sagan import Self_Attn
 import ipdb
 import math
+
+track_stats = False # OJO CON ESTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
 
 def get_SN(bool):
   if bool:
@@ -33,10 +35,10 @@ class ResidualBlock(nn.Module):
     super(ResidualBlock, self).__init__()
     self.main = nn.Sequential(
       nn.Conv2d(dim_in, dim_out, kernel_size=3, stride=1, padding=1, bias=False),
-      nn.InstanceNorm2d(dim_out, affine=True),
+      nn.InstanceNorm2d(dim_out, affine=True, track_running_stats=track_stats),
       nn.ReLU(inplace=True),
       nn.Conv2d(dim_out, dim_out, kernel_size=3, stride=1, padding=1, bias=False),
-      nn.InstanceNorm2d(dim_out, affine=True))
+      nn.InstanceNorm2d(dim_out, affine=True, track_running_stats=track_stats))
 
   def forward(self, x):
     return x + self.main(x)
@@ -66,7 +68,7 @@ class Discriminator(nn.Module):
     self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
     self.conv2 = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
     if debug:
-      feed = Variable(torch.ones(1,3,image_size,image_size), volatile=True)
+      feed = torch.ones(1,3,image_size,image_size)
       print('-- Discriminator:')
       features = print_debug(feed, layers_debug)
       _ = print_debug(features, [self.conv1])
@@ -97,7 +99,7 @@ class Generator(nn.Module):
     if InterLabels: layers.append(nn.Conv2d(3, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     elif style_gen: layers.append(nn.Conv2d(3+c_dim+c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     else: layers.append(nn.Conv2d(3+c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
-    layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
+    layers.append(nn.InstanceNorm2d(conv_dim, affine=True, track_running_stats=track_stats))
     layers.append(nn.ReLU(inplace=True))
 
     # if SAGAN:
@@ -109,7 +111,7 @@ class Generator(nn.Module):
     curr_dim = conv_dim
     for i in range(conv_repeat):
       layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
-      layers.append(nn.InstanceNorm2d(curr_dim*2, affine=True))
+      layers.append(nn.InstanceNorm2d(curr_dim*2, affine=True, track_running_stats=track_stats))
       layers.append(nn.ReLU(inplace=True))
       curr_dim = curr_dim * 2
 
@@ -128,7 +130,7 @@ class Generator(nn.Module):
       if AdaIn:
         layers.append(AdaptiveInstanceNorm2d(curr_dim//2))
       else:
-        layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True))
+        layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True, track_running_stats=track_stats))
       layers.append(nn.ReLU(inplace=True))
       curr_dim = curr_dim // 2
       if SAGAN and i>0:
@@ -184,13 +186,13 @@ class Generator(nn.Module):
       print('-- Generator:')
       # ipdb.set_trace()
       if self.InterLabels: 
-        feed = Variable(torch.ones(1,3,self.image_size,self.image_size), volatile=True)
+        feed = torch.ones(1,3,self.image_size,self.image_size)
         feed = print_debug(feed, self.content)
-        c = Variable(torch.ones(1, self.c_dim, feed.size(2), feed.size(3)), volatile=True)
+        c = torch.ones(1, self.c_dim, feed.size(2), feed.size(3))
         feed = torch.cat([feed, c], dim=1)
         # ipdb.set_trace()
       else: 
-        feed = Variable(torch.ones(1,3+self.c_dim,self.image_size,self.image_size), volatile=True)
+        feed = torch.ones(1,3+self.c_dim,self.image_size,self.image_size)
       
       features = print_debug(feed, self.layers)
 
@@ -237,7 +239,7 @@ class StyleEncoder(nn.Module):
     self.mono_style = mono_style
     layers = []
     layers.append(nn.Conv2d(3, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
-    layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
+    layers.append(nn.InstanceNorm2d(conv_dim, affine=True, track_running_stats=track_stats))
     layers.append(nn.ReLU(inplace=True))
 
     # if SAGAN:
@@ -249,7 +251,7 @@ class StyleEncoder(nn.Module):
     curr_dim = conv_dim
     for i in range(conv_repeat):
       layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
-      layers.append(nn.InstanceNorm2d(curr_dim*2, affine=True))
+      layers.append(nn.InstanceNorm2d(curr_dim*2, affine=True, track_running_stats=track_stats))
       layers.append(nn.ReLU(inplace=True))
       curr_dim = curr_dim * 2
 
@@ -264,7 +266,7 @@ class StyleEncoder(nn.Module):
       self.cls = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
 
     if debug:
-      feed = Variable(torch.ones(1,3,image_size,image_size), volatile=True)
+      feed = torch.ones(1,3,image_size,image_size)
       print('-- StyleEncoder:')
       features = print_debug(feed, layers)
       _ = print_debug(features, [self.style]) 
@@ -292,12 +294,12 @@ class StyleDecoder(nn.Module):
     # ipdb.set_trace()
 
     layers.append(nn.ConvTranspose2d(c_dim, conv_dim, kernel_size=3, stride=1, padding=1, bias=False))
-    layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
+    layers.append(nn.InstanceNorm2d(conv_dim, affine=True, track_running_stats=track_stats))
     layers.append(nn.ReLU(inplace=True))
 
     for i in range(conv_repeat):
       layers.append(nn.ConvTranspose2d(conv_dim, conv_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
-      layers.append(nn.InstanceNorm2d(conv_dim//2, affine=True))
+      layers.append(nn.InstanceNorm2d(conv_dim//2, affine=True, track_running_stats=track_stats))
       layers.append(nn.ReLU(inplace=True))
       conv_dim = conv_dim // 2
     
@@ -309,9 +311,9 @@ class StyleDecoder(nn.Module):
 
     if debug:
       if self.c_dim==1:
-        feed = Variable(torch.ones(1, 1, self.style_size, self.style_size), volatile=True)
+        feed = torch.ones(1, 1, self.style_size, self.style_size)
       else:
-        feed = Variable(torch.ones(1, self.c_dim, self.style_size, self.style_size), volatile=True)
+        feed = torch.ones(1, self.c_dim, self.style_size, self.style_size)
       print('-- StyleDecoder:')
       _ = print_debug(feed, layers)
 
@@ -355,7 +357,7 @@ class AdaInGEN(nn.Module):
     self.debug()
 
   def debug(self):
-    feed = Variable(torch.ones(1,3,self.image_size,self.image_size), volatile=True)
+    feed = torch.ones(1,3,self.image_size,self.image_size)
     # print('-- Generator:')    
     style, _ = self.get_style(feed)
     # if self.vae_like:
@@ -424,7 +426,7 @@ class MLP(nn.Module):
 
 
     if debug:
-      feed = Variable(torch.ones(1,input_dim), volatile=True)
+      feed = torch.ones(1,input_dim)
       print('-- MLP:')
       _ = print_debug(feed, self._model)    
 
