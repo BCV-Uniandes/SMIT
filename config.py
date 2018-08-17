@@ -37,10 +37,13 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'SpectralNorm')
     if not 'SAGAN' in config.GAN_options and not 'GOOGLE' in config.GAN_options: 
       config.batch_size=8
-      if config.image_size<=128: config.batch_size=64
+      if config.image_size<=128: config.batch_size=128
 
   if 'HINGE' in config.GAN_options: 
     update_folder(config, 'HINGE') 
+
+  if 'Idt' in config.GAN_options: 
+    update_folder(config, 'Idt')     
 
   if 'InterLabels' in config.GAN_options: 
     update_folder(config, 'InterLabels')     

@@ -182,6 +182,7 @@ class Generator(nn.Module):
 
   def debug(self):
       print('-- Generator:')
+      # ipdb.set_trace()
       if self.InterLabels: 
         feed = Variable(torch.ones(1,3,self.image_size,self.image_size), volatile=True)
         feed = print_debug(feed, self.content)
@@ -347,7 +348,7 @@ class AdaInGEN(nn.Module):
     self.enc_style = StyleEncoder(image_size, mlp_dim, style_dim, self.c_dim, conv_dim, mono_style=mono_style, style_label=style_label, style_label_net=style_label_net, debug=True)
     if vae_like: self.dec_style = StyleDecoder(image_size, style_dim, self.c_dim, conv_dim, debug=True)
 
-    self.generator = Generator(image_size, conv_dim, c_dim, repeat_num, Attention, 
+    self.generator = Generator(image_size, conv_dim, c_dim, repeat_num, Attention=Attention, 
                      AdaIn=True, InterLabels=InterLabels, debug=False)
 
     self.adain_net = MLP(style_dim*self.c_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=True)
@@ -378,8 +379,9 @@ class AdaInGEN(nn.Module):
     return z
 
   def get_style(self, x):
-    style = self.enc_style(x)
-    return style
+    style, cls = self.enc_style(x)
+    style = style.view(style.size(0), self.c_dim, -1)
+    return style, cls
 
   def apply_style(self, image, style):
     # apply style code to an image
