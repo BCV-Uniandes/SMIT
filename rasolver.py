@@ -56,10 +56,10 @@ class Solver(object):
     from torchviz import make_dot, make_dot_from_trace
     
     if name=='Discriminator':
-      y1,y2 = self.D(self.to_cuda(torch.ones(1,3,self.config.image_size,self.config.image_size)))
+      y1,y2 = self.D(self.to_var(torch.ones(1,3,self.config.image_size,self.config.image_size)))
       g=make_dot(y1, params=dict(self.D.named_parameters()))
     elif name=='Generator':
-      y, _ = self.G(self.to_cuda(torch.ones(1,3,self.config.image_size,self.config.image_size)), self.to_cuda(torch.zeros(1,12)))
+      y, _ = self.G(self.to_var(torch.ones(1,3,self.config.image_size,self.config.image_size)), self.to_var(torch.zeros(1,12)))
       g=make_dot(y, params=dict(self.G.named_parameters()))
     g.filename=name
     g.render()
@@ -114,12 +114,22 @@ class Solver(object):
   #=======================================================================================#
 
   def print_network(self, model, name):
-    num_params = 0
-    for p in model.parameters():
-      num_params += p.numel()
+    
+    if 'AdaIn' in self.config.GAN_options and name=='Generator':
+      for m in ['generator', 'enc_style', 'adain_net']:
+        submodel = getattr(model, m)
+        num_params = 0
+        for p in submodel.parameters():
+          num_params += p.numel()
+        self.PRINT("{} number of parameters: {}".format(m.upper(), num_params))
+    else:
+      num_params = 0
+      for p in model.parameters():
+        num_params += p.numel()   
+      self.PRINT("{} number of parameters: {}".format(name.upper(), num_params))   
     # self.PRINT(name)
     # self.PRINT(model)
-    self.PRINT("{} number of parameters: {}".format(name, num_params))
+    # self.PRINT("{} number of parameters: {}".format(name, num_params))
     # self.display_net(name)
 
   #=======================================================================================#
@@ -128,9 +138,9 @@ class Solver(object):
   def load_pretrained_model(self):
     # ipdb.set_trace()
     name = os.path.join(self.config.model_save_path, '{}_{}.pth'.format(self.config.pretrained_model, '{}'))
-    self.G.load_state_dict(torch.load(name.format('G'), map_location=lambda storage, loc: storage))
+    self.G.load_state_dict(torch.load(name.format('G')))#, map_location=lambda storage, loc: storage))
     if not 'GOOGLE' in self.config.GAN_options: 
-      self.D.load_state_dict(torch.load(name.format('D'), map_location=lambda storage, loc: storage))
+      self.D.load_state_dict(torch.load(name.format('D')))#, map_location=lambda storage, loc: storage))
     self.PRINT('loaded trained models (step: {})..!'.format(self.config.pretrained_model))
 
   #=======================================================================================#
@@ -160,12 +170,44 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
 
-  def to_cuda(self, x):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if isinstance(x, nn.Module):
-      x.to(device)
-    else:
-      return x.to(device)
+  if int(torch.__version__.split('.')[1])>3:
+    def to_cuda(self, x):
+      device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+      if isinstance(x, nn.Module):
+        x.to(device)
+      else:
+        return x.to(device)
+  else:
+    def to_cuda(self, x):
+      if torch.cuda.is_available():
+        if isinstance(x, nn.Module):
+          x.cuda()
+        else:
+          return x.cuda()
+      else:
+        return x
+
+  #=======================================================================================#
+  #=======================================================================================#
+
+  if int(torch.__version__.split('.')[1])>3:
+    def get_loss_value(self, x):
+      return x.item()
+  else:
+    def get_loss_value(self, x):
+      return x.data[0]
+
+  #=======================================================================================#
+  #=======================================================================================#
+
+  if int(torch.__version__.split('.')[1])>3:
+    def to_var(self, x, volatile=False, requires_grad=False):
+      return self.to_cuda(x)
+  else:
+    def to_var(self, x, volatile=False, requires_grad=False):
+      from torch.autograd import grad
+      from torch.autograd import Variable      
+      return Variable(self.to_cuda(x), volatile=volatile, requires_grad=requires_grad)
 
   #=======================================================================================#
   #=======================================================================================#
@@ -270,59 +312,6 @@ class Solver(object):
 
   #=======================================================================================#
   #=======================================================================================#
-
-  def show_img(self, img, real_c, fake_c, ppt=False):         
-
-    AUS_SHOW = self.get_aus()
-
-    fake_image_list=[img]
-    fake_attn_list = [self.to_cuda(self.denorm(img.data))]
-    flag_time=True
-    self.G.eval()
-
-    for fl in fake_c:
-      # ipdb.set_trace()
-      if flag_time:
-        start=time.time()
-      fake_img, fake_attn = self.G(img, self.to_cuda(fl.data))
-      fake_image_list.append(fake_img)
-      fake_attn_list.append(fake_attn.repeat(1,3,1,1))
-      if flag_time:
-        elapsed = time.time() - start
-        elapsed = str(datetime.timedelta(seconds=elapsed))        
-        self.PRINT("Time elapsed for transforming one batch: "+elapsed)
-        flag_time=False
-
-    fake_images = torch.cat(fake_image_list, dim=3)
-    fake_attn = torch.cat(fake_attn_list, dim=3)   
-    shape0 = min(20, fake_images.data.cpu().shape[0])
-
-    fake_images = fake_images.data.cpu()
-    fake_attn = fake_attn.data.cpu()
-    fake_images = torch.cat((AUS_SHOW, self.denorm(fake_images[:shape0])),dim=0)
-    fake_attn = torch.cat((AUS_SHOW, fake_attn[:shape0]),dim=0)
-    if ppt:
-      name_folder = len(glob.glob('show/ppt*'))
-      name_folder = 'show/ppt'+str(name_folder)
-      self.PRINT("Saving outputs at: "+name_folder)
-      if not os.path.isdir(name_folder): os.makedirs(name_folder)
-      for n in range(1,14):
-        new_fake_images = fake_images.clone()
-        file_name = os.path.join(name_folder, 'tmp_all_'+str(n-1))
-        new_fake_images[:,:,:,256*n:] = 0
-        save_image(new_fake_images, file_name+'.jpg',nrow=1, padding=0)
-      file_name = os.path.join(name_folder, 'tmp_all_'+str(n+1))
-      save_image(fake_images, file_name+'.jpg',nrow=1, padding=0)       
-    else:
-      file_name = os.path.join(self.config.sample_path, self.config.pretrained_model+'_google.jpg')
-      print('Saved at '+file_name)
-      save_image(fake_images, file_name,nrow=1, padding=0)
-      save_image(fake_attn, file_name.replace('.jpg', '_attn.jpg'),nrow=1, padding=0)
-      #os.system('eog tmp_all.jpg')    
-      #os.remove('tmp_all.jpg')
-
-  #=======================================================================================#
-  #=======================================================================================#
   @property
   def TimeNow(self):
     return str(datetime.datetime.now(pytz.timezone('Europe/Amsterdam'))).split('.')[0]
@@ -390,7 +379,8 @@ class Solver(object):
     # The number of iterations per epoch
     iters_per_epoch = len(self.data_loader)
 
-    with torch.no_grad():
+    opt = torch.no_grad() if int(torch.__version__.split('.')[1])>3 else open('_null.txt', 'w')
+    with opt:
       fixed_x = []
       for i, (images, labels, files) in enumerate(self.data_loader):
         # ipdb.set_trace()
@@ -400,8 +390,7 @@ class Solver(object):
           break
 
       # Fixed inputs and target domain labels for debugging
-      # ipdb.set_trace()
-      fixed_x = self.to_cuda(torch.cat(fixed_x, dim=0))
+      fixed_x = torch.cat(fixed_x, dim=0)
     
     # lr cache for decaying
     g_lr = self.config.g_lr
@@ -465,8 +454,8 @@ class Solver(object):
           #=======================================================================================#
 
           # Convert tensor to variable
-          real_x = self.to_cuda(real_x)
-          real_c = self.to_cuda(real_c)       
+          real_x = self.to_var(real_x)
+          real_c = self.to_var(real_c)       
 
           split = lambda x: (x[:x.size(0)//2], x[x.size(0)//2:])
           # split = lambda x: (x, x)
@@ -474,14 +463,14 @@ class Solver(object):
           real_c0, real_c1 = split(real_c)
 
           # Generat fake labels randomly (target domain labels)
-          rand_idx0 = self.to_cuda(torch.randperm(real_c0.size(0)))
+          rand_idx0 = self.to_var(torch.randperm(real_c0.size(0)))
           fake_c0 = real_c0[rand_idx0]
 
-          rand_idx1 = self.to_cuda(torch.randperm(real_c1.size(0)))
+          rand_idx1 = self.to_var(torch.randperm(real_c1.size(0)))
           fake_c1 = real_c1[rand_idx1]
 
-          fake_c0 = self.to_cuda(fake_c0.data)
-          fake_c1 = self.to_cuda(fake_c1.data)
+          fake_c0 = self.to_var(fake_c0.data)
+          fake_c1 = self.to_var(fake_c1.data)
           # ipdb.set_trace()  
 
             ############################## Stochastic Part ##################################
@@ -489,7 +478,7 @@ class Solver(object):
             style_real0, _ = self.G.get_style(real_x0)
             style_fake0 = style_real0[rand_idx0]
             if 'kl_loss' in self.config.GAN_options:
-              style_random0 = self.to_cuda(self.G.random_style(real_x0))
+              style_random0 = self.to_var(self.G.random_style(real_x0))
 
             if 'style_labels' in self.config.GAN_options:
               style_real0 *= real_c0.unsqueeze(2)
@@ -522,8 +511,8 @@ class Solver(object):
           d_loss.backward()
           self.d_optimizer.step()
 
-          loss['D/src'] = d_loss_src.item()
-          loss['D/cls'] = d_loss_cls.item()          
+          loss['D/src'] = self.get_loss_value(d_loss_src)#.item()
+          loss['D/cls'] = self.get_loss_value(d_loss_cls)          
           self.update_loss('D/src', loss['D/src'])
           self.update_loss('D/cls', loss['D/cls'])
                     
@@ -534,7 +523,7 @@ class Solver(object):
           if not 'HINGE' in self.config.GAN_options:
             alpha = self.to_cuda(torch.rand(real_x0.size(0), 1, 1, 1).expand_as(real_x0))
             # ipdb.set_trace()
-            interpolated = (alpha * real_x0.data + (1 - alpha) * fake_x0.data).requires_grad_(True)
+            interpolated = self.to_var((alpha * real_x0.data + (1 - alpha) * fake_x0.data), requires_grad = True)
             out, out_cls = self.D(interpolated)
 
             grad = torch.autograd.grad(outputs=out,
@@ -550,7 +539,7 @@ class Solver(object):
 
             # Backward + Optimize
             d_loss_gp = self.config.lambda_gp * d_loss_gp
-            loss['D/gp'] = d_loss_gp.item()
+            loss['D/gp'] = self.get_loss_value(d_loss_gp)
             self.reset_grad()
             d_loss.backward()
             self.d_optimizer.step()
@@ -568,7 +557,7 @@ class Solver(object):
               style_real1, _ = self.G.get_style(real_x1)
               style_fake1 = style_real1[rand_idx1]
               if 'kl_loss' in self.config.GAN_options:
-                style_random1 = self.to_cuda(self.G.random_style(real_x1))
+                style_random1 = self.to_var(self.G.random_style(real_x1))
 
               if 'style_labels' in self.config.GAN_options:
                 # if 'style_label_net' not in self.config.GAN_options: 
@@ -600,8 +589,8 @@ class Solver(object):
                 rec_x1, rec_real_mask1 = self.G(fake_x1, real_c1, stochastic = style_real1)  
                 g_loss_mask = self.config.lambda_mask * (torch.mean(rec_real_mask1) + torch.mean(fake_mask1))
                 g_loss_mask_smooth = self.config.lambda_mask_smooth * (self.compute_loss_smooth(fake_mask1) + self.compute_loss_smooth(rec_real_mask1))
-              loss['G/mask'] = g_loss_mask.item()
-              loss['G/mask_sm'] = g_loss_mask_smooth.item()     
+              loss['G/mask'] = self.get_loss_value(g_loss_mask)
+              loss['G/mask_sm'] = self.get_loss_value(g_loss_mask_smooth)     
               self.update_loss('G/mask', loss['G/mask'])
               self.update_loss('G/mask_sm', loss['G/mask_sm'])
      
@@ -655,9 +644,9 @@ class Solver(object):
             g_loss_rec = g_loss_rec*self.config.lambda_rec
             g_loss_cls = g_loss_cls*self.config.lambda_cls
 
-            loss['G/src'] = g_loss_src.item()
-            loss['G/rec'] = g_loss_rec.item()
-            loss['G/cls'] = g_loss_cls.item()
+            loss['G/src'] = self.get_loss_value(g_loss_src)
+            loss['G/rec'] = self.get_loss_value(g_loss_rec)
+            loss['G/cls'] = self.get_loss_value(g_loss_cls)
 
             self.update_loss('G/src', loss['G/src'])
             self.update_loss('G/rec', loss['G/rec'])
@@ -691,7 +680,7 @@ class Solver(object):
                                                      self.compute_kl(_style_fake_random1) + 
                                                      self.compute_kl(_style_rec_random1)
                                                      )
-                loss['G/kl'] = g_loss_kl.item()
+                loss['G/kl'] = self.get_loss_value(g_loss_kl)
                 self.update_loss('G/kl', loss['G/kl'])
 
                 g_loss += g_loss_kl
@@ -700,22 +689,23 @@ class Solver(object):
               if 'vae_like' in self.config.GAN_options:
                 # ipdb.set_trace()
                 if 'kl_loss' in self.config.GAN_options: raise TypeError("VAE does not support kl_loss")
-                rand = self.to_cuda(self.G.dec_style.random_noise(style_real1.size(0)))
+                rand = self.to_var(self.G.dec_style.random_noise(style_real1.size(0)))
                 rec_real_vae = self.G.dec_style(style_real1.view(*rand.shape) + rand)
 
-                rand = self.to_cuda(self.G.dec_style.random_noise(_style_fake1.size(0)))
+                rand = self.to_var(self.G.dec_style.random_noise(_style_fake1.size(0)))
                 rec_fake_vae = self.G.dec_style(_style_fake1.view(*rand.shape) + rand)                
                 
                 g_loss_vae = self.config.lambda_kl * (
                                                      F.l1_loss(real_x1, rec_real_vae) +
                                                      F.l1_loss(fake_x1, rec_fake_vae)
                                                      )
-                loss['G/vae'] = g_loss_vae.item()
+                loss['G/vae'] = self.get_loss_value(g_loss_vae)
                 self.update_loss('G/vae', loss['G/vae'])
 
                 g_loss += g_loss_vae              
 
             ############################## Stochastic Part ###################################
+            # ipdb.set_trace()            
             if 'Stochastic' in self.config.GAN_options:              
               g_loss_style = self.config.lambda_style * (F.l1_loss(style_real1, _style_rec1) +
                                                          F.l1_loss(_style_fake1, style_fake1))
@@ -726,7 +716,7 @@ class Solver(object):
                                         F.l1_loss(_style_fake1, _style_fake_random1) +
                                         F.l1_loss(_style_fake_random1, style_fake1) 
                                         )
-              loss['G/sty'] = g_loss_style.item()
+              loss['G/sty'] = self.get_loss_value(g_loss_style)
               self.update_loss('G/sty', loss['G/sty'])
               g_loss += g_loss_style
 
@@ -737,7 +727,7 @@ class Solver(object):
                 g_style_cls_real = F.binary_cross_entropy_with_logits(
                   _style_cls_real, real_c1, size_average=False) / real_x1.size(0)
                 g_loss_style_cls = self.config.lambda_style * (g_style_cls_fake + g_style_cls_real)
-                loss['G/sty_cls'] = g_loss_style_cls.item()
+                loss['G/sty_cls'] = self.get_loss_value(g_loss_style_cls)
                 self.update_loss('G/sty_cls', loss['G/sty_cls'])
 
                 g_loss += g_loss_style_cls                
@@ -797,13 +787,14 @@ class Solver(object):
     self.G.eval()
     Attention = 'Attention' in self.config.GAN_options
     Stochastic = 'Stochastic' in self.config.GAN_options
-    with torch.no_grad():
-      real_x = self.to_cuda(real_x)
+    opt = torch.no_grad() if int(torch.__version__.split('.')[1])>3 else open('_null.txt', 'w')
+    with opt:
+      real_x = self.to_var(real_x, volatile=True)
 
       # target_c_list = []
       target_c= torch.from_numpy(np.zeros((real_x.size(0), self.config.c_dim), dtype=np.float32))
 
-      target_c_list = [self.to_cuda(target_c)]
+      target_c_list = [self.to_var(target_c, volatile=True)]
 
       for j in range(self.config.c_dim):
         if label is None:
@@ -813,7 +804,7 @@ class Solver(object):
           # ipdb.set_trace()
           print(j+1, sorted(list(set(map(int, (self.config.AUs['EMOTIONNET']*label[j].cpu().numpy()).tolist())))))
           target_c=label[j].repeat(label.size(0),1)      
-        target_c_list.append(self.to_cuda(target_c))      
+        target_c_list.append(self.to_var(target_c, volatile=True))      
 
       # Start translations
       fake_image_list = [real_x]
@@ -823,14 +814,14 @@ class Solver(object):
         real_x0 = real_x[n_img].repeat(n_rep,1,1,1)
         fake_rand_list = [real_x0]
         if Attention: 
-          rand_attn_list = [self.to_cuda(self.denorm(real_x0.data))]
+          rand_attn_list = [self.to_var(self.denorm(real_x0.data), volatile=True)]
           # ipdb.set_trace()
       if Attention: 
-        fake_attn_list = [self.to_cuda(self.denorm(real_x.data))]
+        fake_attn_list = [self.to_var(self.denorm(real_x.data), volatile=True)]
       for target_c in target_c_list:
         if Stochastic: 
           style, _ = self.G.get_style(real_x)
-          style_rand=self.to_cuda(self.G.random_style(real_x0))
+          style_rand=self.to_var(self.G.random_style(real_x0), volatile=True)
         else: 
           style = None   
 

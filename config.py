@@ -60,7 +60,7 @@ def config_GENERATOR(config, update_folder):
     # config.lambda_style = 1
     if not 'AdaIn' in config.GAN_options and not 'info_like' in config.GAN_options: config.GAN_options.append('AdaIn')    
     update_folder(config, 'Stochastic') 
-    update_folder(config, 'style_'+str(int(config.lambda_style)))
+    update_folder(config, 'style_'+str(config.lambda_style))
     if 'mono_style' in config.GAN_options:
       update_folder(config, 'mono_style')     
     if 'style_labels' in config.GAN_options:

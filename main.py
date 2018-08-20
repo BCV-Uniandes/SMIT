@@ -111,7 +111,7 @@ if __name__ == '__main__':
   parser.add_argument('--lambda_rec',       type=float, default=10.0)
   parser.add_argument('--lambda_gp',        type=float, default=10.0)
   parser.add_argument('--lambda_style',     type=float, default=1.0)
-  parser.add_argument('--lambda_kl',        type=int, default=1)
+  parser.add_argument('--lambda_kl',        type=float, default=1.0)
   # parser.add_argument('--lambda_style_cls', type=float, default=5.0)
   parser.add_argument('--d_train_repeat',   type=int, default=5)
 
@@ -150,7 +150,7 @@ if __name__ == '__main__':
   parser.add_argument('--GPU',             type=str, default='0')
 
   # Step size
-  parser.add_argument('--log_step',        type=int, default=1000)
+  parser.add_argument('--log_step',        type=int, default=500)
   parser.add_argument('--sample_step',     type=int, default=1000000)
   parser.add_argument('--model_save_step', type=int, default=2000000)
 
