@@ -209,17 +209,27 @@ class Generator(nn.Module):
   def debug(self):
       print('-- Generator:')
       # ipdb.set_trace()
-      if self.InterLabels and self.DRIT: c_dim = self.c_dim*2
-      elif self.InterLabels or self.DRIT: c_dim = self.c_dim
+      if self.InterLabels and self.DRIT: 
+        c_dim = self.c_dim*2
+        in_dim = self.color_dim
+      elif self.InterLabels:
+        c_dim = self.c_dim
+        in_dim = self.color_dim
+      elif self.DRIT:
+        c_dim = self.c_dim
+        in_dim = self.color_dim+self.c_dim
+      else:
+        in_dim = self.color_dim+self.c_dim
+        c_dim = 0
 
       if self.InterLabels or self.DRIT: 
-        feed = to_var(torch.ones(1,self.color_dim, self.image_size,self.image_size), volatile=True)
+        feed = to_var(torch.ones(1,in_dim, self.image_size,self.image_size), volatile=True)
         feed = print_debug(feed, self.content)
         c = to_var(torch.ones(1, c_dim, feed.size(2), feed.size(3)), volatile=True)
         feed = torch.cat([feed, c], dim=1)
         # ipdb.set_trace()
       else: 
-        feed = to_var(torch.ones(1,self.color_dim+self.c_dim,self.image_size,self.image_size), volatile=True)
+        feed = to_var(torch.ones(1,in_dim,self.image_size,self.image_size), volatile=True)
       
       features = print_debug(feed, self.layers)
 
@@ -262,9 +272,6 @@ class Generator(nn.Module):
         stochastic = stochastic.unsqueeze(3)
         stochastic = stochastic.expand(stochastic.size(0), stochastic.size(1), stochastic.size(2), stochastic.size(2))
         x_cat = torch.cat([content, stochastic], dim=1)                
-
-    else:
-      x_cat = content
 
     if self.Attention: 
       features = self.main(x_cat)

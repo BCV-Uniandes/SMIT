@@ -283,31 +283,6 @@ class Solver(object):
 
   #=======================================================================================#
   #=======================================================================================#
-
-  def blurRANDOM(self, img,):
-    self.blurrandom +=1
-    np.random.seed(self.blurrandom) 
-    gray = np.random.randint(0,2,img.size(0))
-    np.random.seed(self.blurrandom)
-    sigma = np.random.randint(2,9,img.size(0))
-    np.random.seed(self.blurrandom)
-    window = np.random.randint(7,29,img.size(0))
-
-    trunc = (((window-1)/2.)-0.5)/sigma
-    # ipdb.set_trace()
-    conv_img = torch.zeros_like(img.clone())
-    for i in range(img.size(0)):    
-      # ipdb.set_trace()
-      if gray[i] and 'GRAY' in self.config.GAN_options:
-        conv_img[i] = torch.from_numpy(filters.gaussian_filter(img[i], sigma=sigma[i], truncate=trunc[i]))
-      else:
-        for j in range(img.size(1)):
-          conv_img[i,j] = torch.from_numpy(filters.gaussian_filter(img[i,j], sigma=sigma[i], truncate=trunc[i]))
-
-    return conv_img
-
-  #=======================================================================================#
-  #=======================================================================================#
   @property
   def TimeNow(self):
     return str(datetime.datetime.now(pytz.timezone('Europe/Amsterdam'))).split('.')[0]
@@ -318,15 +293,6 @@ class Solver(object):
   def TimeNow_str(self):
     import re
     return re.sub('\D','_',self.TimeNow)
-
-  #=======================================================================================#
-  #=======================================================================================#
-
-  def show_img_single(self, img):  
-    img_ = self.denorm(img.data.cpu())
-    save_image(img_.cpu(), 'show/tmp0.jpg',nrow=int(math.sqrt(img_.size(0))), padding=0)
-    os.system('eog show/tmp0.jpg')    
-    os.remove('show/tmp0.jpg')    
 
   #=======================================================================================#
   #=======================================================================================#
@@ -343,6 +309,10 @@ class Solver(object):
     name = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(Epoch, iter, '{}'))
     torch.save(self.G.state_dict(), name.format('G'))
     torch.save(self.D.state_dict(), name.format('D'))
+    if Epoch>1:
+      name_1 = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(Epoch-1, iter, '{}'))
+      os.remove(name_1.format('G'))
+      os.remove(name_1.format('D'))
 
   #=======================================================================================#
   #=======================================================================================#
@@ -483,30 +453,28 @@ class Solver(object):
             ############################## Stochastic Part ##################################
           if 'Stochastic' in self.config.GAN_options:
             style_real0, _ = self.G.get_style(real_x0)
-            # ipdb.set_trace()
             style_fake0 = [s[rand_idx0] for s in style_real0]
-            if 'kl_loss' in self.config.GAN_options:
-              style_random0 = self.to_var(self.G.random_style(real_x0))
+            # if 'kl_loss' in self.config.GAN_options:
+            #   style_random0 = self.to_var(self.G.random_style(real_x0))
 
             if 'style_labels' in self.config.GAN_options:
-              # ipdb.set_trace()
               style_real0 = [s*real_c0.unsqueeze(2) for s in style_real0]
               style_fake0 = [s*fake_c0.unsqueeze(2) for s in style_fake0]
-              if 'kl_loss' in self.config.GAN_options:
-                style_random0 *= fake_c0.unsqueeze(2)
+              # if 'kl_loss' in self.config.GAN_options:
+              #   style_random0 *= fake_c0.unsqueeze(2)
           else:
             style_real0 = style_fake0 = None
 
           fake_x0 = self.G(real_x0, fake_c0, stochastic=style_fake0[0])[0]
-          if 'kl_loss' in self.config.GAN_options:
-            fake_x0_random = self.G(real_x0, fake_c0, stochastic=style_random0)[0]
+          # if 'kl_loss' in self.config.GAN_options:
+          #   fake_x0_random = self.G(real_x0, fake_c0, stochastic=style_random0)[0]
 
           #=======================================================================================#
           #======================================== Train D ======================================#
           #=======================================================================================#
           d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0, real_c0)
-          if 'kl_loss' in self.config.GAN_options:
-            d_loss_src += self._GAN_LOSS(real_x0, fake_x0_random, real_c0)[0]
+          # if 'kl_loss' in self.config.GAN_options:
+          #   d_loss_src += self._GAN_LOSS(real_x0, fake_x0_random, real_c0)[0]
           d_loss_cls = self.config.lambda_cls * d_loss_cls  
 
           # Backward + Optimize       
@@ -520,7 +488,23 @@ class Solver(object):
           loss['D/cls'] = self.get_loss_value(d_loss_cls)          
           self.update_loss('D/src', loss['D/src'])
           self.update_loss('D/cls', loss['D/cls'])
-                    
+
+          if 'kl_loss' in self.config.GAN_options:
+            style_random0 = self.to_var(self.G.random_style(real_x0))
+            if 'style_labels' in self.config.GAN_options:
+              style_random0 *= fake_c0.unsqueeze(2)    
+            fake_x0_random = self.G(real_x0, fake_c0, stochastic=style_random0)[0]
+            d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0_random, real_c0)
+            d_loss_cls = self.config.lambda_cls * d_loss_cls  
+            d_loss = d_loss_src + d_loss_cls
+            self.reset_grad()
+            d_loss.backward()
+            self.d_optimizer.step()
+            loss['D/src_r'] = self.get_loss_value(d_loss_src)#.item()
+            loss['D/cls_r'] = self.get_loss_value(d_loss_cls)          
+            self.update_loss('D/src_r', loss['D/src_r'])
+            self.update_loss('D/cls_r', loss['D/cls_r'])            
+
           #=======================================================================================#
           #=================================== Gradient Penalty ==================================#
           #=======================================================================================#
@@ -561,27 +545,14 @@ class Solver(object):
             if 'Stochastic' in self.config.GAN_options:
               style_real1, _ = self.G.get_style(real_x1)
               style_fake1 = [s[rand_idx1] for s in style_real1]
-              if 'kl_loss' in self.config.GAN_options:
-                style_random1 = self.to_var(self.G.random_style(real_x1))
-
               if 'style_labels' in self.config.GAN_options:
-                # if 'style_label_net' not in self.config.GAN_options: 
-                # ipdb.set_trace()
                 style_real1 = [s*real_c1.unsqueeze(2) for s in style_real1]
                 style_fake1 = [s*fake_c1.unsqueeze(2) for s in style_fake1]
-                if 'kl_loss' in self.config.GAN_options:
-                  style_random1 *= fake_c1.unsqueeze(2)
             else:
               style_real1 = style_fake1 = None
 
-            if 'kl_loss' in self.config.GAN_options:
-              fake_x1 = self.G(real_x1, fake_c1, stochastic = style_fake1[0], CONTENT='content_loss' in self.config.GAN_options)
-              fake_x1_random = self.G(real_x1, fake_c1, stochastic = style_random1)
-              rec_x1  = self.G(fake_x1[0], real_c1, stochastic = style_real1[0], CONTENT='content_loss' in self.config.GAN_options) 
-              rec_x1_random  = self.G(fake_x1_random[0], real_c1, stochastic = style_real1[0]) 
-            else:              
-              fake_x1 = self.G(real_x1, fake_c1, stochastic = style_fake1[0], CONTENT='content_loss' in self.config.GAN_options)
-              rec_x1  = self.G(fake_x1[0], real_c1, stochastic = style_real1[0], CONTENT='content_loss' in self.config.GAN_options) 
+            fake_x1 = self.G(real_x1, fake_c1, stochastic = style_fake1[0], CONTENT='content_loss' in self.config.GAN_options)
+            rec_x1  = self.G(fake_x1[0], real_c1, stochastic = style_real1[0], CONTENT='content_loss' in self.config.GAN_options) 
 
             ## GAN LOSS
             g_loss_src, g_loss_cls = self._GAN_LOSS(fake_x1[0], real_x1, fake_c1)
@@ -589,10 +560,7 @@ class Solver(object):
             ## REC LOSS
             if 'L1_LOSS' in self.config.GAN_options:
               g_loss_rec = F.l1_loss(real_x1, fake_x1[0]) + \
-                           F.l1_loss(fake_x1[0], rec_x1[0])
-              if 'kl_loss' in self.config.GAN_options:
-                g_loss_rec += F.l1_loss(real_x1, fake_x1_random[0]) + \
-                             F.l1_loss(fake_x1_random[0], rec_x1[0])                
+                           F.l1_loss(fake_x1[0], rec_x1[0])         
             else:
               g_loss_rec = F.l1_loss(real_x1, rec_x1[0])
 
@@ -610,29 +578,11 @@ class Solver(object):
             # Backward + Optimize
             g_loss = g_loss_src + g_loss_rec + g_loss_cls 
 
-            ############################## Content Part ###################################
-            if 'content_loss' in self.config.GAN_options:
-              # ipdb.set_trace()
-              g_loss_content = self.config.lambda_content * F.l1_loss(fake_x1[-1], rec_x1[-1])
-              loss['G/con'] = self.get_loss_value(g_loss_content)
-              self.update_loss('G/con', loss['G/con'])       
-              g_loss += g_loss_content      
-
             ############################## Attention Part ###################################
             if 'Attention' in self.config.GAN_options:
-              if 'kl_loss' in self.config.GAN_options:
 
-                g_loss_mask = self.config.lambda_mask * (
-                          torch.mean(fake_x1[0]) + torch.mean(fake_x1_random[0]) +
-                          torch.mean(rec_x1[0]) + torch.mean(rec_x1_random[0])
-                          )
-                g_loss_mask_smooth = self.config.lambda_mask_smooth * (
-                        self.compute_loss_smooth(fake_mask1[1]) + self.compute_loss_smooth(fake_mask1_random[1]) +
-                        self.compute_loss_smooth(rec_real_mask1[1]) + self.compute_loss_smooth(rec_real_mask1_random[1])
-                        )     
-              else:
-                g_loss_mask = self.config.lambda_mask * (torch.mean(rec_real_mask1[0]) + torch.mean(fake_mask1[0]))
-                g_loss_mask_smooth = self.config.lambda_mask_smooth * (self.compute_loss_smooth(fake_mask1[1]) + self.compute_loss_smooth(rec_real_mask1[1])) 
+              g_loss_mask = self.config.lambda_mask * (torch.mean(rec_real_mask1[0]) + torch.mean(fake_mask1[0]))
+              g_loss_mask_smooth = self.config.lambda_mask_smooth * (self.compute_loss_smooth(fake_mask1[1]) + self.compute_loss_smooth(rec_real_mask1[1])) 
 
               loss['G/mask'] = self.get_loss_value(g_loss_mask)
               loss['G/mask_sm'] = self.get_loss_value(g_loss_mask_smooth)     
@@ -641,39 +591,39 @@ class Solver(object):
 
               g_loss += g_loss_mask + g_loss_mask_smooth
 
-            # loss KL style
-            ############################## Style Part ###################################
-            if 'AdaIn' in self.config.GAN_options or 'info_like' in self.config.GAN_options :
-              _style_fake1, _style_cls_fake1 = self.G.get_style(fake_x1[0])
-              _style_rec1, _style_cls_real1 = self.G.get_style(rec_x1[0])
-              if 'kl_loss' in self.config.GAN_options:
-                _style_fake_random1, _style_cls_fake_random1 = self.G.get_style(fake_x1_random[0])
-                _style_rec_random1, _style_cls_real_random1 = self.G.get_style(rec_x1_random[0])
-              if 'style_labels' in self.config.GAN_options:
-                # ipdb.set_trace()
-                # style_real1 *= real_c1.unsqueeze(2)
-                _style_fake1 = [s*fake_c1.unsqueeze(2) for s in _style_fake1]
-                _style_rec1 = [s*real_c1.unsqueeze(2) for s in _style_rec1]
-                if 'kl_loss' in self.config.GAN_options:
-                  _style_fake_random1 = [s*fake_c1.unsqueeze(2) for s in _style_fake_random1]
-                # ipdb.set_trace()
 
-              ############################## KL Part ###################################
-              if 'kl_loss' in self.config.GAN_options:
-                g_loss_kl = self.config.lambda_kl * (self.compute_kl(style_real1) 
-                                                     # + self.compute_kl(_style_fake1)
-                                                     # + self.compute_kl(_style_rec1) 
-                                                     # + self.compute_kl(_style_fake_random1) 
-                                                     # + self.compute_kl(_style_rec_random1)
-                                                     )
-                loss['G/kl'] = self.get_loss_value(g_loss_kl)
-                self.update_loss('G/kl', loss['G/kl'])
+            ############################## KL Part ###################################
+            if 'kl_loss' in self.config.GAN_options:
+              g_loss_kl = self.config.lambda_kl * (self.compute_kl(style_real1) 
+                                                   # + self.compute_kl(_style_fake1)
+                                                   # + self.compute_kl(_style_rec1) 
+                                                   # + self.compute_kl(_style_fake_random1) 
+                                                   # + self.compute_kl(_style_rec_random1)
+                                                   )
+              loss['G/kl'] = self.get_loss_value(g_loss_kl)
+              self.update_loss('G/kl', loss['G/kl'])
 
-                g_loss += g_loss_kl
+              g_loss += g_loss_kl
+
+            ############################## Content Part ###################################
+            if 'content_loss' in self.config.GAN_options:
+              # ipdb.set_trace()
+              g_loss_content = self.config.lambda_content * F.l1_loss(fake_x1[-1], rec_x1[-1])
+              loss['G/con'] = self.get_loss_value(g_loss_content)
+              self.update_loss('G/con', loss['G/con'])       
+              g_loss += g_loss_content                      
 
             ############################## Stochastic Part ###################################
             # ipdb.set_trace()            
-            if 'Stochastic' in self.config.GAN_options:              
+            if 'Stochastic' in self.config.GAN_options: 
+
+              _style_fake1, _style_cls_fake1 = self.G.get_style(fake_x1[0])
+              _style_rec1, _style_cls_real1 = self.G.get_style(rec_x1[0])
+
+              if 'style_labels' in self.config.GAN_options:
+                _style_fake1 = [s*fake_c1.unsqueeze(2) for s in _style_fake1]
+                _style_rec1 = [s*real_c1.unsqueeze(2) for s in _style_rec1]
+
               g_loss_style = (self.config.lambda_style/10) * (F.l1_loss(style_real1[0], _style_rec1[0]) +
                                                          F.l1_loss(_style_fake1[0], style_fake1[0]))
               if 'kl_loss' in self.config.GAN_options:
@@ -681,28 +631,63 @@ class Solver(object):
                 self.reset_grad()
                 g_loss.backward(retain_graph=True)
                 self.g_optimizer.step()
+
+                style_random1 = self.to_var(self.G.random_style(real_x1))
+
+                if 'style_labels' in self.config.GAN_options:
+                  style_random1 *= fake_c1.unsqueeze(2)              
+                fake_x1_random = self.G(real_x1, fake_c1, stochastic = style_random1)
+                rec_x1_random  = self.G(fake_x1_random[0], real_c1, stochastic = style_real1[0]) 
+
+                _style_fake_random1, _style_cls_fake_random1 = self.G.get_style(fake_x1_random[0])
+                # _style_rec_random1, _style_cls_real_random1 = self.G.get_style(rec_x1_random[0])                
+
+                if 'style_labels' in self.config.GAN_options:
+                  _style_fake_random1 = [s*fake_c1.unsqueeze(2) for s in _style_fake_random1]
+
                 mu_index = 1 if 'LOGVAR' in self.config.GAN_options else 0
                 g_loss_style_random = self.config.lambda_style * (
                                         F.l1_loss(_style_fake_random1[mu_index], style_random1) 
-                                        # F.l1_loss(style_real1[0], _style_rec_random1[0]) +
-                                        # F.l1_loss(_style_rec_random1[0], _style_rec1[0]) +
-                                        # F.l1_loss(_style_fake1[0], _style_fake_random1[0]) +
-                                        # F.l1_loss(_style_fake_random1[0], style_fake1[0]) 
                                         )
                 g_loss_src_random, g_loss_cls_random = self._GAN_LOSS(fake_x1_random[0], real_x1, fake_c1)
                 g_loss_cls_random = g_loss_cls_random*self.config.lambda_cls
 
+                g_loss_rec_random = F.l1_loss(real_x1, fake_x1_random[0]) + F.l1_loss(fake_x1_random[0], rec_x1[0])       
+                g_loss_rec_random = self.config.lambda_rec * g_loss_rec_random
+
                 loss['G/src_r'] = self.get_loss_value(g_loss_src_random)
                 loss['G/cls_r'] = self.get_loss_value(g_loss_cls_random)
+                loss['G/rec_r'] = self.get_loss_value(g_loss_rec_random)
                 loss['G/sty_r'] = self.get_loss_value(g_loss_style_random)
                 loss['G/sty'] = self.get_loss_value(g_loss_style)
                 self.update_loss('G/sty_', loss['G/sty'])
+                self.update_loss('G/rec_r', loss['G/rec_r'])       
                 self.update_loss('G/sty_r', loss['G/sty_r'])
                 self.update_loss('G/src_r', loss['G/src_r'])
                 self.update_loss('G/cls_r', loss['G/cls_r'])
 
+                g_loss = g_loss_src_random + g_loss_cls_random + g_loss_rec_random \
+                         + g_loss_style + g_loss_style_random
+
+                if 'Attention' in self.config.GAN_options:
+
+                  g_loss_mask_random = self.config.lambda_mask * (
+                            torch.mean(fake_x1_random[0]) +
+                            torch.mean(rec_x1_random[0])
+                            )
+                  g_loss_mask_smooth_random = self.config.lambda_mask_smooth * (
+                          self.compute_loss_smooth(fake_mask1_random[1]) +
+                          self.compute_loss_smooth(rec_real_mask1_random[1])
+                          )     
+
+                  loss['G/mask_r'] = self.get_loss_value(g_loss_mask_random)
+                  loss['G/mask_sm_r'] = self.get_loss_value(g_loss_mask_smooth_random)     
+                  self.update_loss('G/mask_r', loss['G/mask_r'])
+                  self.update_loss('G/mask_sm_r', loss['G/mask_sm_r'])    
+
+                  g_loss += g_loss_mask_random + g_loss_mask_smooth_random
                 # Backward + Optimize
-                g_loss = g_loss_src_random + g_loss_cls_random + g_loss_style + g_loss_style_random
+
 
               else:
 

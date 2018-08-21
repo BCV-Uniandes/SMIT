@@ -49,7 +49,9 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'InterLabels')    
 
   if 'content_loss' in config.GAN_options: 
-    if not 'InterLabels' in config.GAN_options: config.GAN_options.append('InterLabels')
+    if not 'InterLabels' in config.GAN_options: 
+      config.GAN_options.append('InterLabels')
+      update_folder(config, 'InterLabels')    
     update_folder(config, 'content_loss_'+str(config.lambda_content))           
 
   if int(config.lambda_cls)!=1:
