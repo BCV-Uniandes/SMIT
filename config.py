@@ -46,7 +46,11 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'Idt')     
 
   if 'InterLabels' in config.GAN_options: 
-    update_folder(config, 'InterLabels')     
+    update_folder(config, 'InterLabels')    
+
+  if 'content_loss' in config.GAN_options: 
+    if not 'InterLabels' in config.GAN_options: config.GAN_options.append('InterLabels')
+    update_folder(config, 'content_loss_'+str(config.lambda_content))           
 
   if int(config.lambda_cls)!=1:
     update_folder(config, 'lambda_cls_'+str(config.lambda_cls))     
@@ -61,6 +65,14 @@ def config_GENERATOR(config, update_folder):
     if not 'AdaIn' in config.GAN_options and not 'info_like' in config.GAN_options: config.GAN_options.append('AdaIn')    
     update_folder(config, 'Stochastic') 
     update_folder(config, 'style_'+str(config.lambda_style))
+
+    if 'InterStyleLabels' in config.GAN_options: 
+      if not 'InterLabels' in config.GAN_options: config.GAN_options.append('InterLabels')
+      # if 'DRIT' in config.GAN_options: config.GAN_options.remove('DRIT')    
+      update_folder(config, 'InterStyleLabels')      
+
+    if 'DRIT' in config.GAN_options:   
+      update_folder(config, 'DRIT')       
     if 'mono_style' in config.GAN_options:
       update_folder(config, 'mono_style')     
     if 'style_labels' in config.GAN_options:
@@ -79,14 +91,26 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'info_like') 
       if not 'kl_loss' in config.GAN_options: config.GAN_options.append('kl_loss')        
 
+    if 'LOGVAR' in config.GAN_options:
+      update_folder(config, 'LOGVAR')   
+
+  if 'FC' in config.GAN_options: 
+    update_folder(config, 'FC')     
+
   if 'AdaIn' in config.GAN_options or 'Stochastic' in config.GAN_options:
     config.mlp_dim=256
     config.style_dim=16
+
     if 'kl_loss' in config.GAN_options: 
       # config.lambda_kl = 10
       update_folder(config, 'kl_loss_'+str(config.lambda_kl))
     if not 'Stochastic' in config.GAN_options: 
       update_folder(config, 'AdaIn')    
+
+  if config.dataset_fake=='MNIST':
+    config.c_dim=10
+    config.color_dim = 1
+
 
 def update_folder(config, folder):
   import os
@@ -125,8 +149,9 @@ def remove_folder(config):
   import os
   logs = os.path.join(config.log_path, '*.bcv002')
   samples = os.path.join(config.sample_path, '*.jpg')
+  samples_txt = os.path.join(config.sample_path, '*.txt')
   models = os.path.join(config.model_save_path, '*.pth')
-  print("YOU ARE ABOUT TO REMOVE EVERYTHING IN:\n{}\n{}\n{}".format(logs, samples, models))
+  print("YOU ARE ABOUT TO REMOVE EVERYTHING IN:\n{}\n{}\n{}n{}".format(logs, samples, samples_txt, models))
   raw_input("ARE YOU SURE?")
   os.system("rm {} {} {}".format(logs, samples, models))
 
@@ -138,6 +163,7 @@ def update_config(config):
   config.AUs = {'EMOTIONNET': [1, 2, 4, 5, 6, 9, 12, 17, 20, 25, 26, 43],
                 'BP4D': [1, 2, 4, 6, 7, 10, 12, 14, 15, 17, 23, 24],
                 'CELEBA': [1, 2, 4, 5, 6, 9, 12, 17, 20, 25, 26, 43],
+                'MNIST': [],
                 'DEMO': []} #CelebA AUs are for training framework
   config.AUs_Common=  [1, 2, 4, 6, 12, 17]
 

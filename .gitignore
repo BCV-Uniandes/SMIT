@@ -5,6 +5,8 @@ __pycache__/
 *.swp
 
 data/
+no_github/
+_*.txt
 
 *.gif
 samples/

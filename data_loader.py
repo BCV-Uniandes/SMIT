@@ -3,7 +3,7 @@ import os
 import random
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from torchvision import transforms
+from torchvision import transforms, datasets
 from torchvision.transforms.functional import rotate, adjust_brightness, adjust_contrast, adjust_saturation, to_grayscale
 from torchvision.datasets import ImageFolder
 from PIL import Image
@@ -252,6 +252,40 @@ class EmotionNet(Dataset):
     random.seed(seed)
     random.shuffle(self.labels)
 
+######################################################################################################
+###                                            MNIST                                               ###
+######################################################################################################
+class MNIST(Dataset):
+  from sklearn.preprocessing import OneHotEncoder
+  def __init__(self, image_size, metadata_path, transform, mode, fake_label = False, shuffling = False, AUs=[]):
+    # ipdb.set_trace()
+    self.transform = transform
+    self.name = 'MNIST'
+    data_loader = datasets.MNIST('data/MNIST', train=mode=='train', download=True, transform=self.transform)
+    self.imgs = getattr(data_loader, mode + '_data')
+    self.labels = getattr(data_loader, mode + '_labels')
+    # ipdb.set_trace()
+
+  def get_data(self):
+    return self.imgs, self.labels
+
+  def __getitem__(self, index):
+    # ipdb.set_trace()
+    image = Image.fromarray(self.imgs[index].numpy())
+    one_hot = torch.zeros(10)
+    one_hot[self.labels[index]]=1
+    return self.transform(image), one_hot, ''
+
+  def __len__(self):
+    return self.imgs.size(0)
+
+  def shuffle(self, seed):
+    random.seed(seed)
+    random.shuffle(self.imgs)
+    random.seed(seed)
+    random.shuffle(self.labels)  
+
+
 
 ######################################################################################################
 ###                                              CelebA                                            ###
@@ -379,6 +413,9 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
 
   transform_resize = [transforms.Resize((crop_size+10, crop_size+10), interpolation=Image.ANTIALIAS)] if crop_size==64 else []
 
+  if dataset[0]=='MNIST':
+    transform_resize = [transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS)]     
+
   if mode == 'train':
     if color_jitter:
       transform = transforms.Compose([
@@ -393,7 +430,7 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
         # transform_resize,
         # transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS),
         transforms.CenterCrop((crop_size, crop_size)),
-        transforms.RandomHorizontalFlip(),
+        # transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean, std)])  
 

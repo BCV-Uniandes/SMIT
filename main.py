@@ -12,7 +12,7 @@ import warnings
 import ipdb
 import sys
 import torch
-warnings.filterwarnings('ignore')
+# warnings.filterwarnings('ignore')
 
 #./main.py -- --GPU 3 --GRAY --BLUR --L1_LOSS --lambda_l1 5
 
@@ -76,13 +76,14 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
 
   # Model hyper-parameters
-  parser.add_argument('--dataset_fake',     type=str, default='EmotionNet', choices=['BP4D', 'EmotionNet', 'CelebA'])
+  parser.add_argument('--dataset_fake',     type=str, default='EmotionNet', choices=['BP4D', 'EmotionNet', 'CelebA', 'MNIST'])
   parser.add_argument('--dataset_real',     type=str, default='', choices=['','BP4D', 'EmotionNet', 'CelebA'])  
   parser.add_argument('--fold',             type=str, default='0')
   parser.add_argument('--mode_data',        type=str, default='normal', choices=['normal', 'aligned'])   
   parser.add_argument('--mode_train',       type=str, default='GAN', choices=['GAN', 'CLS'])   
   parser.add_argument('--mode',             type=str, default='train', choices=['train', 'val', 'test']) 
   parser.add_argument('--c_dim',            type=int, default=12)
+  parser.add_argument('--color_dim',        type=int, default=3)
   parser.add_argument('--image_size',       type=int, default=128)
   parser.add_argument('--batch_size',       type=int, default=16)
   parser.add_argument('--num_workers',      type=int, default=4)
@@ -112,6 +113,7 @@ if __name__ == '__main__':
   parser.add_argument('--lambda_gp',        type=float, default=10.0)
   parser.add_argument('--lambda_style',     type=float, default=1.0)
   parser.add_argument('--lambda_kl',        type=float, default=1.0)
+  parser.add_argument('--lambda_content',   type=float, default=10.0)
   # parser.add_argument('--lambda_style_cls', type=float, default=5.0)
   parser.add_argument('--d_train_repeat',   type=int, default=5)
 
