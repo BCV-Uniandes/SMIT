@@ -322,16 +322,31 @@ class Solver(object):
 
   #=======================================================================================#
   #=======================================================================================#
-  def _GAN_LOSS(self, real_x, fake_x, label):
+  def _GAN_LOSS(self, real_x, fake_x, label, GEN=False):
     src_real, cls_real = self.D(real_x)
     src_fake, cls_fake = self.D(fake_x)
 
-    if 'HINGE' in self.config.GAN_options:
-      loss_src = (torch.mean(torch.nn.ReLU()(1.0 - (src_real - torch.mean(src_fake)))) \
-                      + torch.mean(torch.nn.ReLU()(1.0 + (src_fake - torch.mean(src_real)))))/2         
+    # Relativistic GAN
+    if 'RaGAN' in self.config.GAN_options:
+      if 'HINGE' in self.config.GAN_options:
+        loss_real = torch.mean(torch.nn.ReLU()(1.0 - (src_real - torch.mean(src_fake))))
+        loss_fake = torch.mean(torch.nn.ReLU()(1.0 + (src_fake - torch.mean(src_real))))        
+      else:
+        #Wasserstein
+        loss_real = torch.mean(-(src_real - torch.mean(src_fake)))
+        loss_fake = torch.mean(src_fake - torch.mean(src_real))
+      loss_src = (loss_real + loss_fake)/2 
+
     else:
-      loss_src = (torch.mean(- (src_real - torch.mean(src_fake))) \
-                    + torch.mean(src_fake - torch.mean(src_real)))/2          
+      if 'HINGE' in self.config.GAN_options:
+        d_loss_real = torch.mean(F.relu(1-src_real))
+        d_loss_fake = torch.mean(F.relu(1+src_fake))            
+      else:
+        #Wasserstein
+        d_loss_real = -torch.mean(src_real)
+        d_loss_fake = torch.mean(src_fake)   
+      if GEN: loss_src = loss_real
+      else: loss_src = loss_real + loss_fake  
 
     # ipdb.set_trace()
     loss_cls = self._CLS_LOSS(cls_real, label)
@@ -557,7 +572,7 @@ class Solver(object):
             rec_x1  = self.G(fake_x1[0], real_c1, stochastic = style_real1[0], CONTENT='content_loss' in self.config.GAN_options) 
 
             ## GAN LOSS
-            g_loss_src, g_loss_cls = self._GAN_LOSS(fake_x1[0], real_x1, fake_c1)
+            g_loss_src, g_loss_cls = self._GAN_LOSS(fake_x1[0], real_x1, fake_c1, GEN=True)
 
             ## REC LOSS
             if 'L1_LOSS' in self.config.GAN_options:
@@ -651,7 +666,7 @@ class Solver(object):
                 g_loss_style_random = self.config.lambda_style * (
                                         F.l1_loss(_style_fake_random1[mu_index], style_random1) 
                                         )
-                g_loss_src_random, g_loss_cls_random = self._GAN_LOSS(fake_x1_random[0], real_x1, fake_c1)
+                g_loss_src_random, g_loss_cls_random = self._GAN_LOSS(fake_x1_random[0], real_x1, fake_c1, GEN=True)
                 g_loss_cls_random = g_loss_cls_random*self.config.lambda_cls
 
                 g_loss_rec_random = F.l1_loss(real_x1, fake_x1_random[0]) + F.l1_loss(fake_x1_random[0], rec_x1[0])       

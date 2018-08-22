@@ -42,8 +42,6 @@ def main(config):
 
   if config.mode_train=='CLS':
     from solver_cls import Solver
-  elif 'RaGAN' in config.GAN_options:
-    from rasolver import Solver
   else:
     from solver import Solver
 
