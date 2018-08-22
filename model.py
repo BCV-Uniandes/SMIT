@@ -310,12 +310,12 @@ class DRITGEN(nn.Module):
 
   def debug(self):
     feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True)
-    style, _ = self.get_style(feed, volatile=True)
+    style = self.get_style(feed, volatile=True)
     self.generator.debug()
     
   def forward(self, x, c, stochastic=None, CONTENT=False):
     if stochastic is None:
-      style, _ = self.get_style(x)
+      style = self.get_style(x)
     else:
       style = stochastic
     return self.generator(x, c, stochastic=style, CONTENT=CONTENT)
@@ -362,7 +362,7 @@ class AdaInGEN(nn.Module):
 
   def debug(self):
     feed = to_var(torch.ones(1,self.color_dim,self.image_size,self.image_size), volatile=True)
-    style, _ = self.get_style(feed)
+    style = self.get_style(feed)
     self.apply_style(feed, style[0])
     self.generator.debug()
     
