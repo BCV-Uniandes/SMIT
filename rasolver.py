@@ -309,8 +309,8 @@ class Solver(object):
     name = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(Epoch, iter, '{}'))
     torch.save(self.G.state_dict(), name.format('G'))
     torch.save(self.D.state_dict(), name.format('D'))
-    if Epoch>1:
-      name_1 = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(Epoch-1, iter, '{}'))
+    if int(Epoch)>2:
+      name_1 = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(str(int(Epoch-1)).zfill(3), iter, '{}'))
       os.remove(name_1.format('G'))
       os.remove(name_1.format('D'))
 
@@ -390,6 +390,7 @@ class Solver(object):
 
     # Start training
 
+    self.PRINT("Now: "+self.TimeNow_str)
     self.PRINT("Log path: "+self.config.log_path)
 
     Log = "---> batch size: {}, fold: {}, img: {}, GPU: {}, !{}, [{}]\n-> GAN_options:".format(\
