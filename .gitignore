@@ -6,7 +6,6 @@ __pycache__/
 
 data/
 no_github/
-_*.txt
 
 *.gif
 samples/
