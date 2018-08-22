@@ -12,6 +12,7 @@ samples/
 *.caffemodel
 checkpoint/
 tools/
+tools
 
 *.png
 *.jpg
