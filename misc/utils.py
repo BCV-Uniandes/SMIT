@@ -12,9 +12,7 @@ def get_aus(image_size, dataset):
   import numpy as np
   resize = lambda x: skimage.transform.resize(imageio.imread(line), (image_size, image_size))
   imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('data/{}/aus_flat/*.jpeg'.format(dataset)))]
-  # ipdb.set_trace()
-  if self.config.dataset_fake=='MNIST': 
-    imgs = [np.expand_dims(img.mean(axis=0),0) for img in imgs]    
+  # ipdb.set_trace()   
   imgs = torch.from_numpy(np.concatenate(imgs, axis=2).astype(np.float32)).unsqueeze(0)
   return imgs  
 
