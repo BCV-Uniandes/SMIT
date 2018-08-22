@@ -349,6 +349,23 @@ class Solver(object):
     else:
       return F.binary_cross_entropy_with_logits(output, target, size_average=False) / output.size(0)
 
+
+  def _get_gradient_penalty(self, real_x, fake_x):
+    alpha = self.to_cuda(torch.rand(real_x.size(0), 1, 1, 1).expand_as(real_x))
+    interpolated = self.to_var((alpha * real_x.data + (1 - alpha) * fake_x.data), requires_grad = True)
+    out, _ = self.D(interpolated)
+
+    grad = torch.autograd.grad(outputs=out,
+                   inputs=interpolated,
+                   grad_outputs=self.to_cuda(torch.ones(out.size())),
+                   retain_graph=True,
+                   create_graph=True,
+                   only_inputs=True)[0]
+
+    grad = grad.view(grad.size(0), -1)
+    grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
+    d_loss_gp = torch.mean((grad_l2norm - 1)**2)   
+    return d_loss_gp 
   #=======================================================================================#
   #=======================================================================================#
 
@@ -453,29 +470,20 @@ class Solver(object):
 
             ############################## Stochastic Part ##################################
           if 'Stochastic' in self.config.GAN_options:
-            style_real0, _ = self.G.get_style(real_x0)
+            style_real0 = self.G.get_style(real_x0)
             style_fake0 = [s[rand_idx0] for s in style_real0]
-            # if 'kl_loss' in self.config.GAN_options:
-            #   style_random0 = self.to_var(self.G.random_style(real_x0))
-
             if 'style_labels' in self.config.GAN_options:
               style_real0 = [s*real_c0.unsqueeze(2) for s in style_real0]
               style_fake0 = [s*fake_c0.unsqueeze(2) for s in style_fake0]
-              # if 'kl_loss' in self.config.GAN_options:
-              #   style_random0 *= fake_c0.unsqueeze(2)
           else:
             style_real0 = style_fake0 = None
 
           fake_x0 = self.G(real_x0, fake_c0, stochastic=style_fake0[0])[0]
-          # if 'kl_loss' in self.config.GAN_options:
-          #   fake_x0_random = self.G(real_x0, fake_c0, stochastic=style_random0)[0]
 
           #=======================================================================================#
           #======================================== Train D ======================================#
           #=======================================================================================#
           d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0, real_c0)
-          # if 'kl_loss' in self.config.GAN_options:
-          #   d_loss_src += self._GAN_LOSS(real_x0, fake_x0_random, real_c0)[0]
           d_loss_cls = self.config.lambda_cls * d_loss_cls  
 
           # Backward + Optimize       
@@ -511,29 +519,22 @@ class Solver(object):
           #=======================================================================================#
           # Compute gradient penalty
           if not 'HINGE' in self.config.GAN_options:
-            alpha = self.to_cuda(torch.rand(real_x0.size(0), 1, 1, 1).expand_as(real_x0))
-            # ipdb.set_trace()
-            interpolated = self.to_var((alpha * real_x0.data + (1 - alpha) * fake_x0.data), requires_grad = True)
-            out, out_cls = self.D(interpolated)
-
-            grad = torch.autograd.grad(outputs=out,
-                           inputs=interpolated,
-                           grad_outputs=self.to_cuda(torch.ones(out.size())),
-                           retain_graph=True,
-                           create_graph=True,
-                           only_inputs=True)[0]
-
-            grad = grad.view(grad.size(0), -1)
-            grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
-            d_loss_gp = torch.mean((grad_l2norm - 1)**2)
-
-            # Backward + Optimize
+            d_loss_gp = self._get_gradient_penalty(real_x0, fake_x0)
             d_loss_gp = self.config.lambda_gp * d_loss_gp
             loss['D/gp'] = self.get_loss_value(d_loss_gp)
             self.reset_grad()
             d_loss.backward()
             self.d_optimizer.step()
             self.update_loss('D/gp', loss['D/gp'])
+
+            if 'kl_loss' in self.config.GAN_options:
+              d_loss_gp = self._get_gradient_penalty(real_x0, fake_x0_random)
+              d_loss_gp = self.config.lambda_gp * d_loss_gp
+              loss['D/gp_r'] = self.get_loss_value(d_loss_gp)
+              self.reset_grad()
+              d_loss.backward()
+              self.d_optimizer.step()
+              self.update_loss('D/gp_r', loss['D/gp_r'])  
           
           #=======================================================================================#
           #======================================= Train G =======================================#
@@ -544,7 +545,7 @@ class Solver(object):
 
             ############################## Stochastic Part ##################################
             if 'Stochastic' in self.config.GAN_options:
-              style_real1, _ = self.G.get_style(real_x1)
+              style_real1 = self.G.get_style(real_x1)
               style_fake1 = [s[rand_idx1] for s in style_real1]
               if 'style_labels' in self.config.GAN_options:
                 style_real1 = [s*real_c1.unsqueeze(2) for s in style_real1]
@@ -618,8 +619,8 @@ class Solver(object):
             # ipdb.set_trace()            
             if 'Stochastic' in self.config.GAN_options: 
 
-              _style_fake1, _style_cls_fake1 = self.G.get_style(fake_x1[0])
-              _style_rec1, _style_cls_real1 = self.G.get_style(rec_x1[0])
+              _style_fake1 = self.G.get_style(fake_x1[0])
+              _style_rec1 = self.G.get_style(rec_x1[0])
 
               if 'style_labels' in self.config.GAN_options:
                 _style_fake1 = [s*fake_c1.unsqueeze(2) for s in _style_fake1]
@@ -640,8 +641,8 @@ class Solver(object):
                 fake_x1_random = self.G(real_x1, fake_c1, stochastic = style_random1)
                 rec_x1_random  = self.G(fake_x1_random[0], real_c1, stochastic = style_real1[0]) 
 
-                _style_fake_random1, _style_cls_fake_random1 = self.G.get_style(fake_x1_random[0])
-                # _style_rec_random1, _style_cls_real_random1 = self.G.get_style(rec_x1_random[0])                
+                _style_fake_random1 = self.G.get_style(fake_x1_random[0])
+                # _style_rec_random1 = self.G.get_style(rec_x1_random[0])                
 
                 if 'style_labels' in self.config.GAN_options:
                   _style_fake_random1 = [s*fake_c1.unsqueeze(2) for s in _style_fake_random1]
@@ -784,7 +785,7 @@ class Solver(object):
         fake_attn_list = [self.to_var(self.denorm(real_x.data), volatile=True)]
       for target_c in target_c_list:
         if Stochastic: 
-          style, _ = self.G.get_style(real_x, volatile=True)
+          style = self.G.get_style(real_x, volatile=True)
           style = style[0]
           style_rand=self.to_var(self.G.random_style(real_x0), volatile=True)
         else: 

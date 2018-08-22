@@ -328,7 +328,7 @@ class DRITGEN(nn.Module):
     return z
 
   def get_style(self, x, volatile=False):
-    style, cls = self.enc_style(x)
+    style = self.enc_style(x)
     if len(style)==1:
       style = [style[0].view(style[0].size(0), self.c_dim, -1)]
     else:
@@ -339,7 +339,7 @@ class DRITGEN(nn.Module):
       eps = self.random_style(style[0].data)
       if style[1].data.is_cuda: eps = to_cuda(eps)
       style = [to_var(eps.mul(std).add_(style[0].data), volatile=volatile)] + style
-    return style, cls
+    return style
 
 #===============================================================================================#
 #===============================================================================================#
@@ -368,7 +368,7 @@ class AdaInGEN(nn.Module):
     
   def forward(self, x, c, stochastic=None, CONTENT=False):
     if stochastic is None:
-      style, _ = self.get_style(x)
+      style = self.get_style(x)
       style = style[0]
     else:
       style = stochastic
@@ -383,7 +383,7 @@ class AdaInGEN(nn.Module):
     return z
 
   def get_style(self, x, volatile=False):
-    style, cls = self.enc_style(x)
+    style = self.enc_style(x)
     if len(style)==1:
       style = [style[0].view(style[0].size(0), self.c_dim, -1)]
     else:
@@ -394,7 +394,7 @@ class AdaInGEN(nn.Module):
       eps = self.random_style(style[0].data)
       if style[1].data.is_cuda: eps = to_cuda(eps)
       style = [to_var(eps.mul(std).add_(style[0].data), volatile=volatile)] + style
-    return style, cls
+    return style
 
   def apply_style(self, image, style):
     # apply style code to an image
@@ -434,7 +434,6 @@ class StyleEncoder(nn.Module):
     color_dim = config.color_dim
     style_dim = config.style_dim
     self.c_dim = config.c_dim
-    self.style_label_net = 'style_label_net' in config.GAN_options
     self.mono_style = 'mono_style' in config.GAN_options
     self.FC = 'FC' in config.GAN_options
     self.lognet = 'LOGVAR' in config.GAN_options
@@ -478,9 +477,6 @@ class StyleEncoder(nn.Module):
       if self.lognet:
         self.style_var = nn.Conv2d(curr_dim, self.c_dim, kernel_size=1, stride=1, padding=0, bias=False)
     self.main = nn.Sequential(*layers)
-    if self.style_label_net: 
-      k_size = int(image_size / np.power(2, conv_repeat))
-      self.style_cls = nn.Conv2d(curr_dim, self.c_dim, kernel_size=k_size, bias=False)
 
     if debug:
       feed = to_var(torch.ones(1,color_dim,image_size,image_size), volatile=True)
@@ -495,9 +491,6 @@ class StyleEncoder(nn.Module):
       if self.lognet:
         _ = print_debug(features, [self.style_var]) 
 
-      if self.style_label_net: 
-        _ = print_debug(features, [self.style_cls]) 
-
   def forward(self, x):
     features = self.main(x)
     if self.FC:
@@ -510,9 +503,7 @@ class StyleEncoder(nn.Module):
       style = [style_mu, style_var]
     else:
       style = [style_mu]
-    cls = self.style_cls(features).view(features.size(0), self.c_dim) if self.style_label_net else None
-    # style = style*cls.unsqueeze(2) if cls is not None and self.style_label else style
-    return style, cls
+    return style
     
 #===============================================================================================#
 #===============================================================================================#
