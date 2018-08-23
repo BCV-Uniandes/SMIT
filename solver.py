@@ -1,4 +1,4 @@
-import torch, os, time, ipdb, glob, math, warnings
+import torch, os, time, ipdb, glob, math, warnings, datetime
 # import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -13,7 +13,7 @@ class Solver(object):
 
   def __init__(self, data_loader, config):
     # Data loader
-    self.data_loader = data_loader[0]
+    self.data_loader = data_loader
     self.config = config
 
     # Build tensorboard if use
@@ -38,7 +38,6 @@ class Solver(object):
     G_parameters = filter(lambda p: p.requires_grad, self.G.parameters())
     self.g_optimizer = torch.optim.Adam(G_parameters, self.config.g_lr, [self.config.beta1, self.config.beta2])
     to_cuda(self.G)
-    self.print_network(self.G, 'Generator')
 
     if self.config.mode=='train': 
       self.D = Discriminator(self.config, debug=True) 
@@ -46,6 +45,7 @@ class Solver(object):
       self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr, [self.config.beta1, self.config.beta2])
       to_cuda(self.D)
       self.print_network(self.D, 'Discriminator')
+    self.print_network(self.G, 'Generator')
 
   #=======================================================================================#
   #=======================================================================================#
@@ -78,7 +78,7 @@ class Solver(object):
     torch.save(self.G.state_dict(), name.format('G'))
     torch.save(self.D.state_dict(), name.format('D'))
     if int(Epoch)>2:
-      name_1 = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(str(int(Epoch-1)).zfill(3), iter, '{}'))
+      name_1 = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(str(int(Epoch)-1).zfill(3), iter, '{}'))
       os.remove(name_1.format('G'))
       os.remove(name_1.format('D'))
 
@@ -124,7 +124,16 @@ class Solver(object):
   #=======================================================================================#
   def get_aus(self):
     return get_aus(self.config.image_size, self.config.dataset_fake)
-    
+
+  #=======================================================================================#
+  #=======================================================================================#
+  def get_randperm(self, x):
+    if x.size(0)>2:
+      rand_idx = to_var(torch.randperm(x.size(0)))
+    else:
+      rand_idx = to_var(torch.LongTensor([1,0]))
+    return rand_idx
+
   #=======================================================================================#
   #=======================================================================================#
   def PRINT(self, str):  
@@ -202,7 +211,7 @@ class Solver(object):
           total=len(self.data_loader), desc=desc_bar, ncols=10)
       for i, (real_x, real_c, files) in progress_bar: 
         if real_x.size(0)==self.config.batch_size:
-
+          # ipdb.set_trace()
           loss = {}
 
           #=======================================================================================#
@@ -218,10 +227,10 @@ class Solver(object):
           real_c0, real_c1 = split(real_c)          
 
           # Generat fake labels randomly (target domain labels)
-          rand_idx0 = to_var(torch.randperm(real_c0.size(0)))
+          rand_idx0 = self.get_randperm(real_c0)
           fake_c0 = real_c0[rand_idx0]
 
-          rand_idx1 = to_var(torch.randperm(real_c1.size(0)))
+          rand_idx1 = self.get_randperm(real_c1)
           fake_c1 = real_c1[rand_idx1]
 
           fake_c0 = to_var(fake_c0.data)
@@ -379,6 +388,10 @@ class Solver(object):
 
               g_loss_style = (self.config.lambda_style/10) * (F.l1_loss(style_real1[0], _style_rec1[0]) +
                                                          F.l1_loss(_style_fake1[0], style_fake1[0]))
+              loss['G/sty'] = get_loss_value(g_loss_style)
+              self.update_loss('G/sty', loss['G/sty'])
+              g_loss += g_loss_style
+
               if 'kl_loss' in GAN_options:
 
                 self.reset_grad()
@@ -386,6 +399,7 @@ class Solver(object):
                 g_loss.backward()
                 self.g_optimizer.step()
 
+                style_real1 = self.G.get_style(real_x1)
                 style_random1 = to_var(self.G.random_style(real_x1))
 
                 if 'style_labels' in GAN_options:
@@ -406,22 +420,19 @@ class Solver(object):
                 g_loss_src_random, g_loss_cls_random = self._GAN_LOSS(fake_x1_random[0], real_x1, fake_c1, GEN=True)
                 g_loss_cls_random = g_loss_cls_random*self.config.lambda_cls
 
-                g_loss_rec_random = F.l1_loss(real_x1, fake_x1_random[0]) + F.l1_loss(fake_x1_random[0], rec_x1_random[0])       
+                g_loss_rec_random = F.l1_loss(real_x1, fake_x1_random[0]) + F.l1_loss(fake_x1_random[0], rec_x1_random[0])
                 g_loss_rec_random = self.config.lambda_rec * g_loss_rec_random
 
                 loss['G/src_r'] = get_loss_value(g_loss_src_random)
                 loss['G/cls_r'] = get_loss_value(g_loss_cls_random)
                 loss['G/rec_r'] = get_loss_value(g_loss_rec_random)
                 loss['G/sty_r'] = get_loss_value(g_loss_style_random)
-                loss['G/sty'] = get_loss_value(g_loss_style)
-                self.update_loss('G/sty_', loss['G/sty'])
                 self.update_loss('G/rec_r', loss['G/rec_r'])       
                 self.update_loss('G/sty_r', loss['G/sty_r'])
                 self.update_loss('G/src_r', loss['G/src_r'])
                 self.update_loss('G/cls_r', loss['G/cls_r'])
                 # ipdb.set_trace()
-                g_loss = g_loss_src_random + g_loss_cls_random + g_loss_rec_random \
-                         + g_loss_style + g_loss_style_random
+                g_loss = g_loss_src_random + g_loss_cls_random + g_loss_rec_random + g_loss_style_random
 
                 if 'Attention' in GAN_options:
 
@@ -440,10 +451,6 @@ class Solver(object):
                   self.update_loss('G/mask_sm_r', loss['G/mask_sm_r'])    
 
                   g_loss += g_loss_mask_random + g_loss_mask_smooth_random
-              else:
-                loss['G/sty'] = get_loss_value(g_loss_style)
-                self.update_loss('G/sty', loss['G/sty'])
-                g_loss += g_loss_style
 
             self.reset_grad()
             g_loss.backward()
@@ -461,6 +468,9 @@ class Solver(object):
           if self.config.use_tensorboard:
             for tag, value in loss.items():
               self.logger.scalar_summary(tag, value, e * last_model_step + i + 1)
+
+        # Save current fake
+        if (i+1) % (self.config.log_step*2) == 0 or (i+1)==last_model_step or i+e==0:
           name = os.path.join(self.config.sample_path, 'current_fake.jpg')
           self.save_fake_output(fixed_x, name)
 
@@ -595,7 +605,7 @@ class Solver(object):
 
     data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
                  self.config.image_size, self.config.batch_size, shuffling = True,
-                 dataset=[dataset], mode='test', AU=self.config.AUs)[0]  
+                 dataset=dataset, mode='test', AU=self.config.AUs)[0]  
 
     for i, (real_x, org_c, files) in enumerate(data_loader_val):
       # ipdb.set_trace()
@@ -630,7 +640,7 @@ class Solver(object):
 
     data_loader = get_loader(path, self.config.image_size,
                  self.config.image_size, self.config.batch_size, shuffling = True,
-                 dataset=['DEMO'], mode='test', AU=self.config.AUs)[0]  
+                 dataset='DEMO', mode='test', AU=self.config.AUs)[0]  
 
     for real_x in data_loader:
       # ipdb.set_trace()
