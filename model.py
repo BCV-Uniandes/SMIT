@@ -187,7 +187,7 @@ class Generator(nn.Module):
       self.layers1 = layers1
       self.attetion_reg = nn.Sequential(*layers1)
 
-    elif self.AdaIn is not None:
+    elif self.AdaIn:
       self.main = nn.Sequential(*layers)
       self.layers = layers
 
@@ -232,11 +232,11 @@ class Generator(nn.Module):
         feed = to_var(torch.ones(1,in_dim,self.image_size,self.image_size), volatile=True)
       
       features = print_debug(feed, self.layers)
-
+      # ipdb.set_trace()
       if self.Attention: 
         _ = print_debug(features, self.layers0)
         _ = print_debug(features, self.layers1)
-      elif self.AdaIn is not None: 
+      elif self.AdaIn: 
         _ = print_debug(features, self.layers0)        
 
   def forward(self, x, c, stochastic=None, CONTENT=False):
@@ -280,7 +280,7 @@ class Generator(nn.Module):
       fake_img = (mask_img * x) + ((1 - mask_img) * fake_img)
       output = [fake_img, mask_img]
 
-    elif self.AdaIn is not None:  
+    elif self.AdaIn:  
       features = self.main(x_cat)
       output = [self.img_reg(features)]
 
