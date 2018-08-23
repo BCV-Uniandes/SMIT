@@ -210,10 +210,9 @@ class Solver(object):
       self.LOSS = {}
       desc_bar = 'Epoch: %d/%d'%(e,self.config.num_epochs)
       progress_bar = tqdm(enumerate(self.data_loader), \
-          total=len(self.data_loader), desc=desc_bar, ncols=10)
+          total=len(self.data_loader), desc=desc_bar, ncols=5)
       for i, (real_x, real_c, files) in progress_bar: 
 
-        # ipdb.set_trace()
         loss = {}
 
         #=======================================================================================#
@@ -241,7 +240,6 @@ class Solver(object):
 
         fake_c0 = to_var(fake_c0.data)
         fake_c1 = to_var(fake_c1.data)
-        # ipdb.set_trace()  
 
           ############################## Stochastic Part ##################################
         if 'Stochastic' in GAN_options:
@@ -268,10 +266,10 @@ class Solver(object):
         d_loss.backward()
         self.d_optimizer.step()
 
-        loss['D/src'] = get_loss_value(d_loss_src)
-        loss['D/cls'] = get_loss_value(d_loss_cls)          
-        self.update_loss('D/src', loss['D/src'])
-        self.update_loss('D/cls', loss['D/cls'])
+        loss['Dsrc'] = get_loss_value(d_loss_src)
+        loss['Dcls'] = get_loss_value(d_loss_cls)          
+        self.update_loss('Dsrc', loss['Dsrc'])
+        self.update_loss('Dcls', loss['Dcls'])
 
         if 'kl_loss' in GAN_options:
           style_random0 = to_var(self.G.random_style(real_x0))
@@ -284,10 +282,10 @@ class Solver(object):
           self.reset_grad()
           d_loss.backward()
           self.d_optimizer.step()
-          loss['D/src_r'] = get_loss_value(d_loss_src)
-          loss['D/cls_r'] = get_loss_value(d_loss_cls)          
-          self.update_loss('D/src_r', loss['D/src_r'])
-          self.update_loss('D/cls_r', loss['D/cls_r'])            
+          loss['Dsrcr'] = get_loss_value(d_loss_src)
+          loss['Dclsr'] = get_loss_value(d_loss_cls)          
+          self.update_loss('Dsrcr', loss['Dsrcr'])
+          self.update_loss('Dclsr', loss['Dclsr'])            
 
         #=======================================================================================#
         #=================================== Gradient Penalty ==================================#
@@ -296,8 +294,8 @@ class Solver(object):
         if not 'HINGE' in GAN_options:
           d_loss_gp = self._get_gradient_penalty(real_x0.data, fake_x0.data)
           d_loss = self.config.lambda_gp * d_loss_gp
-          loss['D/gp'] = get_loss_value(d_loss)
-          self.update_loss('D/gp', loss['D/gp'])
+          loss['Dgp'] = get_loss_value(d_loss)
+          self.update_loss('Dgp', loss['Dgp'])
           self.reset_grad()
           d_loss.backward()
           self.d_optimizer.step()
@@ -305,8 +303,8 @@ class Solver(object):
           if 'kl_loss' in GAN_options:
             d_loss_gp = self._get_gradient_penalty(real_x0.data, fake_x0_random.data)
             d_loss = self.config.lambda_gp * d_loss_gp
-            loss['D/gp_r'] = get_loss_value(d_loss)
-            self.update_loss('D/gp_r', loss['D/gp_r'])  
+            loss['Dgpr'] = get_loss_value(d_loss)
+            self.update_loss('Dgpr', loss['Dgpr'])  
             self.reset_grad()
             d_loss.backward()
             self.d_optimizer.step()              
@@ -344,13 +342,13 @@ class Solver(object):
           g_loss_rec = g_loss_rec*self.config.lambda_rec
           g_loss_cls = g_loss_cls*self.config.lambda_cls
 
-          loss['G/src'] = get_loss_value(g_loss_src)
-          loss['G/rec'] = get_loss_value(g_loss_rec)
-          loss['G/cls'] = get_loss_value(g_loss_cls)
+          loss['Gsrc'] = get_loss_value(g_loss_src)
+          loss['Grec'] = get_loss_value(g_loss_rec)
+          loss['Gcls'] = get_loss_value(g_loss_cls)
 
-          self.update_loss('G/src', loss['G/src'])
-          self.update_loss('G/rec', loss['G/rec'])
-          self.update_loss('G/cls', loss['G/cls'])
+          self.update_loss('Gsrc', loss['Gsrc'])
+          self.update_loss('Grec', loss['Grec'])
+          self.update_loss('Gcls', loss['Gcls'])
 
           # Backward + Optimize
           g_loss = g_loss_src + g_loss_rec + g_loss_cls 
@@ -358,32 +356,30 @@ class Solver(object):
           ############################## Attention Part ###################################
           if 'Attention' in GAN_options:
 
-            g_loss_mask = self.config.lambda_mask * (torch.mean(rec_real_mask1[0]) + torch.mean(fake_mask1[0]))
-            g_loss_mask_smooth = self.config.lambda_mask_smooth * (_compute_loss_smooth(rec_real_mask1[1]) + _compute_loss_smooth(fake_mask1[1])) 
+            g_loss_mask = self.config.lambda_mask * (torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
+            g_loss_mask_smooth = self.config.lambda_mask_smooth * (_compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(fake_x1[1])) 
 
-            loss['G/mask'] = get_loss_value(g_loss_mask)
-            loss['G/mask_sm'] = get_loss_value(g_loss_mask_smooth)     
-            self.update_loss('G/mask', loss['G/mask'])
-            self.update_loss('G/mask_sm', loss['G/mask_sm'])
+            loss['Gatm'] = get_loss_value(g_loss_mask)
+            loss['Gats'] = get_loss_value(g_loss_mask_smooth)     
+            self.update_loss('Gatm', loss['Gatm'])
+            self.update_loss('Gats', loss['Gats'])
             g_loss += g_loss_mask + g_loss_mask_smooth
 
           ############################## KL Part ###################################
           if 'kl_loss' in GAN_options:
             g_loss_kl = self.config.lambda_kl * (_compute_kl(style_real1))
-            loss['G/kl'] = get_loss_value(g_loss_kl)
-            self.update_loss('G/kl', loss['G/kl'])
+            loss['Gkl'] = get_loss_value(g_loss_kl)
+            self.update_loss('Gkl', loss['Gkl'])
             g_loss += g_loss_kl
 
           ############################## Content Part ###################################
           if 'content_loss' in GAN_options:
-            # ipdb.set_trace()
             g_loss_content = self.config.lambda_content * F.l1_loss(fake_x1[-1], rec_x1[-1])
-            loss['G/con'] = get_loss_value(g_loss_content)
-            self.update_loss('G/con', loss['G/con'])       
+            loss['Gcon'] = get_loss_value(g_loss_content)
+            self.update_loss('Gcon', loss['Gcon'])       
             g_loss += g_loss_content                      
 
           ############################## Stochastic Part ###################################
-          # ipdb.set_trace()            
           if 'Stochastic' in GAN_options: 
 
             _style_fake1 = self.G.get_style(fake_x1[0])
@@ -394,8 +390,8 @@ class Solver(object):
 
             g_loss_style = (self.config.lambda_style/10) * (F.l1_loss(style_real1[0], _style_rec1[0]) +
                                                        F.l1_loss(_style_fake1[0], style_fake1[0]))
-            loss['G/sty'] = get_loss_value(g_loss_style)
-            self.update_loss('G/sty', loss['G/sty'])
+            loss['Gsty'] = get_loss_value(g_loss_style)
+            self.update_loss('Gsty', loss['Gsty'])
             g_loss += g_loss_style
 
             if 'kl_loss' in GAN_options:
@@ -432,32 +428,31 @@ class Solver(object):
                 g_loss_rec_random = F.l1_loss(real_x1, rec_x1_random[0])
               g_loss_rec_random = self.config.lambda_rec * g_loss_rec_random
 
-              loss['G/src_r'] = get_loss_value(g_loss_src_random)
-              loss['G/cls_r'] = get_loss_value(g_loss_cls_random)
-              loss['G/rec_r'] = get_loss_value(g_loss_rec_random)
-              loss['G/sty_r'] = get_loss_value(g_loss_style_random)
-              self.update_loss('G/rec_r', loss['G/rec_r'])       
-              self.update_loss('G/sty_r', loss['G/sty_r'])
-              self.update_loss('G/src_r', loss['G/src_r'])
-              self.update_loss('G/cls_r', loss['G/cls_r'])
-              # ipdb.set_trace()
+              loss['Gsrcr'] = get_loss_value(g_loss_src_random)
+              loss['Gclsr'] = get_loss_value(g_loss_cls_random)
+              loss['Grecr'] = get_loss_value(g_loss_rec_random)
+              loss['Gstyr'] = get_loss_value(g_loss_style_random)
+              self.update_loss('Grecr', loss['Grecr'])       
+              self.update_loss('Gstyr', loss['Gstyr'])
+              self.update_loss('Gsrcr', loss['Gsrcr'])
+              self.update_loss('Gclsr', loss['Gclsr'])
               g_loss = g_loss_src_random + g_loss_cls_random + g_loss_rec_random + g_loss_style_random
 
               if 'Attention' in GAN_options:
 
                 g_loss_mask_random = self.config.lambda_mask * (
-                          torch.mean(fake_x1_random[0]) +
-                          torch.mean(rec_x1_random[0])
+                          torch.mean(fake_x1_random[1]) +
+                          torch.mean(rec_x1_random[1])
                           )
                 g_loss_mask_smooth_random = self.config.lambda_mask_smooth * (
                         _compute_loss_smooth(fake_x1_random[1]) +
                         _compute_loss_smooth(rec_x1_random[1])
                         )     
 
-                loss['G/mask_r'] = get_loss_value(g_loss_mask_random)
-                loss['G/mask_sm_r'] = get_loss_value(g_loss_mask_smooth_random)     
-                self.update_loss('G/mask_r', loss['G/mask_r'])
-                self.update_loss('G/mask_sm_r', loss['G/mask_sm_r'])    
+                loss['Gatmr'] = get_loss_value(g_loss_mask_random)
+                loss['Gatsr'] = get_loss_value(g_loss_mask_smooth_random)     
+                self.update_loss('Gatmr', loss['Gatmr'])
+                self.update_loss('Gatsr', loss['Gatsr'])    
 
                 g_loss += g_loss_mask_random + g_loss_mask_smooth_random
 
@@ -471,7 +466,6 @@ class Solver(object):
 
         # PRINT log info
         if (i+1) % self.config.log_step == 0 or (i+1)==last_model_step or i+e==0:
-          # progress_bar.set_postfix(G_loss_rec=np.array(self.LOSS['G/rec']).mean())
           progress_bar.set_postfix(**loss)
           if (i+1)==last_model_step: progress_bar.set_postfix('')
           if self.config.use_tensorboard:
@@ -518,8 +512,6 @@ class Solver(object):
     opt = torch.no_grad() if int(torch.__version__.split('.')[1])>3 else open('_null.txt', 'w')
     with opt:
       real_x = to_var(real_x, volatile=True)
-
-      # target_c_list = []
       target_c= torch.from_numpy(np.zeros((real_x.size(0), self.config.c_dim), dtype=np.float32))
 
       target_c_list = [to_var(target_c, volatile=True)]
@@ -529,7 +521,6 @@ class Solver(object):
           target_c[:]=0 
           target_c[:,j]=1       
         else:
-          # ipdb.set_trace()
           print(j+1, sorted(list(set(map(int, (self.config.AUs['EMOTIONNET']*label[j].cpu().numpy()).tolist())))))
           target_c=label[j].repeat(label.size(0),1)      
         target_c_list.append(to_var(target_c, volatile=True))      
@@ -543,7 +534,6 @@ class Solver(object):
         fake_rand_list = [real_x0]
         if Attention: 
           rand_attn_list = [to_var(denorm(real_x0.data), volatile=True)]
-          # ipdb.set_trace()
       if Attention: 
         fake_attn_list = [to_var(denorm(real_x.data), volatile=True)]
       for target_c in target_c_list:
@@ -557,26 +547,21 @@ class Solver(object):
         if Stochastic:
           fake_x = self.G(real_x, target_c, stochastic=style)
           target_c0 = target_c[:n_rep]
-          # ipdb.set_trace()
                   
           style_rand[0] = style[n_img] #Compare with the original style
           style_rand[1] = style[6]
           style_rand[2] = style[9]     
-          # ipdb.set_trace()
           if 'mono_style' not in self.config.GAN_options:
             style_rand[3] = style_rand[3]*target_c0[0].unsqueeze(1)
             style_rand[4] = style_rand[4]*target_c0[0].unsqueeze(1)
-          # fake_x0 = self.G(real_x0, target_c0, stochastic=style_rand*target_c0.unsqueeze(2))   
           fake_x0 = self.G(real_x0, target_c0, stochastic=style_rand)   
           fake_rand_list.append(fake_x0[0])    
           if Attention: rand_attn_list.append(fake_x0[1].repeat(1,3,1,1))          
         else:
           fake_x = self.G(real_x, target_c)
-        # ipdb.set_trace()
         fake_image_list.append(fake_x[0])
         if Attention: fake_attn_list.append(fake_x[1].repeat(1,3,1,1))
 
-      # ipdb.set_trace()
       fake_images = denorm(torch.cat(fake_image_list, dim=3).data.cpu())
       fake_images = torch.cat((self.get_aus(), fake_images), dim=0)
       save_image(fake_images, save_path, nrow=1, padding=0)
@@ -610,14 +595,12 @@ class Solver(object):
     G_path = os.path.join(self.config.model_save_path, '{}_G.pth'.format(last_name))
     self.G.load_state_dict(torch.load(G_path))
     self.G.eval()
-    # ipdb.set_trace()
 
     data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
                  self.config.image_size, self.config.batch_size, shuffling = True,
                  dataset=dataset, mode='test', AU=self.config.AUs)[0]  
 
     for i, (real_x, org_c, files) in enumerate(data_loader_val):
-      # ipdb.set_trace()
       save_path = os.path.join(self.config.sample_path, '{}_fake_val_{}_{}_{}.jpg'.format(last_name, dataset, i+1, '{}'))
       name = save_path.format(TimeNow_str())
       if 'real_cS' in self.config.GAN_options: 
@@ -625,10 +608,7 @@ class Solver(object):
       else: 
         self.save_fake_output(real_x, name)
       self.PRINT('Translated test images and saved into "{}"..!'.format(name))
-      if i==1: break
-    # if 'Stochastic' in self.config.GAN_options:
-    #   # ipdb.set_trace()
-    #   self.save_fake_output(real_x[0].repeat(3,1,1,1), save_path.format(TimeNow_str()))      
+      if i==1: break   
 
   #=======================================================================================#
   #=======================================================================================#
@@ -645,14 +625,12 @@ class Solver(object):
     G_path = os.path.join(self.config.model_save_path, '{}_G.pth'.format(last_name))
     self.G.load_state_dict(torch.load(G_path))
     self.G.eval()
-    # ipdb.set_trace()
 
     data_loader = get_loader(path, self.config.image_size,
                  self.config.image_size, self.config.batch_size, shuffling = True,
                  dataset='DEMO', mode='test', AU=self.config.AUs)[0]  
 
     for real_x in data_loader:
-      # ipdb.set_trace()
       save_path = os.path.join(self.config.sample_path, '{}_fake_val_DEMO_{}.jpg'.format(last_name, TimeNow_str()))
       self.save_fake_output(real_x, save_path)
       self.PRINT('Translated test images and saved into "{}"..!'.format(save_path))

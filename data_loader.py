@@ -34,7 +34,6 @@ def get_aus_emotionnet(metadata_path, mode):
 ######################################################################################################
 class BP4D(Dataset):
   def __init__(self, image_size, metadata_path, transform, mode, shuffling = False, AUs=[]):
-    # ipdb.set_trace()
     self.transform = transform
     self.mode = mode
     self.shuffling = shuffling
@@ -52,7 +51,6 @@ class BP4D(Dataset):
     self.preprocess()
     self.num_data = len(self.filenames)
     if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
-    # ipdb.set_trace()
 
   def preprocess(self):
     self.filenames = []
@@ -69,7 +67,6 @@ class BP4D(Dataset):
         # continue
         ipdb.set_trace()
         imageio.imwrite(filename, np.zeros((self.image_size, self.image_size,3)).astype(np.uint8))
-      # ipdb.set_trace()
       values = splits[1:]
 
       label = []
@@ -83,7 +80,6 @@ class BP4D(Dataset):
     return self.filenames, self.labels
 
   def __getitem__(self, index):
-    # ipdb.set_trace()
     image = Image.open(self.filenames[index])
     label = self.labels[index]
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
@@ -102,7 +98,6 @@ class BP4D(Dataset):
 ######################################################################################################
 class BP4D_FULL(Dataset):
   def __init__(self, image_size, metadata_path, transform, mode, no_flipping = False, shuffling = False, AUs=[]):
-    # ipdb.set_trace()
     self.transform = transform
     self.mode = mode
     self.no_flipping = no_flipping
@@ -124,7 +119,6 @@ class BP4D_FULL(Dataset):
     print ('Finished preprocessing BP4D: %s_full!'%(mode))
     
     self.num_data = len(self.filenames)
-    # ipdb.set_trace()
 
   def preprocess(self):
     self.filenames = []
@@ -146,7 +140,6 @@ class BP4D_FULL(Dataset):
     return self.filenames, self.labels
 
   def __getitem__(self, index):
-    # ipdb.set_trace()
     image = Image.open(self.filenames[index])
 
     return self.transform(image), torch.FloatTensor([0]*12), self.filenames[index]
@@ -159,7 +152,6 @@ class BP4D_FULL(Dataset):
 ######################################################################################################
 class GooglePhotos(Dataset):
   def __init__(self, image_size, metadata_path, transform, mode='aligned', shuffling=False):
-    # ipdb.set_trace()
     self.transform = transform
     self.image_size = image_size
     self.mode = mode
@@ -184,7 +176,6 @@ class GooglePhotos(Dataset):
 ######################################################################################################
 class EmotionNet(Dataset):
   def __init__(self, image_size, metadata_path, transform, mode, shuffling = False, AUs=[]):
-    # ipdb.set_trace()
     self.transform = transform
     self.mode = mode
     self.shuffling = shuffling
@@ -202,11 +193,9 @@ class EmotionNet(Dataset):
 
     if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
-    # random.seed(10)
     self.preprocess()
     self.num_data = len(self.filenames)
     if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
-    # ipdb.set_trace()
 
   def preprocess(self):
     self.filenames = []
@@ -233,7 +222,6 @@ class EmotionNet(Dataset):
     return self.filenames, self.labels
 
   def __getitem__(self, index):
-    # ipdb.set_trace()
     image = Image.open(self.filenames[index]).convert('RGB')
     label = self.labels[index]
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
@@ -292,7 +280,6 @@ class CelebA(Dataset):
         # filename = os.path.abspath('/home/afromero/ssd2/CelebA/Faces/{}'.format(splits[0]))
       else:
         filename = os.path.abspath('/home/roandres/bcv002/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
-      # ipdb.set_trace()
       if not os.path.isfile(filename): continue
       values = splits[1:]
 
@@ -318,7 +305,6 @@ class CelebA(Dataset):
     return self.filenames, self.labels
 
   def __getitem__(self, index):
-    # ipdb.set_trace()
     image = Image.open(self.filenames[index])
     label = self.labels[index]
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
@@ -347,7 +333,6 @@ class DEMO(Dataset):
     self.len = len(self.lines)
 
   def __getitem__(self, index):
-    # ipdb.set_trace()
     image = Image.open(self.lines[index]).convert('RGB')
     return self.transform(image)
 
@@ -392,7 +377,6 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
       transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS),
       transforms.ToTensor(),
       transforms.Normalize(mean, std)])
-  # ipdb.set_trace()
 
   dataset = globals()[dataset](image_size, metadata_path, transform, mode, shuffling=shuffling, AUs=AU[dataset.upper()])
   data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)

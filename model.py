@@ -89,7 +89,6 @@ class Discriminator(nn.Module):
     k_size = int(image_size / np.power(2, repeat_num))
     layers_debug = layers
     self.main = nn.Sequential(*layers)
-    # ipdb.set_trace()
     self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
     self.conv2 = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
     if debug:
@@ -101,11 +100,13 @@ class Discriminator(nn.Module):
 
   def forward(self, x):
     h = self.main(x)
-    # ipdb.set_trace()
     out_real = self.conv1(h).squeeze()
-    out_aux = self.conv2(h).squeeze()
+    out_real = out_real.view(x.size(0), out_real.size(-2), out_real.size(-1))
 
-    return out_real.view(x.size(0), out_real.size(-2), out_real.size(-1)), out_aux.view(x.size(0), out_aux.size(-1))
+    out_aux = self.conv2(h).squeeze()
+    out_aux = out_aux.view(x.size(0), out_aux.size(-1))
+
+    return out_real, out_aux
 
 
 #===============================================================================================#
@@ -126,7 +127,6 @@ class Generator(nn.Module):
     self.style_gen = 'style_gen' in config.GAN_options
     self.DRIT = 'DRIT' in config.GAN_options and not self.InterStyleLabels
     self.AdaIn = 'AdaIn' in config.GAN_options and not 'DRIT' in config.GAN_options 
-    # ipdb.set_trace()
     if self.InterLabels: layers.append(nn.Conv2d(self.color_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     else: layers.append(nn.Conv2d(self.color_dim+self.c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
@@ -208,7 +208,6 @@ class Generator(nn.Module):
 
   def debug(self):
       print('-- Generator:')
-      # ipdb.set_trace()
       if self.InterLabels and self.DRIT: 
         c_dim = self.c_dim*2
         in_dim = self.color_dim
@@ -227,12 +226,10 @@ class Generator(nn.Module):
         feed = print_debug(feed, self.content)
         c = to_var(torch.ones(1, c_dim, feed.size(2), feed.size(3)), volatile=True)
         feed = torch.cat([feed, c], dim=1)
-        # ipdb.set_trace()
       else: 
         feed = to_var(torch.ones(1,in_dim,self.image_size,self.image_size), volatile=True)
       
       features = print_debug(feed, self.layers)
-      # ipdb.set_trace()
       if self.Attention: 
         _ = print_debug(features, self.layers0)
         _ = print_debug(features, self.layers1)
@@ -244,13 +241,11 @@ class Generator(nn.Module):
     if not self.InterLabels:
       c = c.unsqueeze(2).unsqueeze(3)
       c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
-      # ipdb.set_trace()
       x_cat = torch.cat([x, c], dim=1)
     else:
       x_cat = x
 
     if self.InterStyleLabels:
-      # ipdb.set_trace()      
       content = self.content(x_cat)
       c = stochastic*c.unsqueeze(2)
       c = c.unsqueeze(3)
@@ -258,8 +253,6 @@ class Generator(nn.Module):
       x_cat = torch.cat([content, c], dim=1)
 
     elif self.DRIT:
-      # ipdb.set_trace()
-      # ipdb.set_trace()
       content = self.content(x_cat)
       if self.InterLabels:
         c = c.unsqueeze(2).unsqueeze(3)
@@ -305,7 +298,6 @@ class DRITGEN(nn.Module):
 
     self.enc_style = StyleEncoder(config, debug=True)
     self.generator = Generator(config, debug=False)
-    # ipdb.set_trace()
     self.debug()
 
   def debug(self):
@@ -332,7 +324,6 @@ class DRITGEN(nn.Module):
     if len(style)==1:
       style = [style[0].view(style[0].size(0), self.c_dim, -1)]
     else:
-      # ipdb.set_trace()
       style[0] = style[0].view(style[0].size(0), self.c_dim, -1)
       style[1] = style[1].view(style[1].size(0), self.c_dim, -1)      
       std = style[1].data.mul(0.5).exp_()
@@ -387,7 +378,6 @@ class AdaInGEN(nn.Module):
     if len(style)==1:
       style = [style[0].view(style[0].size(0), self.c_dim, -1)]
     else:
-      # ipdb.set_trace()
       style[0] = style[0].view(style[0].size(0), self.c_dim, -1)
       style[1] = style[1].view(style[1].size(0), self.c_dim, -1)
       std = style[1].data.mul(0.5).exp_()
@@ -408,7 +398,6 @@ class AdaInGEN(nn.Module):
       if m.__class__.__name__ == "AdaptiveInstanceNorm2d":
         mean = adain_params[:, :m.num_features]
         std = adain_params[:, m.num_features:2*m.num_features]
-        # ipdb.set_trace()
         m.bias = mean.contiguous().view(-1)
         m.weight = std.contiguous().view(-1)
         if adain_params.size(1) > 2*m.num_features:
@@ -484,9 +473,7 @@ class StyleEncoder(nn.Module):
       features = print_debug(feed, layers)
       if self.FC:
         fc_in = features.view(features.size(0), -1)
-        # ipdb.set_trace()
         features = print_debug(fc_in, layers0)
-
       _ = print_debug(features, [self.style_mu]) 
       if self.lognet:
         _ = print_debug(features, [self.style_var]) 
@@ -512,7 +499,6 @@ class MLP(nn.Module):
 
     super(MLP, self).__init__()
     self._model = []
-    # ipdb.set_trace()
     self._model += [LinearBlock(input_dim, dim, norm=norm, activation=activ)]
     for i in range(n_blk - 2):
       self._model += [LinearBlock(dim, dim, norm=norm, activation=activ)]
@@ -544,7 +530,6 @@ class AdaptiveInstanceNorm2d(nn.Module):
     self.register_buffer('running_var', torch.ones(num_features))
 
   def forward(self, x):
-    # ipdb.set_trace()
     assert self.weight is not None and self.bias is not None, "Please assign weight and bias before calling AdaIN!"
     b, c = x.size(0), x.size(1)
     running_mean = self.running_mean.repeat(b)
