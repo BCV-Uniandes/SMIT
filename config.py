@@ -88,9 +88,11 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'AdaIn')    
 
   if config.batch_size==2:
-    update_folder(config, 'bs_'+str(config.batch_size)) 
+    update_folder(config, 'bs_2') 
 
-
+  if 'RaGAN' in config.GAN_options:
+    config.batch_size *= 2
+    
 def update_folder(config, folder):
   import os
   config.log_path = os.path.join(config.log_path, folder)

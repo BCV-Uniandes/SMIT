@@ -29,7 +29,6 @@ def _compute_loss_smooth(mat):
 #=======================================================================================#
 #=======================================================================================#
 def _CLS_LOSS(output, target):
-  """Compute binary or softmax cross entropy loss."""
   import torch.nn.functional as F
   return F.binary_cross_entropy_with_logits(output, target, size_average=False) / output.size(0)
 
@@ -54,12 +53,12 @@ def _GAN_LOSS(Disc, real_x, fake_x, label, opts, GEN=False):
 
   else:
     if 'HINGE' in opts:
-      d_loss_real = torch.mean(F.relu(1-src_real))
-      d_loss_fake = torch.mean(F.relu(1+src_fake))            
+      loss_real = torch.mean(F.relu(1-src_real))
+      loss_fake = torch.mean(F.relu(1+src_fake))            
     else:
       #Wasserstein
-      d_loss_real = -torch.mean(src_real)
-      d_loss_fake = torch.mean(src_fake)   
+      loss_real = -torch.mean(src_real)
+      loss_fake = torch.mean(src_fake)   
     if GEN: loss_src = loss_real
     else: loss_src = loss_real + loss_fake  
 
@@ -73,7 +72,7 @@ def _get_gradient_penalty(Disc, real_x, fake_x):
   import torch
   from utils import to_cuda, to_var
   alpha = to_cuda(torch.rand(real_x.size(0), 1, 1, 1).expand_as(real_x))
-  interpolated = to_var((alpha * real_x.data + (1 - alpha) * fake_x.data), requires_grad = True)
+  interpolated = to_var((alpha * real_x + (1 - alpha) * fake_x), requires_grad = True)
   out, _ = Disc(interpolated)
 
   grad = torch.autograd.grad(outputs=out,

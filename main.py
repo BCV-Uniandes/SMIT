@@ -83,7 +83,7 @@ if __name__ == '__main__':
   parser.add_argument('--c_dim',            type=int, default=12)
   parser.add_argument('--color_dim',        type=int, default=3)
   parser.add_argument('--image_size',       type=int, default=128)
-  parser.add_argument('--batch_size',       type=int, default=128)
+  parser.add_argument('--batch_size',       type=int, default=64)
   parser.add_argument('--num_workers',      type=int, default=4)
   parser.add_argument('--num_epochs',       type=int, default=200)
   parser.add_argument('--num_epochs_decay', type=int, default=50)
