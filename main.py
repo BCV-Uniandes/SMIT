@@ -36,8 +36,8 @@ def main(config):
 
   data_loader = get_loader(config.metadata_path, config.image_size,
                    config.image_size, config.batch_size, config.dataset, config.mode, \
-                   color_jitter='COLOR_JITTER' in config.GAN_options, AU=config.AUs, fake_label=config.mode_train=='CLS' and 'JUST_REAL' not in config.CLS_options,\
-                   mean=config.mean, std=config.std, num_workers=config.num_workers, ratio=config.ratio)   
+                   color_jitter='COLOR_JITTER' in config.GAN_options, AU=config.AUs,\
+                   mean=config.mean, std=config.std, num_workers=config.num_workers)   
 
 
   if config.mode_train=='CLS':
@@ -83,9 +83,9 @@ if __name__ == '__main__':
   parser.add_argument('--c_dim',            type=int, default=12)
   parser.add_argument('--color_dim',        type=int, default=3)
   parser.add_argument('--image_size',       type=int, default=128)
-  parser.add_argument('--batch_size',       type=int, default=16)
+  parser.add_argument('--batch_size',       type=int, default=128)
   parser.add_argument('--num_workers',      type=int, default=4)
-  parser.add_argument('--num_epochs',       type=int, default=199)
+  parser.add_argument('--num_epochs',       type=int, default=200)
   parser.add_argument('--num_epochs_decay', type=int, default=50)
   parser.add_argument('--beta1',            type=float, default=0.5)
   parser.add_argument('--beta2',            type=float, default=0.999)
@@ -97,7 +97,6 @@ if __name__ == '__main__':
   parser.add_argument('--model_save_path',  type=str, default='./snapshot/models')
   parser.add_argument('--sample_path',      type=str, default='./snapshot/samples')
   parser.add_argument('--DEMO_path',      type=str, default='')
-  # parser.add_argument('--result_path', type=str, default='./snapshot/results')  
 
   # Generative 
   parser.add_argument('--g_conv_dim',       type=int, default=64)
@@ -106,41 +105,17 @@ if __name__ == '__main__':
   parser.add_argument('--d_repeat_num',     type=int, default=6)
   parser.add_argument('--g_lr',             type=float, default=0.0001)
   parser.add_argument('--d_lr',             type=float, default=0.0001)
-  parser.add_argument('--lambda_cls',       type=float, default=1)
+  parser.add_argument('--lambda_cls',       type=float, default=1)  
   parser.add_argument('--lambda_rec',       type=float, default=10.0)
   parser.add_argument('--lambda_gp',        type=float, default=10.0)
   parser.add_argument('--lambda_style',     type=float, default=1.0)
   parser.add_argument('--lambda_kl',        type=float, default=1.0)
   parser.add_argument('--lambda_content',   type=float, default=10.0)
-  # parser.add_argument('--lambda_style_cls', type=float, default=5.0)
+
   parser.add_argument('--d_train_repeat',   type=int, default=5)
 
   # Generative settings
   parser.add_argument('--GAN_options',  type=str, default='')
-  # parser.add_argument('--COLOR_JITTER', action='store_true', default=False)  
-  # parser.add_argument('--BLUR',         action='store_true', default=False)   
-  # parser.add_argument('--GRAY',         action='store_true', default=False)  
-  # parser.add_argument('--GOOGLE',       action='store_true', default=False)   
-  # parser.add_argument('--PPT',          action='store_true', default=False)  
-  # parser.add_argument('--VAL_SHOW',     action='store_true', default=False)  
-  # parser.add_argument('--LSGAN',        action='store_true', default=False) 
-  # parser.add_argument('--L1_LOSS',      action='store_true', default=False) 
-  # parser.add_argument('--L2_LOSS',      action='store_true', default=False) 
-  # parser.add_argument('--NO_TANH',      action='store_true', default=False) 
-  # parser.add_argument('--NEW_GEN',      action='store_true', default=False) ################
-  # parser.add_argument('--HINGE',        action='store_true', default=False) 
-  # parser.add_argument('--SpectralNorm', action='store_true', default=False) 
-  # parser.add_argument('--SAGAN',        action='store_true', default=False) 
-  # parser.add_argument('--TTUR',         action='store_true', default=False) 
-  # parser.add_argument('--REAL_LABELS',action='store_true', default=False)   
-
-  # Classifier Settings
-  parser.add_argument('--CLS_options',     type=str, default='')
-  parser.add_argument('--c_lr',            type=float, default=0.0001)
-  parser.add_argument('--DENSENET',        action='store_true', default=False)  
-  parser.add_argument('--Generator_path',  type=str, default='')
-  parser.add_argument('--ratio',           type=int, default=0)
-  parser.add_argument('--stop_training',   type=int, default=15, help='How many epochs of plateau before stop')
 
   # Misc
   parser.add_argument('--use_tensorboard', action='store_true', default=False)
@@ -156,8 +131,6 @@ if __name__ == '__main__':
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
-  config.CLS_options = config.CLS_options.split(',')
-  # ipdb.set_trace()
   os.environ['CUDA_VISIBLE_DEVICES'] = str(int(float(config.GPU)))
   if not torch.cuda.is_available():
     config.GPU='no_cuda'
@@ -166,7 +139,6 @@ if __name__ == '__main__':
 
 
   if config.mode=='train':
-
     # Create directories if not exist
     if not os.path.exists(config.log_path): os.makedirs(config.log_path)
     if not os.path.exists(config.model_save_path): os.makedirs(config.model_save_path)

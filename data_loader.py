@@ -33,11 +33,10 @@ def get_aus_emotionnet(metadata_path, mode):
 ###                                                BP4D                                            ###
 ######################################################################################################
 class BP4D(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, fake_label = False, shuffling = False, AUs=[]):
+  def __init__(self, image_size, metadata_path, transform, mode, shuffling = False, AUs=[]):
     # ipdb.set_trace()
     self.transform = transform
     self.mode = mode
-    self.fake_label = fake_label
     self.shuffling = shuffling
     self.image_size = image_size
     self.AUs = AUs
@@ -86,11 +85,7 @@ class BP4D(Dataset):
   def __getitem__(self, index):
     # ipdb.set_trace()
     image = Image.open(self.filenames[index])
-    if not self.fake_label: 
-      label = self.labels[index]
-    else:
-      # np.random.seed(index)
-      label = self.labels_au[np.random.randint(0,len(self.labels_au),1)[0]]
+    label = self.labels[index]
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
 
   def __len__(self):
@@ -188,7 +183,7 @@ class GooglePhotos(Dataset):
 ###                                            EmotionNet                                          ###
 ######################################################################################################
 class EmotionNet(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, fake_label = False, shuffling = False, AUs=[]):
+  def __init__(self, image_size, metadata_path, transform, mode, shuffling = False, AUs=[]):
     # ipdb.set_trace()
     self.transform = transform
     self.mode = mode
@@ -253,49 +248,13 @@ class EmotionNet(Dataset):
     random.shuffle(self.labels)
 
 ######################################################################################################
-###                                            MNIST                                               ###
-######################################################################################################
-class MNIST(Dataset):
-  from sklearn.preprocessing import OneHotEncoder
-  def __init__(self, image_size, metadata_path, transform, mode, fake_label = False, shuffling = False, AUs=[]):
-    # ipdb.set_trace()
-    self.transform = transform
-    self.name = 'MNIST'
-    data_loader = datasets.MNIST('data/MNIST', train=mode=='train', download=True, transform=self.transform)
-    self.imgs = getattr(data_loader, mode + '_data')
-    self.labels = getattr(data_loader, mode + '_labels')
-    # ipdb.set_trace()
-
-  def get_data(self):
-    return self.imgs, self.labels
-
-  def __getitem__(self, index):
-    # ipdb.set_trace()
-    image = Image.fromarray(self.imgs[index].numpy())
-    one_hot = torch.zeros(10)
-    one_hot[self.labels[index]]=1
-    return self.transform(image), one_hot, ''
-
-  def __len__(self):
-    return self.imgs.size(0)
-
-  def shuffle(self, seed):
-    random.seed(seed)
-    random.shuffle(self.imgs)
-    random.seed(seed)
-    random.shuffle(self.labels)  
-
-
-
-######################################################################################################
 ###                                              CelebA                                            ###
 ######################################################################################################
 class CelebA(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, fake_label = False, shuffling=False, AUs=[]):
+  def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, AUs=[]):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
-    self.fake_label = fake_label
     self.AUs = AUs
     self.name = 'CelebA'
     # self.lines = open(metadata_path, 'r').readlines()
@@ -361,11 +320,7 @@ class CelebA(Dataset):
   def __getitem__(self, index):
     # ipdb.set_trace()
     image = Image.open(self.filenames[index])
-    if not self.fake_label: 
-      label = self.labels[index]
-    else:
-      # np.random.seed(index)
-      label = self.labels_au[np.random.randint(0,len(self.labels_au),1)[0]]
+    label = self.labels[index]
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
 
   def __len__(self):
@@ -381,7 +336,7 @@ class CelebA(Dataset):
 ###                                              DEMO                                              ###
 ######################################################################################################
 class DEMO(Dataset):
-  def __init__(self, image_size, img_path, transform, mode, fake_label=False,shuffling=False, AUs=[]):
+  def __init__(self, image_size, img_path, transform, mode, shuffling=False, AUs=[]):
     self.img_path = img_path
     self.transform = transform
 
@@ -403,7 +358,7 @@ class DEMO(Dataset):
 ###                                              LOADER                                            ###
 ######################################################################################################
 def get_loader(metadata_path, crop_size, image_size, batch_size, \
-        dataset=['BP4D'], mode='train', ratio=0, fake_label=False,\
+        dataset='BP4D', mode='train', \
         shuffling = False, color_jitter=False, AU=dict,\
         mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5), num_workers=0):
   """Build and return data loader."""
@@ -411,10 +366,7 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
   # resize = image_size + (image_size//20)
   crop_size = image_size 
 
-  transform_resize = [transforms.Resize((crop_size+10, crop_size+10), interpolation=Image.ANTIALIAS)] if crop_size==64 else []
-
-  if dataset[0]=='MNIST':
-    transform_resize = [transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS)]     
+  transform_resize = [transforms.Resize((crop_size+10, crop_size+10), interpolation=Image.ANTIALIAS)] if crop_size==64 else [] 
 
   if mode == 'train':
     if color_jitter:
@@ -430,7 +382,7 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
         # transform_resize,
         # transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS),
         transforms.CenterCrop((crop_size, crop_size)),
-        # transforms.RandomHorizontalFlip(),
+        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean, std)])  
 
@@ -441,35 +393,10 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
       transforms.ToTensor(),
       transforms.Normalize(mean, std)])
   # ipdb.set_trace()
-  if dataset[0]=='Google':
-    dataset = globals()["Google"](image_size, 'data', transform, mode=mode, shuffling=shuffling)
-    data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    return [data_loader]
 
-  elif len(dataset)==1:
-    # ipdb.set_trace()
-    dataset = globals()[dataset[0]](image_size, metadata_path, transform, mode, shuffling=shuffling, fake_label = fake_label, AUs=AU[dataset[0].upper()])
-    data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    return [data_loader]
-
-  elif len(dataset)==2:
-    # dataset1 -> fake, dataset2 -> real. Ratio: fake/real over batch
-    assert ratio%1==0, "Ratio must be [0,100] integer."   
-     
-    dataset1 = globals()[dataset[0]](image_size, metadata_path, transform, mode, fake_label=fake_label, shuffling=shuffling, AUs=AU[dataset[0].upper()])
-    batch_size1 = int(batch_size*ratio/100)
-    # images1, labels1 = dataset1.get_data()
-    dataset2 = globals()[dataset[1]](image_size, metadata_path, transform, mode, shuffling=shuffling, AUs=AU[dataset[1].upper()])
-    batch_size2 = batch_size - batch_size1
-    # images2, labels2 = dataset2.get_data()
-    ipdb.set_trace()
-    data_loader1 = DataLoader(dataset=dataset1, batch_size=batch_size1, shuffle=False, num_workers=num_workers)
-    data_loader2 = DataLoader(dataset=dataset2, batch_size=batch_size2, shuffle=False, num_workers=num_workers)
-    # ipdb.set_trace()
-    if len(data_loader2)<len(data_loader1):
-      return [data_loader2, data_loader1]
-    else:
-      return [data_loader1, data_loader2]
+  dataset = globals()[dataset](image_size, metadata_path, transform, mode, shuffling=shuffling, AUs=AU[dataset.upper()])
+  data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+  return data_loader
 
 ######################################################################################################
 ######################################################################################################
