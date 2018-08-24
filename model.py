@@ -244,9 +244,12 @@ class Generator(nn.Module):
       c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
       x_cat = torch.cat([x, c], dim=1)
 
-    if self.InterStyleLabels:
+    if self.InterStyleLabels or self.InterLabels:
       content = self.content(x_cat)
-      c = stochastic*c.unsqueeze(2)
+      if self.InterStyleLabels:
+        c = stochastic*c.unsqueeze(2)
+      else: 
+        c = c.unsqueeze(2)
       c = c.unsqueeze(3)
       c = c.expand(c.size(0), c.size(1), content.size(2), content.size(3))
       x_cat = torch.cat([content, c], dim=1)
