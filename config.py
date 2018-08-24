@@ -87,12 +87,21 @@ def config_GENERATOR(config, update_folder):
     if not 'Stochastic' in config.GAN_options: 
       update_folder(config, 'AdaIn')    
 
+  if 'Split_Optim_all' in config.GAN_options: 
+    update_folder(config, 'Split_Optim_all') 
+
+  elif 'Split_Optim' in config.GAN_options: 
+    update_folder(config, 'Split_Optim') 
+
+  if 'Split_Data' in config.GAN_options: 
+    update_folder(config, 'Split_Data')     
+
   if config.batch_size==2:
     update_folder(config, 'bs_2') 
 
   if 'RaGAN' in config.GAN_options:
     config.batch_size *= 2
-    
+
 def update_folder(config, folder):
   import os
   config.log_path = os.path.join(config.log_path, folder)
