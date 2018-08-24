@@ -35,13 +35,34 @@ class Solver(object):
       else: from model import DRITGEN as GEN
     else: from model import Generator as GEN
     self.G = GEN(self.config, debug=True)
-    G_parameters = filter(lambda p: p.requires_grad, self.G.parameters())
+    # ipdb.set_trace()
+
+    if 'Stochastic' in self.config.GAN_options and ('Split_Optim' in self.config.GAN_options or 'Split_Optim_all' in self.config.GAN_options):
+      # ipdb.set_trace()
+      # [param for name, param in self.G.state_dict().iteritems() if 'foo' in name]
+      # names = [name for name, param in self.G.generator.state_dict().iteritems()]
+      if 'Split_Optim_all' in self.config.GAN_options:
+        
+        G_parameters = [param for name, param in self.G.generator.named_parameters() if 'content' not in name]#self.G.generator.parameters()
+        C_parameters = [param for name, param in self.G.generator.named_parameters() if 'content' in name]#self.G.generator.parameters()
+        C_parameters = filter(lambda p: p.requires_grad, C_parameters)
+        self.c_optimizer = torch.optim.Adam(C_parameters, self.config.g_lr, [self.config.beta1, self.config.beta2])
+      else:
+        G_parameters = self.G.generator.parameters()
+      S_parameters = self.G.enc_style.parameters()
+      S_parameters = filter(lambda p: p.requires_grad, S_parameters)
+      self.s_optimizer = torch.optim.Adam(S_parameters, self.config.g_lr, [self.config.beta1, self.config.beta2])
+      
+    else:
+      G_parameters = self.G.parameters()
+    G_parameters = filter(lambda p: p.requires_grad, G_parameters)
     self.g_optimizer = torch.optim.Adam(G_parameters, self.config.g_lr, [self.config.beta1, self.config.beta2])
     to_cuda(self.G)
 
     if self.config.mode=='train': 
       self.D = Discriminator(self.config, debug=True) 
-      D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
+      D_parameters = self.D.parameters()
+      D_parameters = filter(lambda p: p.requires_grad, D_parameters)
       self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr, [self.config.beta1, self.config.beta2])
       to_cuda(self.D)
       self.print_network(self.D, 'Discriminator')
@@ -110,6 +131,10 @@ class Solver(object):
   def reset_grad(self):
     self.g_optimizer.zero_grad()
     self.d_optimizer.zero_grad()
+    if 'Stochastic' in self.config.GAN_options and 'Split_Optim' in self.config.GAN_options:
+      self.s_optimizer.zero_grad()
+      if 'Split_Optim_all' in GAN_options:
+        self.c_optimizer.zero_grad()
 
   #=======================================================================================#
   #=======================================================================================#
@@ -319,10 +344,9 @@ class Solver(object):
           ############################## Stochastic Part ##################################
           if 'Stochastic' in GAN_options:
             style_real1 = self.G.get_style(real_x1)
-            style_fake1 = [s[rand_idx1] for s in style_real1]
             if 'style_labels' in GAN_options:
               style_real1 = [s*real_c1.unsqueeze(2) for s in style_real1]
-              style_fake1 = [s*fake_c1.unsqueeze(2) for s in style_fake1]
+            style_fake1 = [s[rand_idx1] for s in style_real1]
           else:
             style_real1 = style_fake1 = None
 
@@ -334,18 +358,15 @@ class Solver(object):
 
           ## REC LOSS
           if 'L1_LOSS' in GAN_options:
-            g_loss_rec = F.l1_loss(real_x1, fake_x1[0]) + \
-                         F.l1_loss(fake_x1[0], rec_x1[0])         
+            g_loss_rec = F.l1_loss(real_x1, fake_x1[0]) + F.l1_loss(fake_x1[0], rec_x1[0])         
           else:
             g_loss_rec = F.l1_loss(real_x1, rec_x1[0])
 
           g_loss_rec = g_loss_rec*self.config.lambda_rec
           g_loss_cls = g_loss_cls*self.config.lambda_cls
-
           loss['Gsrc'] = get_loss_value(g_loss_src)
           loss['Grec'] = get_loss_value(g_loss_rec)
           loss['Gcls'] = get_loss_value(g_loss_cls)
-
           self.update_loss('Gsrc', loss['Gsrc'])
           self.update_loss('Grec', loss['Grec'])
           self.update_loss('Gcls', loss['Gcls'])
@@ -355,14 +376,12 @@ class Solver(object):
 
           ############################## Attention Part ###################################
           if 'Attention' in GAN_options:
-
             g_loss_mask = self.config.lambda_mask * (torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
             g_loss_mask_smooth = self.config.lambda_mask_smooth * (_compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(fake_x1[1])) 
-
             loss['Gatm'] = get_loss_value(g_loss_mask)
-            loss['Gats'] = get_loss_value(g_loss_mask_smooth)     
+            # loss['Gats'] = get_loss_value(g_loss_mask_smooth)     
             self.update_loss('Gatm', loss['Gatm'])
-            self.update_loss('Gats', loss['Gats'])
+            # self.update_loss('Gats', loss['Gats']) #Does not fit in window
             g_loss += g_loss_mask + g_loss_mask_smooth
 
           ############################## KL Part ###################################
@@ -381,33 +400,45 @@ class Solver(object):
 
           ############################## Stochastic Part ###################################
           if 'Stochastic' in GAN_options: 
-
             _style_fake1 = self.G.get_style(fake_x1[0])
             _style_rec1 = self.G.get_style(rec_x1[0])
             if 'style_labels' in GAN_options:
               _style_fake1 = [s*fake_c1.unsqueeze(2) for s in _style_fake1]
               _style_rec1 = [s*real_c1.unsqueeze(2) for s in _style_rec1]
 
-            g_loss_style = (self.config.lambda_style/10) * (F.l1_loss(style_real1[0], _style_rec1[0]) +
-                                                       F.l1_loss(_style_fake1[0], style_fake1[0]))
+            mu_index = 1 if 'LOGVAR' in GAN_options else 0
+            g_loss_style = (self.config.lambda_style/10) * (F.l1_loss(style_real1[mu_index], _style_rec1[mu_index]) +
+                                                       F.l1_loss(_style_fake1[mu_index], style_fake1[mu_index]))
+            if 'LOGVAR' in GAN_options:
+              g_loss_style += (self.config.lambda_style/10) * (F.l1_loss(style_real1[2], _style_rec1[2]) +
+                                                         F.l1_loss(_style_fake1[2], style_fake1[2]))              
             loss['Gsty'] = get_loss_value(g_loss_style)
             self.update_loss('Gsty', loss['Gsty'])
             g_loss += g_loss_style
 
+            self.reset_grad()
+            g_loss.backward()
+            if 'Stochastic' in GAN_options and ('Split_Optim' in GAN_options or 'Split_Optim_all' in GAN_options):
+              self.s_optimizer.step()
+              if 'Split_Optim_all' in GAN_options:
+                self.c_optimizer.step()
+            self.g_optimizer.step()            
+
             if 'kl_loss' in GAN_options:
 
-              self.reset_grad()
-              # g_loss.backward(retain_graph=True)
-              g_loss.backward()
-              self.g_optimizer.step()
+              # TODO new data for this section. Split exclusive data here
+              if 'Stochastic' in GAN_options and 'Split_Data' in GAN_options: 
+                real_x1 = real_x0
+                fake_c1 = fake_c0
+                real_c1 = real_c0
 
               style_real1 = self.G.get_style(real_x1)
               style_random1 = to_var(self.G.random_style(real_x1))
 
               if 'style_labels' in GAN_options:
                 style_random1 *= fake_c1.unsqueeze(2)              
-              fake_x1_random = self.G(real_x1, fake_c1, stochastic = style_random1)
-              rec_x1_random  = self.G(fake_x1_random[0], real_c1, stochastic = style_real1[0]) 
+              fake_x1_random = self.G(real_x1, fake_c1, stochastic = style_random1, CONTENT='content_loss' in GAN_options)
+              rec_x1_random  = self.G(fake_x1_random[0], real_c1, stochastic = style_real1[0], CONTENT='content_loss' in GAN_options)
 
               _style_fake_random1 = self.G.get_style(fake_x1_random[0])
               # _style_rec_random1 = self.G.get_style(rec_x1_random[0])                
@@ -416,9 +447,7 @@ class Solver(object):
                 _style_fake_random1 = [s*fake_c1.unsqueeze(2) for s in _style_fake_random1]
 
               mu_index = 1 if 'LOGVAR' in GAN_options else 0
-              g_loss_style_random = self.config.lambda_style * (
-                                      F.l1_loss(_style_fake_random1[mu_index], style_random1) 
-                                      )
+              g_loss_style_random = self.config.lambda_style * (F.l1_loss(_style_fake_random1[mu_index], style_random1))
               g_loss_src_random, g_loss_cls_random = self._GAN_LOSS(fake_x1_random[0], real_x1, fake_c1, GEN=True)
               g_loss_cls_random = g_loss_cls_random*self.config.lambda_cls
 
@@ -426,7 +455,7 @@ class Solver(object):
                 g_loss_rec_random = F.l1_loss(real_x1, fake_x1_random[0]) + F.l1_loss(fake_x1_random[0], rec_x1_random[0])
               else:
                 g_loss_rec_random = F.l1_loss(real_x1, rec_x1_random[0])
-              g_loss_rec_random = self.config.lambda_rec * g_loss_rec_random
+              g_loss_rec_random = self.config.lambda_rec * g_loss_rec_random               
 
               loss['Gsrcr'] = get_loss_value(g_loss_src_random)
               loss['Gclsr'] = get_loss_value(g_loss_cls_random)
@@ -438,32 +467,29 @@ class Solver(object):
               self.update_loss('Gclsr', loss['Gclsr'])
               g_loss = g_loss_src_random + g_loss_cls_random + g_loss_rec_random + g_loss_style_random
 
+              if 'content_loss' in GAN_options:
+                g_loss_content_random = self.config.lambda_content * F.l1_loss(fake_x1_random[-1], rec_x1_random[-1])
+                loss['Gconr'] = get_loss_value(g_loss_content_random)
+                self.update_loss('Gconr', loss['Gconr'])       
+                g_loss += g_loss_content_random  
+
               if 'Attention' in GAN_options:
-
-                g_loss_mask_random = self.config.lambda_mask * (
-                          torch.mean(fake_x1_random[1]) +
-                          torch.mean(rec_x1_random[1])
-                          )
-                g_loss_mask_smooth_random = self.config.lambda_mask_smooth * (
-                        _compute_loss_smooth(fake_x1_random[1]) +
-                        _compute_loss_smooth(rec_x1_random[1])
-                        )     
-
+                g_loss_mask_random = self.config.lambda_mask * (torch.mean(fake_x1_random[1]) + torch.mean(rec_x1_random[1]))
+                g_loss_mask_smooth_random = self.config.lambda_mask_smooth * (_compute_loss_smooth(fake_x1_random[1]) + _compute_loss_smooth(rec_x1_random[1]))
                 loss['Gatmr'] = get_loss_value(g_loss_mask_random)
-                loss['Gatsr'] = get_loss_value(g_loss_mask_smooth_random)     
+                # loss['Gatsr'] = get_loss_value(g_loss_mask_smooth_random)     
                 self.update_loss('Gatmr', loss['Gatmr'])
-                self.update_loss('Gatsr', loss['Gatsr'])    
-
+                # self.update_loss('Gatsr', loss['Gatsr'])    
                 g_loss += g_loss_mask_random + g_loss_mask_smooth_random
-
-          self.reset_grad()
-          g_loss.backward()
-          self.g_optimizer.step()
+              self.reset_grad()
+              g_loss.backward()
+              self.g_optimizer.step()
+              if 'Stochastic' in GAN_options and 'Split_Optim_all' in GAN_options:
+                self.c_optimizer.step()              
 
         #=======================================================================================#
         #========================================MISCELANEOUS===================================#
         #=======================================================================================#
-
         # PRINT log info
         if (i+1) % self.config.log_step == 0 or (i+1)==last_model_step or i+e==0:
           progress_bar.set_postfix(**loss)
@@ -473,14 +499,13 @@ class Solver(object):
               self.logger.scalar_summary(tag, value, e * last_model_step + i + 1)
 
         # Save current fake
-        if (i+1) % (self.config.log_step*2) == 0 or (i+1)==last_model_step or i+e==0:
+        if (i+1) % self.config.sample_step == 0 or (i+1)==last_model_step or i+e==0:
           name = os.path.join(self.config.sample_path, 'current_fake.jpg')
           self.save_fake_output(fixed_x, name)
 
-        # Translate fixed images for debugging
-        if (i+1) % self.config.sample_step == 0 or (i+1)==last_model_step or i+e==0:
-          name = os.path.join(self.config.sample_path, '{}_{}_fake.jpg'.format(E, i+1))
-          self.save_fake_output(fixed_x, name)
+      # Translate fixed images for debugging
+      name = os.path.join(self.config.sample_path, '{}_{}_fake.jpg'.format(E, i+1))
+      self.save_fake_output(fixed_x, name)
 
       self.save(E, i+1)
                  

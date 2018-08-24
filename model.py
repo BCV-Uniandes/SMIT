@@ -179,8 +179,7 @@ class Generator(nn.Module):
       layers0.append(nn.Tanh())
       self.layers0 = layers0
       self.img_reg = nn.Sequential(*layers0)
-      #######
-
+      
       layers1 = []
       layers1.append(nn.Conv2d(curr_dim, 1, kernel_size=7, stride=1, padding=3, bias=False))
       layers1.append(nn.Sigmoid())
@@ -238,12 +237,12 @@ class Generator(nn.Module):
 
   def forward(self, x, c, stochastic=None, CONTENT=False):
     # replicate spatially and concatenate domain information
-    if not self.InterLabels:
+    if self.InterLabels:
+      x_cat = x
+    else:
       c = c.unsqueeze(2).unsqueeze(3)
       c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
       x_cat = torch.cat([x, c], dim=1)
-    else:
-      x_cat = x
 
     if self.InterStyleLabels:
       content = self.content(x_cat)
