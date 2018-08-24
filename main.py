@@ -96,7 +96,7 @@ if __name__ == '__main__':
   parser.add_argument('--log_path',         type=str, default='./snapshot/logs')
   parser.add_argument('--model_save_path',  type=str, default='./snapshot/models')
   parser.add_argument('--sample_path',      type=str, default='./snapshot/samples')
-  parser.add_argument('--DEMO_path',      type=str, default='')
+  parser.add_argument('--DEMO_path',        type=str, default='')
 
   # Generative 
   parser.add_argument('--g_conv_dim',       type=int, default=64)
@@ -109,25 +109,25 @@ if __name__ == '__main__':
   parser.add_argument('--lambda_rec',       type=float, default=10.0)
   parser.add_argument('--lambda_gp',        type=float, default=10.0)
   parser.add_argument('--lambda_style',     type=float, default=1.0)
-  parser.add_argument('--lambda_kl',        type=float, default=1.0)
+  parser.add_argument('--lambda_kl',        type=float, default=0.001)
   parser.add_argument('--lambda_content',   type=float, default=10.0)
 
   parser.add_argument('--d_train_repeat',   type=int, default=5)
 
   # Generative settings
-  parser.add_argument('--GAN_options',  type=str, default='')
+  parser.add_argument('--GAN_options',      type=str, default='')
 
   # Misc
-  parser.add_argument('--use_tensorboard', action='store_true', default=False)
-  parser.add_argument('--TEST',            action='store_true', default=False)  
-  parser.add_argument('--DISPLAY_NET',     action='store_true', default=False) 
-  parser.add_argument('--DELETE',          action='store_true', default=False)
-  parser.add_argument('--GPU',             type=str, default='0')
+  parser.add_argument('--use_tensorboard',  action='store_true', default=False)
+  parser.add_argument('--TEST',             action='store_true', default=False)  
+  parser.add_argument('--DISPLAY_NET',      action='store_true', default=False) 
+  parser.add_argument('--DELETE',           action='store_true', default=False)
+  parser.add_argument('--GPU',              type=str, default='0')
 
   # Step size
-  parser.add_argument('--log_step',        type=int, default=250)
-  parser.add_argument('--sample_step',     type=int, default=500)
-  parser.add_argument('--model_save_step', type=int, default=2000000)
+  parser.add_argument('--log_step',         type=int, default=50)
+  parser.add_argument('--sample_step',      type=int, default=500)
+  parser.add_argument('--model_save_step',  type=int, default=10000)
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
