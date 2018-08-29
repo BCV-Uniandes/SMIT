@@ -43,6 +43,7 @@ def print_debug(feed, layers):
                                     or isinstance(layer, nn.Linear) \
                                     or isinstance(layer, ResidualBlock) \
                                     or isinstance(layer, LinearBlock) \
+                                    or isinstance(layer, Conv2dBlock) \
                                     or isinstance(layer, SpectralNormalization):
       print(str(layer).split('(')[0], feed.size())
   print(' ')
@@ -247,6 +248,8 @@ class Generator(nn.Module):
     if self.InterStyleLabels or self.InterLabels:
       content = self.content(x_cat)
       if self.InterStyleLabels:
+        if stochastic.size(-1)!=content.size(-1):
+          stochastic = stochastic.repeat(1,1,content.size(-1)//stochastic.size(-1))        
         c = stochastic*c.unsqueeze(2)
       else: 
         c = c.unsqueeze(2)
@@ -254,11 +257,21 @@ class Generator(nn.Module):
       c = c.expand(c.size(0), c.size(1), content.size(2), content.size(3))
       x_cat = torch.cat([content, c], dim=1)
 
+      if self.DRIT and not self.InterStyleLabels:
+        # ipdb.set_trace()
+        if stochastic.size(-1)!=content.size(-1):
+          stochastic = stochastic.repeat(1,1,content.size(-1)//stochastic.size(-1))
+        stochastic = stochastic.unsqueeze(3)
+        stochastic = stochastic.expand(stochastic.size(0), stochastic.size(1), stochastic.size(2), stochastic.size(2))
+        x_cat = torch.cat([x_cat, stochastic], dim=1)    
+
     elif self.DRIT:
       content = self.content(x_cat)
       if self.InterLabels:
         c = c.unsqueeze(2).unsqueeze(3)
         c = c.expand(c.size(0), c.size(1), content.size(2), content.size(3))        
+        if stochastic.size(-1)!=content.size(-1):
+          stochastic = stochastic.repeat(1,1,content.size(-1)//stochastic.size(-1))        
         stochastic = stochastic.unsqueeze(3)
         stochastic = stochastic.expand(stochastic.size(0), stochastic.size(1), stochastic.size(2), stochastic.size(2))
         x_cat = torch.cat([content, c, stochastic], dim=1)        
@@ -272,7 +285,7 @@ class Generator(nn.Module):
       features = self.main(x_cat)
       fake_img = self.img_reg(features)
       mask_img = self.attetion_reg(features)
-      fake_img = (mask_img * x) + ((1 - mask_img) * fake_img)
+      fake_img = mask_img * x + (1 - mask_img) * fake_img
       output = [fake_img, mask_img]
 
     elif self.AdaIn:  
@@ -429,17 +442,26 @@ class StyleEncoder(nn.Module):
     self.FC = 'FC' in config.GAN_options
     self.lognet = 'LOGVAR' in config.GAN_options
     layers = []
-    layers.append(nn.Conv2d(color_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
-    layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
-    layers.append(nn.ReLU(inplace=True))
+    norm = 'none'
+    activ = 'relu'
+    pad_type = 'reflect'
+    layers.append(Conv2dBlock(color_dim, conv_dim, 7, 1, 3, norm=norm, activation=activ, pad_type=pad_type))
+    # layers.append(nn.Conv2d(color_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
+    # layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
+    # layers.append(nn.ReLU(inplace=True))
 
     # Down-Sampling
-    conv_repeat = int(math.log(image_size, 2))-2
+    if style_dim==4:
+      down = 1 
+    else:
+      down =2
+    conv_repeat = int(math.log(image_size, 2))-down #1 until 2x2, 2 for 4x4
     curr_dim = conv_dim
     for i in range(conv_repeat):
-      layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
-      layers.append(nn.InstanceNorm2d(curr_dim*2, affine=True))
-      layers.append(nn.ReLU(inplace=True))
+      layers.append(Conv2dBlock(curr_dim, curr_dim*2, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type))
+      # layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
+      # layers.append(nn.InstanceNorm2d(curr_dim*2, affine=True))
+      # layers.append(nn.ReLU(inplace=True))
 
       # Bottleneck
       # for i in range(2):
@@ -447,12 +469,11 @@ class StyleEncoder(nn.Module):
 
       curr_dim = curr_dim * 2    
 
-    if self.mono_style: 
+    if style_dim==1: 
       layers.append(nn.AdaptiveAvgPool2d(1)) # global average pooling
-      self.style_mu = nn.Conv2d(curr_dim, style_dim, kernel_size=1, stride=1, padding=0, bias=False)
-      if self.lognet:
-        self.style_var = nn.Conv2d(curr_dim, style_dim, kernel_size=1, stride=1, padding=0, bias=False)
-    elif self.FC:
+      conv_repeat = conv_repeat+down
+
+    if self.FC:
       k_size = int(image_size / np.power(2, conv_repeat))
       layers0=[]
       layers0.append(nn.Linear(curr_dim*k_size*k_size, 256, bias=True))  
@@ -460,13 +481,13 @@ class StyleEncoder(nn.Module):
       layers0.append(nn.Linear(256, 256, bias=True))  
       layers0.append(nn.Dropout(0.5))
       self.fc = nn.Sequential(*layers0)
-      self.style_mu = nn.Linear(256, self.c_dim*k_size*k_size, bias=False)
+      self.style_mu = nn.Linear(256, self.c_dim*k_size*k_size)
       if self.lognet:
-        self.style_var = nn.Linear(256, self.c_dim*k_size*k_size, bias=False)
+        self.style_var = nn.Linear(256, self.c_dim*k_size*k_size)
     else:
-      self.style_mu = nn.Conv2d(curr_dim, self.c_dim, kernel_size=1, stride=1, padding=0, bias=False)
+      self.style_mu = nn.Conv2d(curr_dim, self.c_dim, kernel_size=1, stride=1, padding=0)
       if self.lognet:
-        self.style_var = nn.Conv2d(curr_dim, self.c_dim, kernel_size=1, stride=1, padding=0, bias=False)
+        self.style_var = nn.Conv2d(curr_dim, self.c_dim, kernel_size=1, stride=1, padding=0)
     self.main = nn.Sequential(*layers)
 
     if debug:
@@ -593,3 +614,63 @@ class LinearBlock(nn.Module):
         if self.activation:
             out = self.activation(out)
         return out    
+
+#===============================================================================================#
+#===============================================================================================#
+class Conv2dBlock(nn.Module):
+    def __init__(self, input_dim ,output_dim, kernel_size, stride,
+                 padding=0, norm='none', activation='relu', pad_type='zero'):
+        super(Conv2dBlock, self).__init__()
+        self.use_bias = True
+        # initialize padding
+        if pad_type == 'reflect':
+            self.pad = nn.ReflectionPad2d(padding)
+        elif pad_type == 'replicate':
+            self.pad = nn.ReplicationPad2d(padding)
+        elif pad_type == 'zero':
+            self.pad = nn.ZeroPad2d(padding)
+        else:
+            assert 0, "Unsupported padding type: {}".format(pad_type)
+
+        # initialize normalization
+        norm_dim = output_dim
+        if norm == 'bn':
+            self.norm = nn.BatchNorm2d(norm_dim)
+        elif norm == 'in':
+            # self.norm = nn.InstanceNorm2d(norm_dim, track_running_stats=True)
+            self.norm = nn.InstanceNorm2d(norm_dim)
+        elif norm == 'ln':
+            self.norm = LayerNorm(norm_dim)
+        elif norm == 'adain':
+            self.norm = AdaptiveInstanceNorm2d(norm_dim)
+        elif norm == 'none':
+            self.norm = None
+        else:
+            assert 0, "Unsupported normalization: {}".format(norm)
+
+        # initialize activation
+        if activation == 'relu':
+            self.activation = nn.ReLU(inplace=True)
+        elif activation == 'lrelu':
+            self.activation = nn.LeakyReLU(0.2, inplace=True)
+        elif activation == 'prelu':
+            self.activation = nn.PReLU()
+        elif activation == 'selu':
+            self.activation = nn.SELU(inplace=True)
+        elif activation == 'tanh':
+            self.activation = nn.Tanh()
+        elif activation == 'none':
+            self.activation = None
+        else:
+            assert 0, "Unsupported activation: {}".format(activation)
+
+        # initialize convolution
+        self.conv = nn.Conv2d(input_dim, output_dim, kernel_size, stride, bias=self.use_bias)
+
+    def forward(self, x):
+        x = self.conv(self.pad(x))
+        if self.norm:
+            x = self.norm(x)
+        if self.activation:
+            x = self.activation(x)
+        return x
