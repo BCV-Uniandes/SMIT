@@ -40,11 +40,19 @@ def config_GENERATOR(config, update_folder):
     config.lambda_mask_smooth = 0.0001
     update_folder(config, 'Attention')  
 
+  if 'AdaIn' in config.GAN_options or 'Stochastic' in config.GAN_options:
+    config.mlp_dim=256
+    # config.style_dim=1#4
+
   if 'Stochastic' in config.GAN_options:
     # config.lambda_style = 1
     if not 'AdaIn' in config.GAN_options and not 'info_like' in config.GAN_options: config.GAN_options.append('AdaIn')    
     update_folder(config, 'Stochastic') 
-    update_folder(config, 'style_'+str(config.lambda_style))
+    if config.style_dim==16:
+      update_folder(config, 'style_'+str(config.lambda_style))
+    else:
+      update_folder(config, 'style_{}_dim_{}'.format(config.lambda_style, config.style_dim))
+    
 
     if 'InterStyleLabels' in config.GAN_options: 
       if not 'InterLabels' in config.GAN_options: config.GAN_options.append('InterLabels')
@@ -74,12 +82,8 @@ def config_GENERATOR(config, update_folder):
     if 'LOGVAR' in config.GAN_options:
       update_folder(config, 'LOGVAR')   
 
-  if 'FC' in config.GAN_options: 
-    update_folder(config, 'FC')     
-
-  if 'AdaIn' in config.GAN_options or 'Stochastic' in config.GAN_options:
-    config.mlp_dim=256
-    config.style_dim=16
+    if 'FC' in config.GAN_options: 
+      update_folder(config, 'FC')     
 
     if 'kl_loss' in config.GAN_options: 
       # config.lambda_kl = 10
@@ -94,7 +98,10 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'Split_Optim') 
 
   if 'Split_Data' in config.GAN_options: 
-    update_folder(config, 'Split_Data')     
+    update_folder(config, 'Split_Data')   
+
+  if 'mse_style' in config.GAN_options: 
+    update_folder(config, 'mse_style')          
 
   if config.batch_size==2:
     update_folder(config, 'bs_2') 
