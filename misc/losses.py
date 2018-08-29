@@ -34,7 +34,7 @@ def _CLS_LOSS(output, target):
 
 #=======================================================================================#
 #=======================================================================================#
-def _GAN_LOSS(Disc, real_x, fake_x, label, opts, GEN=False):
+def _GAN_LOSS(Disc, real_x, fake_x, label, opts, is_fake=False):
   import torch
   import torch.nn.functional as F
   src_real, cls_real = Disc(real_x)
@@ -59,7 +59,7 @@ def _GAN_LOSS(Disc, real_x, fake_x, label, opts, GEN=False):
       #Wasserstein
       loss_real = -torch.mean(src_real)
       loss_fake = torch.mean(src_fake)   
-    if GEN: loss_src = loss_real
+    if is_fake: loss_src = loss_real
     else: loss_src = loss_real + loss_fake  
 
   loss_cls = _CLS_LOSS(cls_real, label)
