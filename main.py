@@ -112,6 +112,8 @@ if __name__ == '__main__':
   parser.add_argument('--lambda_kl',        type=float, default=0.001)
   parser.add_argument('--lambda_content',   type=float, default=10.0)
 
+  parser.add_argument('--style_dim',        type=int, default=16, choices=[1, 4, 16])
+
   parser.add_argument('--d_train_repeat',   type=int, default=5)
 
   # Generative settings
@@ -125,7 +127,7 @@ if __name__ == '__main__':
   parser.add_argument('--GPU',              type=str, default='0')
 
   # Step size
-  parser.add_argument('--log_step',         type=int, default=50)
+  parser.add_argument('--log_step',         type=int, default=10)
   parser.add_argument('--sample_step',      type=int, default=500)
   parser.add_argument('--model_save_step',  type=int, default=10000)
 
