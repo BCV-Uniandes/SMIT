@@ -183,7 +183,10 @@ class EmotionNet(Dataset):
     self.name = 'EmotionNet'
     self.image_size = image_size if image_size>=128 else 130
     if os.path.isdir('/home/afromero/ssd2/EmotionNet2018'):
-      self.ssd = '/home/afromero/ssd2/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
+      if 'faces' in metadata_path:
+        self.ssd = '/home/afromero/ssd2/EmotionNet2018/faces/{}'.format(mode)
+      else:
+        self.ssd = '/home/afromero/ssd2/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
     else:
       self.ssd = '/scratch_net/pengyou/Felipe/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
 
