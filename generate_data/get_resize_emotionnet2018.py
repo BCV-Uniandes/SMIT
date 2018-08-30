@@ -12,8 +12,7 @@ import skimage.transform
 def imshow(im_file, resize=0):
     import matplotlib.pyplot as plt
     img = imageio.imread(im_file)
-    if resize:
-        img = (skimage.transform.resize(img, (resize, resize))*255).astype(np.uint8)
+    if resize: img = (skimage.transform.resize(img, (resize, resize))*255).astype(np.uint8)
     plt.imshow(img)
     plt.show()
 
@@ -63,7 +62,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     modes = ['train', 'val']
     folder_root = '/home/afromero/ssd2/EmotionNet2018/data'
-    # face_root = '/home/afromero/Codes/ActionUnits/data/Faces/BP4D/Sequences'
 
     option='|'
     if args.face:
@@ -80,10 +78,8 @@ if __name__ == '__main__':
 
         if not os.path.isdir(size_root): os.makedirs(size_root)  
 
-    # ipdb.set_trace()
     img_files = [sorted(glob.glob(folder_root+'/'+mode+'/*.jpg')) for mode in modes]
 
-    # ipdb.set_trace()  
     for idx, mode in enumerate(modes):   
         for org_file in tqdm.tqdm(img_files[idx], total=len(img_files[idx]), \
                 desc='%s Files [%s]'%(option,mode), ncols=80, leave=True):
@@ -97,6 +93,4 @@ if __name__ == '__main__':
 
             elif args.resize:
                 resize_file = org_file.replace(folder_root, size_root)    
-                # ipdb.set_trace() 
                 get_resize(org_file, resize_file, args.img_size)
-            # ipdb.set_trace()

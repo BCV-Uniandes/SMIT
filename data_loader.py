@@ -354,7 +354,10 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
   # resize = image_size + (image_size//20)
   crop_size = image_size 
 
-  transform_resize = [transforms.Resize((crop_size+5, crop_size+5), interpolation=Image.ANTIALIAS)] if crop_size==64 else [] 
+  if 'face' in metadata_path:
+    transform_resize = [transforms.Resize((crop_size+5, crop_size+5), interpolation=Image.ANTIALIAS)] if crop_size==64 else [] 
+  else:
+    transform_resize = [transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS)] if crop_size==64 else [] 
 
   if mode == 'train':
     if color_jitter:
