@@ -77,7 +77,7 @@ if __name__ == '__main__':
   parser.add_argument('--dataset_fake',     type=str, default='EmotionNet', choices=['BP4D', 'EmotionNet', 'CelebA', 'MNIST'])
   parser.add_argument('--dataset_real',     type=str, default='', choices=['','BP4D', 'EmotionNet', 'CelebA'])  
   parser.add_argument('--fold',             type=str, default='0')
-  parser.add_argument('--mode_data',        type=str, default='normal', choices=['normal', 'aligned'])   
+  parser.add_argument('--mode_data',        type=str, default='normal', choices=['normal', 'faces'])   
   parser.add_argument('--mode_train',       type=str, default='GAN', choices=['GAN', 'CLS'])   
   parser.add_argument('--mode',             type=str, default='train', choices=['train', 'val', 'test']) 
   parser.add_argument('--c_dim',            type=int, default=12)
@@ -99,6 +99,8 @@ if __name__ == '__main__':
   parser.add_argument('--DEMO_path',        type=str, default='')
 
   # Generative 
+  parser.add_argument('--MultiDis',         type=int, default=0)
+  parser.add_argument('--PerceptualLoss',   type=str, default='', choices=['', 'DeepFace'])
   parser.add_argument('--g_conv_dim',       type=int, default=64)
   parser.add_argument('--d_conv_dim',       type=int, default=64)
   parser.add_argument('--g_repeat_num',     type=int, default=6)

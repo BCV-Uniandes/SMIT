@@ -107,7 +107,88 @@ class Discriminator(nn.Module):
     out_aux = self.conv2(h).squeeze()
     out_aux = out_aux.view(x.size(0), out_aux.size(-1))
 
-    return out_real, out_aux
+    return [out_real], [out_aux]
+
+#===============================================================================================#
+#===============================================================================================#
+class MultiDiscriminator(nn.Module):
+  # Multi-scale discriminator architecture
+  def __init__(self, config, debug=False):
+    super(MultiDiscriminator, self).__init__()
+
+    self.image_size = config.image_size
+    self.conv_dim = config.d_conv_dim
+    self.repeat_num = config.d_repeat_num    
+    self.c_dim = config.c_dim
+    self.color_dim = config.color_dim
+    SN = 'SpectralNorm' in config.GAN_options
+    self.SpectralNorm = get_SN(SN)
+    
+    self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
+    self.cnns_main = nn.ModuleList() 
+    self.cnns_src = nn.ModuleList()
+    self.cnns_aux = nn.ModuleList()
+    # ipdb.set_trace()
+    for idx in range(config.MultiDis):
+      self.cnns_main.append(self._make_net(idx)[0])
+      self.cnns_src.append(self._make_net(idx)[1])
+      self.cnns_aux.append(self._make_net(idx)[2])
+
+    if debug:
+      feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True)
+      # ipdb.set_trace()
+      for idx, (model, src, aux) in enumerate(zip(self.cnns_main, self.cnns_src, self.cnns_aux)):
+        # ipdb.set_trace()
+        print('-- MultiDiscriminator ({}):'.format(idx))
+        features = print_debug(feed, model)
+        _ = print_debug(features, src)
+        _ = print_debug(features, aux).view(feed.size(0), -1)     
+        feed = self.downsample(feed)      
+
+  def _make_net(self, idx=0):
+    conv_size = self.image_size/(2**(idx))   
+    layers = [] 
+    layers.append(self.SpectralNorm(nn.Conv2d(self.color_dim, self.conv_dim, kernel_size=4, stride=2, padding=1)))
+    layers.append(nn.LeakyReLU(0.01, inplace=True))
+    curr_dim = self.conv_dim
+    for i in range(1, self.repeat_num-1):
+      layers.append(self.SpectralNorm(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1)))
+      layers.append(nn.LeakyReLU(0.01, inplace=True))
+      curr_dim *= 2     
+      conv_size /= 2
+
+    # ipdb.set_trace()
+    main = nn.Sequential(*layers)
+    src = nn.Sequential(*[nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)])
+    aux = nn.Sequential(*[nn.Conv2d(curr_dim, self.c_dim, kernel_size=conv_size//2, bias=False)])
+    return main, src, aux
+
+
+    # layers = []
+    # cnn_x += [Conv2dBlock(self.c_dim, dim, 4, 2, 1, norm='none', activation=self.activ, pad_type=self.pad_type)]
+    # conv_size /= 2 
+    # for i in range(self.repeat_num - 1):
+    #   cnn_x += [Conv2dBlock(dim, dim * 2, 4, 2, 1, norm=self.norm, activation=self.activ, pad_type=self.pad_type)]
+    #   dim *= 2
+    #   conv_size /= 2 
+    # # ipdb.set_trace()
+    # main = nn.Sequential(*cnn_x)
+    # src = nn.Sequential(*[nn.Conv2d(dim, 1, 1, 1, 0)])
+    # aux = nn.Sequential(*[nn.Conv2d(dim, self.c_dim, conv_size, 1, 0)])
+    # return main, src, aux
+
+  def forward(self, x):
+    outs_src = []; outs_aux = []
+    # ipdb.set_trace()
+    for model, src, aux in zip(self.cnns_main, self.cnns_src, self.cnns_aux):
+      # ipdb.set_trace()
+      main = model(x)
+      src = src(main)
+      aux = aux(main).view(main.size(0), -1)
+      outs_src.append(src)
+      outs_aux.append(aux)
+      x = self.downsample(x)
+    return outs_src, outs_aux  
 
 
 #===============================================================================================#
