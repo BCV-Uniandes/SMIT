@@ -1,12 +1,12 @@
 import torch, os, time, ipdb, glob, math, warnings, datetime
-# import torch.nn as nn
+import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from torchvision.utils import save_image
 import config as cfg
 from tqdm import tqdm
 from misc.utils import denorm, get_aus, get_loss_value, PRINT, TimeNow, TimeNow_str, to_cuda, to_var
-from misc.losses import _compute_kl, _compute_loss_smooth, _GAN_LOSS, _get_gradient_penalty
+from misc.losses import _compute_kl, _compute_loss_smooth, _compute_vgg_loss, _GAN_LOSS, _get_gradient_penalty
 warnings.filterwarnings('ignore')
 
 class Solver(object):
@@ -29,7 +29,10 @@ class Solver(object):
   #=======================================================================================#
   def build_model(self):
     # Define a generator and a discriminator
-    from model import Discriminator
+    if self.config.MultiDis>0:
+      from model import MultiDiscriminator as Discriminator
+    else:
+      from model import Discriminator
     if 'AdaIn' in self.config.GAN_options:
       if 'DRIT' not in self.config.GAN_options: from model import AdaInGEN as GEN
       else: from model import DRITGEN as GEN
@@ -68,6 +71,17 @@ class Solver(object):
       to_cuda(self.D)
       self.print_network(self.D, 'Discriminator')
     self.print_network(self.G, 'Generator')
+
+    if self.config.PerceptualLoss:
+      # Load VGG model if needed
+      import importlib
+      perceptual = importlib.import_module('models.perceptual.{}'.format(self.config.PerceptualLoss))
+      # ipdb.set_trace()
+      self.vgg = getattr(perceptual, self.config.PerceptualLoss)()
+      to_cuda(self.vgg)
+      self.vgg.eval()
+      for param in self.vgg.parameters():
+          param.requires_grad = False                
 
   #=======================================================================================#
   #=======================================================================================#
@@ -166,6 +180,11 @@ class Solver(object):
   #=======================================================================================#
   def PRINT(self, str):  
     PRINT(self.config.log, str)
+
+  #=======================================================================================#
+  #=======================================================================================#
+  def _compute_vgg_loss(self, data_x, data_y):
+    return _compute_vgg_loss(self.vgg, data_x, data_y)
 
   #=======================================================================================#
   #=======================================================================================#
@@ -360,9 +379,9 @@ class Solver(object):
             style_real1 = self.G.get_style(real_x1)
             # style_fake1 = [s[rand_idx1] for s in style_real1]
             style_fake1 = [to_var(self.G.random_style(real_x1))]
-            style_real1_org = style_real1[0].clone()
+            # style_real1_org = style_real1[0].clone()
             if 'style_labels' in GAN_options:
-              style_real1 = [s*real_c1.unsqueeze(2) for s in style_real1]
+              # style_real1 = [s*real_c1.unsqueeze(2) for s in style_real1]
               style_fake1 = [s*fake_c1.unsqueeze(2) for s in style_fake1]     
 
           else:
@@ -374,14 +393,18 @@ class Solver(object):
           ## GAN LOSS
           g_loss_src, g_loss_cls = self._GAN_LOSS(fake_x1[0], real_x1, fake_c1, is_fake=True)
 
-          ## REC LOSS
-          if 'L1_LOSS' in GAN_options:
-            g_loss_rec = criterion_l1(fake_x1[0], real_x1) + criterion_l1(rec_x1[0], fake_x1[0].detach())         
+          if self.config.PerceptualLoss:
+            # Load VGG model if needed
+            g_loss_rec = self._compute_vgg_loss(real_x1, rec_x1[0])         
+
           else:
-            g_loss_rec = criterion_l1(rec_x1[0], real_x1)
+            ## REC LOSS
+            if 'L1_LOSS' in GAN_options:
+              g_loss_rec = criterion_l1(fake_x1[0], real_x1) + criterion_l1(rec_x1[0], fake_x1[0].detach())         
+            else:
+              g_loss_rec = criterion_l1(rec_x1[0], real_x1)
 
-          g_loss_rec = g_loss_rec*self.config.lambda_rec
-
+          g_loss_rec = g_loss_rec*self.config.lambda_rec            
           # recon_x1 = self.G(real_x1, real_c1, stochastic = style_real1[0])
           # g_loss_rrec = criterion_l1(real_x1, recon_x1[0])
           # g_loss_rec += g_loss_rrec*self.config.lambda_rec
@@ -426,7 +449,7 @@ class Solver(object):
 
           ############################## KL Part ###################################
           if 'kl_loss' in GAN_options:
-            g_loss_kl = self.config.lambda_kl * (_compute_kl(style_real1_org)) #style_fake1 is the same with shuffle
+            g_loss_kl = self.config.lambda_kl * (_compute_kl(style_real1)) #style_fake1 is the same with shuffle
             # if 'content_loss' in GAN_options:
             #   g_loss_kl += self.config.lambda_kl * (_compute_kl([fake_x1[-1]]))
             self.loss['Gkl'] = get_loss_value(g_loss_kl)
@@ -444,12 +467,20 @@ class Solver(object):
 
             mu_index = 1 if 'LOGVAR' in GAN_options else 0
             # ipdb.set_trace()
-            criterion_style = torch.nn.MSELoss() if 'mse_style' in GAN_options else criterion_l1
+            criterion_style = torch.nn.MSELoss() if 'mse_style' in GAN_options or e>=4 else criterion_l1
             s_loss_style = (self.config.lambda_style) * criterion_style(_style_fake1[mu_index], style_fake1[mu_index])
             self.loss['Gsty'] = get_loss_value(s_loss_style)
             self.update_loss('Gsty', self.loss['Gsty'])
             g_loss += s_loss_style
-            ipdb.set_trace()
+
+            if 'rec_style' in GAN_options:
+              _style_rec1 = self.G.get_style(rec_x1[0])
+              s_loss_style_rec = (self.config.lambda_style) * criterion_style(_style_rec1[0], style_real1[0].detach())
+              self.loss['Gstyr'] = get_loss_value(s_loss_style_rec)
+              self.update_loss('Gstyr', self.loss['Gstyr'])
+              g_loss += s_loss_style_rec              
+
+            # ipdb.set_trace()
             # self.G.state_dict().keys()
             # for name, key in self.G.enc_style.named_parameters(): print(name, key.data.sum())
             # for name, key in self.G.generator.named_parameters(): print(name, key.data.sum())
@@ -463,7 +494,8 @@ class Solver(object):
             # for name, key in self.G.enc_style.named_parameters(): print(name, key.shape)
 
             if 'style_labels' in GAN_options:
-              s_loss_style_label = 10*self.config.lambda_style * (criterion_style(style_real1_org, style_real1[0].detach()))
+              target_real1 = [s*real_c1.unsqueeze(2) for s in style_real1]
+              s_loss_style_label = 10*self.config.lambda_style * (criterion_style(style_real1[0], target_real1[0].detach()))
               self.loss['Gstl'] = get_loss_value(s_loss_style_label)
               self.update_loss('Gstl', self.loss['Gstl'])
               g_loss += s_loss_style_label                
