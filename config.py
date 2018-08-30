@@ -1,5 +1,11 @@
 def config_GENERATOR(config, update_folder):
 
+  if config.MultiDis>0:
+    update_folder(config, 'MultiDis_scale'+str(config.MultiDis))
+
+  if config.PerceptualLoss:
+    update_folder(config, 'PerceptualLoss_'+config.PerceptualLoss)  
+
   if 'COLOR_JITTER' in config.GAN_options: update_folder(config, 'COLOR_JITTER')
   if 'BLUR' in config.GAN_options: update_folder(config, 'BLUR') 
   if 'GRAY' in config.GAN_options: update_folder(config, 'GRAY') 
@@ -102,6 +108,9 @@ def config_GENERATOR(config, update_folder):
 
   if 'mse_style' in config.GAN_options: 
     update_folder(config, 'mse_style')          
+
+  if 'rec_style' in config.GAN_options: 
+    update_folder(config, 'rec_style')              
 
   if config.batch_size==2:
     update_folder(config, 'bs_2') 
