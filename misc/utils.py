@@ -85,18 +85,18 @@ def pdf2png(filename):
 
 #=======================================================================================#
 #=======================================================================================#
-def send_mail(msg="bcv002", list=[], to='rv.andres10@uniandes.edu.co'):
+def send_mail(body="bcv002", attach=[], subject='Message from bcv002', to='rv.andres10@uniandes.edu.co'):
   import os,ipdb,time
   content_type = {'jpg':'image/jpeg', 'gif':'image/gif', 'mp4':'video/mp4'}
-  if len(list):
+  if len(attach): #Must be a list with the files
     enclosed = []
-    for line in list:
+    for line in attach:
       format = line.split('.')[-1]
       enclosed.append('--content-type={} --attach {}'.format(content_type[format], line))
     enclosed = ' '.join(enclosed)
   else:
     enclosed = ''
-  mail = 'echo "{}" | mail -s "Message from bcv002" {} {}'.format(msg, enclosed, to)
+  mail = 'echo "{}" | mail -s "{}" {} {}'.format(body, subject, enclosed, to)
   # print(mail)
   os.system(mail)
 
