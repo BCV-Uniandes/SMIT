@@ -6,28 +6,7 @@ import numpy as np
 from models.spectral import SpectralNorm as SpectralNormalization
 import ipdb
 import math
-
-if int(torch.__version__.split('.')[1])>3:
-  def to_var(x, volatile=False):
-    return to_cuda(x)
-  def to_cuda(x):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if isinstance(x, nn.Module):
-      x.to(device)
-    else:
-      return x.to(device)
-else:
-  from torch.autograd import Variable
-  def to_var(x, volatile=False):
-    return Variable(x, volatile=volatile)
-  def to_cuda(x):
-    if torch.cuda.is_available():
-      if isinstance(x, nn.Module):
-        x.cuda()
-      else:
-        return x.cuda()
-    else:
-      return x
+from misc.utils import to_cuda, to_var
 
 def get_SN(bool):
   if bool:
@@ -38,7 +17,8 @@ def get_SN(bool):
 def print_debug(feed, layers):
   print(feed.size())
   for layer in layers:
-    feed = layer(feed)
+    try:feed = layer(feed)
+    except: ipdb.set_trace()
     if isinstance(layer, nn.Conv2d) or isinstance(layer, nn.ConvTranspose2d) \
                                     or isinstance(layer, nn.Linear) \
                                     or isinstance(layer, ResidualBlock) \
@@ -51,14 +31,16 @@ def print_debug(feed, layers):
 
 class ResidualBlock(nn.Module):
   """Residual Block."""
-  def __init__(self, dim_in, dim_out):
+  def __init__(self, dim_in, dim_out, AdaIn=False):
     super(ResidualBlock, self).__init__()
+    norm1 = AdaptiveInstanceNorm2d(dim_out) if AdaIn else nn.InstanceNorm2d(dim_out, affine=True)
+    norm2 = AdaptiveInstanceNorm2d(dim_out) if AdaIn else nn.InstanceNorm2d(dim_out, affine=True)
     self.main = nn.Sequential(
       nn.Conv2d(dim_in, dim_out, kernel_size=3, stride=1, padding=1, bias=False),
-      nn.InstanceNorm2d(dim_out, affine=True),
+      norm1,
       nn.ReLU(inplace=True),
       nn.Conv2d(dim_out, dim_out, kernel_size=3, stride=1, padding=1, bias=False),
-      nn.InstanceNorm2d(dim_out, affine=True))
+      norm2)
 
   def forward(self, x):
     return x + self.main(x)
@@ -74,9 +56,13 @@ class Discriminator(nn.Module):
     image_size = config.image_size
     conv_dim = config.d_conv_dim
     repeat_num = config.d_repeat_num    
-    c_dim = config.c_dim
+    self.c_dim = config.c_dim
     color_dim = config.color_dim
     SN = 'SpectralNorm' in config.GAN_options
+    self.StyleDisc = 'StyleDisc' in config.GAN_options
+    if self.StyleDisc: 
+      style_dim = config.style_dim
+      self.FC = 'FC' in config.GAN_options
     SpectralNorm = get_SN(SN)
     layers.append(SpectralNorm(nn.Conv2d(color_dim, conv_dim, kernel_size=4, stride=2, padding=1)))
     layers.append(nn.LeakyReLU(0.01, inplace=True))
@@ -91,15 +77,39 @@ class Discriminator(nn.Module):
     layers_debug = layers
     self.main = nn.Sequential(*layers)
     self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
-    self.conv2 = nn.Conv2d(curr_dim, c_dim, kernel_size=k_size, bias=False)
+    self.conv2 = nn.Conv2d(curr_dim, self.c_dim, kernel_size=k_size, bias=False)
+
+    if self.StyleDisc: 
+      if style_dim==1 or style_dim==8: 
+        layers.append(nn.AdaptiveAvgPool2d(1)) # global average pooling
+      if self.FC:
+        layers0=[]
+        layers0.append(nn.Linear(curr_dim*k_size*k_size, 256, bias=True))  
+        layers0.append(nn.Dropout(0.5))  
+        layers0.append(nn.Linear(256, 256, bias=True))  
+        layers0.append(nn.Dropout(0.5))
+        self.fc = nn.Sequential(*layers0)
+        if style_dim==8:
+          out_dim = style_dim
+        else:
+          out_dim = self.c_dim*k_size*k_size   
+        self.style_mu = nn.Linear(256, out_dim)   
+      else:
+        self.style_mu = nn.Conv2d(curr_dim, self.c_dim, kernel_size=3, stride=1, padding=1, bias=False)
     if debug:
-      feed = to_var(torch.ones(1,color_dim,image_size,image_size), volatile=True)
+      feed = to_var(torch.ones(1,color_dim,image_size,image_size), volatile=True, no_cuda=True)
       print('-- Discriminator:')
       features = print_debug(feed, layers_debug)
       _ = print_debug(features, [self.conv1])
-      _ = print_debug(features, [self.conv2])      
+      _ = print_debug(features, [self.conv2])    
 
-  def forward(self, x):
+      if self.StyleDisc:
+        if self.FC:
+          fc_in = features.view(features.size(0), -1)
+          features = print_debug(fc_in, layers0)
+        _ = print_debug(features, [self.style_mu])         
+
+  def forward(self, x, get_style=False):
     h = self.main(x)
     out_real = self.conv1(h).squeeze()
     out_real = out_real.view(x.size(0), out_real.size(-2), out_real.size(-1))
@@ -107,7 +117,21 @@ class Discriminator(nn.Module):
     out_aux = self.conv2(h).squeeze()
     out_aux = out_aux.view(x.size(0), out_aux.size(-1))
 
-    return [out_real], [out_aux]
+    if self.StyleDisc:
+      if self.FC:
+        fc_input = h.view(h.size(0), -1)
+        h = self.fc(fc_input)
+      style_mu = self.style_mu(h)   
+      style = [style_mu]
+      if get_style: 
+        style = [style[0].view(style[0].size(0), self.c_dim, -1)]
+        return style
+    else:
+      style = [None] 
+
+    return [out_real], [out_aux], [style]
+
+
 
 #===============================================================================================#
 #===============================================================================================#
@@ -135,7 +159,7 @@ class MultiDiscriminator(nn.Module):
       self.cnns_aux.append(self._make_net(idx)[2])
 
     if debug:
-      feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True)
+      feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True, no_cuda=True)
       # ipdb.set_trace()
       for idx, (model, src, aux) in enumerate(zip(self.cnns_main, self.cnns_src, self.cnns_aux)):
         # ipdb.set_trace()
@@ -188,7 +212,7 @@ class MultiDiscriminator(nn.Module):
       outs_src.append(src)
       outs_aux.append(aux)
       x = self.downsample(x)
-    return outs_src, outs_aux  
+    return outs_src, outs_aux, None
 
 
 #===============================================================================================#
@@ -206,11 +230,17 @@ class Generator(nn.Module):
     self.Attention = 'Attention' in config.GAN_options
     self.InterLabels = 'InterLabels' in config.GAN_options
     self.InterStyleLabels = 'InterStyleLabels' in config.GAN_options
+    self.InterStyleConcatLabels = 'InterStyleConcatLabels' in config.GAN_options
     self.style_gen = 'style_gen' in config.GAN_options
     self.DRIT = 'DRIT' in config.GAN_options and not self.InterStyleLabels
-    self.AdaIn = 'AdaIn' in config.GAN_options and not 'DRIT' in config.GAN_options 
-    if self.InterLabels: layers.append(nn.Conv2d(self.color_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
-    else: layers.append(nn.Conv2d(self.color_dim+self.c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
+    self.AdaIn = 'AdaIn' in config.GAN_options and not 'DRIT' in config.GAN_options
+    self.AdaIn2 = 'AdaIn2' in config.GAN_options and not 'DRIT' in config.GAN_options 
+    self.AdaIn3 = 'AdaIn3' in config.GAN_options and not 'DRIT' in config.GAN_options 
+    if self.AdaIn2: AdaIn_res=True
+    else: AdaIn_res = False
+    if self.InterLabels or self.InterStyleConcatLabels: in_dim=self.color_dim
+    else: in_dim=self.color_dim+self.c_dim
+    layers.append(nn.Conv2d(in_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
     layers.append(nn.ReLU(inplace=True))     
 
@@ -225,8 +255,10 @@ class Generator(nn.Module):
 
     # Bottleneck
     for i in range(repeat_num):
-      layers.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim))
+      layers.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim, AdaIn=AdaIn_res))
+      if i==int(repeat_num/2)-1 and self.AdaIn and not self.AdaIn3: AdaIn_res=True
       if i==int(repeat_num/2)-1 and (self.InterLabels or self.DRIT or self.InterStyleLabels):
+        if self.AdaIn and not self.AdaIn3: AdaIn_res=True
         self.content = nn.Sequential(*layers)
         layers = []
         curr_dim = curr_dim+self.c_dim    
@@ -235,34 +267,25 @@ class Generator(nn.Module):
     # Up-Sampling
     for i in range(conv_repeat):
       layers.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
-      if self.AdaIn:
-        layers.append(AdaptiveInstanceNorm2d(curr_dim//2))
-      else:
-        layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True))
+      if not self.AdaIn: layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True)) #undesirable to generate images in vastly different styles
       layers.append(nn.ReLU(inplace=True))
       curr_dim = curr_dim // 2
 
-    # self.main = nn.Sequential(*layers)
-    # self.layers = layers
-
-    # layers0 = []
-    # layers0.append(nn.Conv2d(curr_dim, 3, kernel_size=7, stride=1, padding=3, bias=False))
-    # layers0.append(nn.Tanh())
-    # self.layers0 = layers0
-    # self.img_reg = nn.Sequential(*layers0)
-
     if self.Attention:
-      ##ADDED
       self.main = nn.Sequential(*layers)
       self.layers = layers
 
       layers0 = []
+      if self.AdaIn3:
+        layers0.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim, AdaIn=True))       
       layers0.append(nn.Conv2d(curr_dim, self.color_dim, kernel_size=7, stride=1, padding=3, bias=False))
       layers0.append(nn.Tanh())
       self.layers0 = layers0
       self.img_reg = nn.Sequential(*layers0)
       
-      layers1 = []
+      layers1 = []   
+      # if self.AdaIn3:
+      #   layers1.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim, AdaIn=True))         
       layers1.append(nn.Conv2d(curr_dim, 1, kernel_size=7, stride=1, padding=3, bias=False))
       layers1.append(nn.Sigmoid())
       self.layers1 = layers1
@@ -292,7 +315,7 @@ class Generator(nn.Module):
       if self.InterLabels and self.DRIT: 
         c_dim = self.c_dim*2
         in_dim = self.color_dim
-      elif self.InterLabels:
+      elif self.InterLabels or self.InterStyleConcatLabels:
         c_dim = self.c_dim
         in_dim = self.color_dim
       elif self.DRIT:
@@ -303,12 +326,12 @@ class Generator(nn.Module):
         c_dim = 0
 
       if self.InterLabels or self.DRIT: 
-        feed = to_var(torch.ones(1,in_dim, self.image_size,self.image_size), volatile=True)
+        feed = to_var(torch.ones(1,in_dim, self.image_size,self.image_size), volatile=True, no_cuda=True)
         feed = print_debug(feed, self.content)
-        c = to_var(torch.ones(1, c_dim, feed.size(2), feed.size(3)), volatile=True)
+        c = to_var(torch.ones(1, c_dim, feed.size(2), feed.size(3)), volatile=True, no_cuda=True)
         feed = torch.cat([feed, c], dim=1)
       else: 
-        feed = to_var(torch.ones(1,in_dim,self.image_size,self.image_size), volatile=True)
+        feed = to_var(torch.ones(1,in_dim,self.image_size,self.image_size), volatile=True, no_cuda=True)
       
       features = print_debug(feed, self.layers)
       if self.Attention: 
@@ -317,9 +340,9 @@ class Generator(nn.Module):
       elif self.AdaIn: 
         _ = print_debug(features, self.layers0)        
 
-  def forward(self, x, c, stochastic=None, CONTENT=False):
+  def forward(self, x, c, stochastic=None, CONTENT=False, JUST_CONTENT=False):
     # replicate spatially and concatenate domain information
-    if self.InterLabels:
+    if self.InterLabels or self.InterStyleConcatLabels:
       x_cat = x
     else:
       c = c.unsqueeze(2).unsqueeze(3)
@@ -362,6 +385,9 @@ class Generator(nn.Module):
         stochastic = stochastic.expand(stochastic.size(0), stochastic.size(1), stochastic.size(2), stochastic.size(2))
         x_cat = torch.cat([content, stochastic], dim=1)                
 
+    if JUST_CONTENT:
+      return content
+
     if self.Attention: 
       features = self.main(x_cat)
       fake_img = self.img_reg(features)
@@ -397,16 +423,16 @@ class DRITGEN(nn.Module):
     self.debug()
 
   def debug(self):
-    feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True)
+    feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True, no_cuda=True)
     style = self.get_style(feed, volatile=True)
     self.generator.debug()
     
-  def forward(self, x, c, stochastic=None, CONTENT=False):
+  def forward(self, x, c, stochastic=None, CONTENT=False, JUST_CONTENT=False):
     if stochastic is None:
       style = self.get_style(x)
     else:
       style = stochastic
-    return self.generator(x, c, stochastic=style, CONTENT=CONTENT)
+    return self.generator(x, c, stochastic=style, CONTENT=CONTENT, JUST_CONTENT=JUST_CONTENT)
 
   def random_style(self,x):
     if not self.mono_style: 
@@ -430,6 +456,57 @@ class DRITGEN(nn.Module):
 
 #===============================================================================================#
 #===============================================================================================#
+class AdaInGEN_Label(nn.Module):
+  def __init__(self, config, debug=False):
+    super(AdaInGEN_Label, self).__init__()
+
+    conv_dim = config.g_conv_dim
+    mlp_dim = config.mlp_dim
+    self.color_dim = config.color_dim
+    self.image_size = config.image_size
+    self.c_dim = config.c_dim
+    self.Stochastic = 'Stochastic' in config.GAN_options
+    self.InterStyleConcatLabels= 'InterStyleConcatLabels' in config.GAN_options
+    self.generator = Generator(config, debug=False)
+    self.adain_net = MLP(self.c_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=True)
+    self.debug()
+
+  def debug(self):
+    feed  = to_var(torch.ones(1,self.color_dim,self.image_size,self.image_size), volatile=True, no_cuda=True)
+    label = to_var(torch.ones(1,self.c_dim), volatile=True, no_cuda=True)
+    self.apply_style(feed, label)
+    self.generator.debug()
+    
+  def forward(self, x, c, stochastic=None, CONTENT=False, JUST_CONTENT=False):
+    self.apply_style(x, c)
+    return self.generator(x, c, stochastic=None, CONTENT=CONTENT, JUST_CONTENT=JUST_CONTENT)
+
+  def apply_style(self, image, label):
+    adain_params = self.adain_net(label)
+    self.assign_adain_params(adain_params, self.generator)
+
+
+  def assign_adain_params(self, adain_params, model):
+    # assign the adain_params to the AdaIN layers in model
+    for m in model.modules():
+      if m.__class__.__name__ == "AdaptiveInstanceNorm2d":
+        mean = adain_params[:, :m.num_features]
+        std = adain_params[:, m.num_features:2*m.num_features]
+        m.bias = mean.contiguous().view(-1)
+        m.weight = std.contiguous().view(-1)
+        if adain_params.size(1) > 2*m.num_features:
+          adain_params = adain_params[:, 2*m.num_features:]
+
+  def get_num_adain_params(self, model):
+    # return the number of AdaIN parameters needed by the model
+    num_adain_params = 0
+    for m in model.modules():
+      if m.__class__.__name__ == "AdaptiveInstanceNorm2d":
+        num_adain_params += 2*m.num_features
+    return num_adain_params        
+
+#===============================================================================================#
+#===============================================================================================#
 class AdaInGEN(nn.Module):
   def __init__(self, config, debug=False):
     super(AdaInGEN, self).__init__()
@@ -439,31 +516,34 @@ class AdaInGEN(nn.Module):
     self.color_dim = config.color_dim
     self.image_size = config.image_size
     self.style_dim = config.style_dim    
-    self.mono_style = 'mono_style' in config.GAN_options
-    self.c_dim = config.c_dim if not self.mono_style else 1
-    
-    self.enc_style = StyleEncoder(config, debug=True)
+    self.c_dim = config.c_dim if config.style_dim!=8 else 1
+    self.StyleDisc = 'StyleDisc' in config.GAN_options
+    self.InterStyleConcatLabels= 'InterStyleConcatLabels' in config.GAN_options
+    if not self.StyleDisc: self.enc_style = StyleEncoder(config, debug=True)
     self.generator = Generator(config, debug=False)
-    self.adain_net = MLP(self.style_dim*self.c_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=True)
+    in_dim = self.style_dim*self.c_dim
+    if self.InterStyleConcatLabels: in_dim *=2
+    self.adain_net = MLP(in_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=True)
     self.debug()
 
   def debug(self):
-    feed = to_var(torch.ones(1,self.color_dim,self.image_size,self.image_size), volatile=True)
-    style = self.get_style(feed)
-    self.apply_style(feed, style[0])
+    feed = to_var(torch.ones(1,self.color_dim,self.image_size,self.image_size), volatile=True, no_cuda=True)
+    label = to_var(torch.ones(1,self.c_dim), volatile=True, no_cuda=True)
+    style = to_var(self.random_style(feed), volatile=True, no_cuda=True) #self.get_style(feed)
+    self.apply_style(feed, style, label=label)
     self.generator.debug()
     
-  def forward(self, x, c, stochastic=None, CONTENT=False):
+  def forward(self, x, c, stochastic=None, CONTENT=False, JUST_CONTENT=False):
     if stochastic is None:
       style = self.get_style(x)
       style = style[0]
     else:
       style = stochastic
-    self.apply_style(x, style)
-    return self.generator(x, c, stochastic=style, CONTENT=CONTENT)
+    self.apply_style(x, style, label=c)
+    return self.generator(x, c, stochastic=style, CONTENT=CONTENT, JUST_CONTENT=JUST_CONTENT)
 
-  def random_style(self,x):
-    if not self.mono_style: 
+  def random_style(self, x):
+    if self.style_dim!=8: 
       z = torch.randn(x.size(0), self.c_dim, self.style_dim)
     else:
       z = torch.randn(x.size(0), self.style_dim)
@@ -482,8 +562,12 @@ class AdaInGEN(nn.Module):
       style = [to_var(eps.mul(std).add_(style[0].data), volatile=volatile)] + style
     return style
 
-  def apply_style(self, image, style):
+  def apply_style(self, image, style, label=None):
     # apply style code to an image
+    if self.InterStyleConcatLabels:
+      # ipdb.set_trace()
+      label = label.unsqueeze(2).expand_as(style)
+      style = torch.cat([style, label], dim=2)
     adain_params = self.adain_net(style)
     self.assign_adain_params(adain_params, self.generator)
 
@@ -533,10 +617,10 @@ class StyleEncoder(nn.Module):
 
     # Down-Sampling
     if style_dim==4:
-      down = 1 
+      down = [2,1]
     else:
-      down =2
-    conv_repeat = int(math.log(image_size, 2))-down #1 until 2x2, 2 for 4x4
+      down =[3,3]
+    conv_repeat = int(math.log(image_size, 2))-down[0] #1 until 2x2, 2 for 4x4
     curr_dim = conv_dim
     for i in range(conv_repeat):
       layers.append(Conv2dBlock(curr_dim, curr_dim*2, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type))
@@ -550,11 +634,15 @@ class StyleEncoder(nn.Module):
 
       curr_dim = curr_dim * 2    
 
-    if style_dim==1: 
+    layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
+    curr_dim = curr_dim * 2 
+    
+    if style_dim==1 or style_dim==8: 
       layers.append(nn.AdaptiveAvgPool2d(1)) # global average pooling
-      conv_repeat = conv_repeat+down
 
     if self.FC:
+      # ipdb.set_trace()
+      conv_repeat = conv_repeat+down[1]
       k_size = int(image_size / np.power(2, conv_repeat))
       layers0=[]
       layers0.append(nn.Linear(curr_dim*k_size*k_size, 256, bias=True))  
@@ -562,9 +650,13 @@ class StyleEncoder(nn.Module):
       layers0.append(nn.Linear(256, 256, bias=True))  
       layers0.append(nn.Dropout(0.5))
       self.fc = nn.Sequential(*layers0)
-      self.style_mu = nn.Linear(256, self.c_dim*k_size*k_size)
+      if style_dim==8:
+        out_dim = style_dim
+      else:
+        out_dim = self.c_dim*k_size*k_size
+      self.style_mu = nn.Linear(256, out_dim)
       if self.lognet:
-        self.style_var = nn.Linear(256, self.c_dim*k_size*k_size)
+        self.style_var = nn.Linear(256, out_dim)
     else:
       self.style_mu = nn.Conv2d(curr_dim, self.c_dim, kernel_size=1, stride=1, padding=0)
       if self.lognet:
@@ -572,7 +664,7 @@ class StyleEncoder(nn.Module):
     self.main = nn.Sequential(*layers)
 
     if debug:
-      feed = to_var(torch.ones(1,color_dim,image_size,image_size), volatile=True)
+      feed = to_var(torch.ones(1,color_dim,image_size,image_size), volatile=True, no_cuda=True)
       print('-- StyleEncoder:')
       features = print_debug(feed, layers)
       if self.FC:
@@ -610,7 +702,7 @@ class MLP(nn.Module):
     self.model = nn.Sequential(*self._model)
 
     if debug:
-      feed = to_var(torch.ones(1,input_dim), volatile=True)
+      feed = to_var(torch.ones(1,input_dim), volatile=True, no_cuda=True)
       print('-- MLP:')
       _ = print_debug(feed, self._model)    
 
