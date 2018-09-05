@@ -7,12 +7,11 @@ class Vgg_face_dag(nn.Module):
 
     def __init__(self):
         super(Vgg_face_dag, self).__init__()
-        self.meta = {'mean': [129.186279296875, 104.76238250732422, 93.59396362304688],
+        self.meta = {'name': 'DeepFace',
+                     'mean': [129.186279296875, 104.76238250732422, 93.59396362304688],
                      'std': [1, 1, 1],
                      'imageSize': [224, 224, 3]}
 
-        from collections import OrderedDict
-        self.debug_feats = OrderedDict() # only used for feature verification
         self.conv1_1 = nn.Conv2d(3, 64, kernel_size=[3, 3], stride=(1, 1), padding=(1, 1))
         self.relu1_1 = nn.ReLU()
         self.conv1_2 = nn.Conv2d(64, 64, kernel_size=[3, 3], stride=(1, 1), padding=(1, 1))
@@ -101,10 +100,9 @@ def DeepFace(weights_path='./models/perceptual/DeepFace.pth', **kwargs):
         weights_path (str): If set, loads model weights from the given path
     """
     model = Vgg_face_dag()
-    if weights_path:
-        print(' -- Loading perceptual weights from '+os.path.abspath(weights_path))
-        state_dict = torch.load(weights_path)
-        state_dict = {key:param for key,param in state_dict.items() if 'fc' not in key}
-        # ipdb.set_trace()
-        model.load_state_dict(state_dict)
+    print(' -- Loading perceptual weights from '+os.path.abspath(weights_path))
+    state_dict = torch.load(weights_path)
+    state_dict = {key:param for key,param in state_dict.items() if 'fc' not in key}
+    # ipdb.set_trace()
+    model.load_state_dict(state_dict)
     return model
