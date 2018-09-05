@@ -1,4 +1,6 @@
 def config_GENERATOR(config, update_folder):
+  if config.dataset_fake=='CelebA':
+    config.c_dim=5
 
   if config.MultiDis>0:
     update_folder(config, 'MultiDis_scale'+str(config.MultiDis))
@@ -6,22 +8,26 @@ def config_GENERATOR(config, update_folder):
   if config.PerceptualLoss:
     update_folder(config, 'PerceptualLoss_'+config.PerceptualLoss)  
 
+  if 'L1_Perceptual' in config.GAN_options: 
+    update_folder(config, 'L1_Perceptual_'+str(config.lambda_l1perceptual)) 
+
   if 'COLOR_JITTER' in config.GAN_options: update_folder(config, 'COLOR_JITTER')
   if 'BLUR' in config.GAN_options: update_folder(config, 'BLUR') 
   if 'GRAY' in config.GAN_options: update_folder(config, 'GRAY') 
 
+  if config.d_train_repeat!=5:
+    update_folder(config, 'd_train_repeat_'+str(config.d_train_repeat))
+
   if 'RaGAN' in config.GAN_options: 
     update_folder(config, 'RaGAN')
-    config.d_train_repeat = 1
+    # config.d_train_repeat = 1
 
   if 'L1_LOSS' in config.GAN_options: 
-    update_folder(config, 'L1_LOSS') 
-    update_folder(config, 'lambda_l1_10.0') 
-
-  if 'TTUR' in config.GAN_options:
-    update_folder(config, 'TTUR') 
-    config.d_lr = 0.0004
-    config.d_train_repeat = 1    
+    if config.lambda_l1==1.0:
+      update_folder(config, 'L1_LOSS') 
+      update_folder(config, 'lambda_l1_10.0') 
+    else:
+      update_folder(config, 'L1_LOSS_'+str(config.lambda_l1)) 
 
   if 'SpectralNorm' in config.GAN_options: 
     update_folder(config, 'SpectralNorm')
@@ -42,48 +48,38 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'content_loss_'+str(config.lambda_content))             
 
   if 'Attention' in config.GAN_options: 
-    config.lambda_mask = 1
-    config.lambda_mask_smooth = 0.0001
     update_folder(config, 'Attention')  
 
-  if 'AdaIn' in config.GAN_options or 'Stochastic' in config.GAN_options:
+  if 'AdaIn' in config.GAN_options and not 'Stochastic' in config.GAN_options:
     config.mlp_dim=256
-    # config.style_dim=1#4
+    update_folder(config, 'AdaIn') 
 
   if 'Stochastic' in config.GAN_options:
-    # config.lambda_style = 1
-    if not 'AdaIn' in config.GAN_options and not 'info_like' in config.GAN_options: config.GAN_options.append('AdaIn')    
+    config.mlp_dim=256
+    if not 'AdaIn' in config.GAN_options: config.GAN_options.append('AdaIn')    
     update_folder(config, 'Stochastic') 
-    if config.style_dim==16:
-      update_folder(config, 'style_'+str(config.lambda_style))
-    else:
-      update_folder(config, 'style_{}_dim_{}'.format(config.lambda_style, config.style_dim))
-    
+    update_folder(config, 'style_{}_dim_{}'.format(config.lambda_style, config.style_dim))   
+    if config.style_dim==8 and not 'FC' in config.GAN_options: config.GAN_options.append('FC')
+
+
+    if 'AdaIn2' in config.GAN_options:
+      update_folder(config, 'AdaIn2') 
+
+    if 'AdaIn3' in config.GAN_options:
+      update_folder(config, 'AdaIn3')       
 
     if 'InterStyleLabels' in config.GAN_options: 
       if not 'InterLabels' in config.GAN_options: config.GAN_options.append('InterLabels')
       # if 'DRIT' in config.GAN_options: config.GAN_options.remove('DRIT')    
-      update_folder(config, 'InterStyleLabels')      
+      update_folder(config, 'InterStyleLabels') 
+
+    elif 'InterStyleConcatLabels' in config.GAN_options:
+      update_folder(config, 'InterStyleConcatLabels')
 
     if 'DRIT' in config.GAN_options:   
       update_folder(config, 'DRIT')       
-    if 'mono_style' in config.GAN_options:
-      update_folder(config, 'mono_style')     
     if 'style_labels' in config.GAN_options:
       update_folder(config, 'style_labels') 
-    if 'style_pseudo_random' in config.GAN_options:
-      update_folder(config, 'style_pseudo_random')       
-    if 'style_label_net' in config.GAN_options:
-      if not 'style_labels' in config.GAN_options and 'style_pseudo_random' not in config.GAN_options: config.GAN_options.append('style_labels')
-      update_folder(config, 'style_label_net')       
-
-    if 'vae_like' in config.GAN_options:
-      update_folder(config, 'vae_like') 
-      if not 'kl_loss' in config.GAN_options: config.GAN_options.append('kl_loss')  
-
-    if 'info_like' in config.GAN_options:
-      update_folder(config, 'info_like') 
-      if not 'kl_loss' in config.GAN_options: config.GAN_options.append('kl_loss')        
 
     if 'LOGVAR' in config.GAN_options:
       update_folder(config, 'LOGVAR')   
@@ -92,10 +88,13 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'FC')     
 
     if 'kl_loss' in config.GAN_options: 
-      # config.lambda_kl = 10
       update_folder(config, 'kl_loss_'+str(config.lambda_kl))
     if not 'Stochastic' in config.GAN_options: 
       update_folder(config, 'AdaIn')    
+
+  if 'StyleDisc' in config.GAN_options:
+    update_folder(config, 'StyleDisc')
+    if 'Split_Optim' in config.GAN_options: config.GAN_options.remove('Split_Optim')
 
   if 'Split_Optim_all' in config.GAN_options: 
     update_folder(config, 'Split_Optim_all') 
@@ -103,17 +102,15 @@ def config_GENERATOR(config, update_folder):
   elif 'Split_Optim' in config.GAN_options: 
     update_folder(config, 'Split_Optim') 
 
-  if 'Split_Data' in config.GAN_options: 
-    update_folder(config, 'Split_Data')   
-
   if 'mse_style' in config.GAN_options: 
-    update_folder(config, 'mse_style')          
+    update_folder(config, 'mse_style') 
 
-  if 'rec_style' in config.GAN_options: 
-    update_folder(config, 'rec_style')              
+  if 'rec_style_gan' in config.GAN_options: 
+    update_folder(config, 'rec_style_gan')   
+    config.GAN_options.append('rec_style')
 
-  if config.batch_size==2:
-    update_folder(config, 'bs_2') 
+  elif 'rec_style' in config.GAN_options: 
+    update_folder(config, 'rec_style')      
 
   if 'RaGAN' in config.GAN_options:
     config.batch_size *= 2
