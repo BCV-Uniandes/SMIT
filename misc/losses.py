@@ -84,7 +84,7 @@ def _GAN_LOSS(Disc, real_x, fake_x, label, opts, is_fake=False):
     loss_cls += _CLS_LOSS(cls_real[i], label)
 
   if is_fake and 'StyleDisc' in opts:
-    return loss_src, loss_cls, style_real[0], style_fake[0]
+    return loss_src, loss_cls, style_real, style_fake
   else:
     return  loss_src, loss_cls
 
