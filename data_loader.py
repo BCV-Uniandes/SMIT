@@ -248,6 +248,7 @@ class CelebA(Dataset):
     self.shuffling = shuffling
     self.AUs = AUs
     self.name = 'CelebA'
+    self.metadata_path = metadata_path
     # self.lines = open(metadata_path, 'r').readlines()
     # self.lines = open('/home/afromero/datos2/CelebA/Img/img_align_celeba/_data_aligned.txt').readlines()
     self.lines = open(os.path.abspath('data/CelebA/list_attr_celeba.txt')).readlines()
@@ -266,9 +267,14 @@ class CelebA(Dataset):
     for i, attr in enumerate(attrs):
       self.attr2idx[attr] = i
       self.idx2attr[i] = attr
-
+    #All attr: 5_o_Clock_Shadow Arched_Eyebrows Attractive Bags_Under_Eyes Bald Bangs Big_Lips Big_Nose 
+    #          Black_Hair Blond_Hair Blurry Brown_Hair Bushy_Eyebrows Chubby Double_Chin Eyeglasses 
+    #          Goatee Gray_Hair Heavy_Makeup High_Cheekbones Male Mouth_Slightly_Open Mustache 
+    #          Narrow_Eyes No_Beard Oval_Face Pale_Skin Pointy_Nose Receding_Hairline Rosy_Cheeks 
+    #          Sideburns Smiling Straight_Hair Wavy_Hair Wearing_Earrings Wearing_Hat Wearing_Lipstick 
+    #          Wearing_Necklace Wearing_Necktie Young 
     # self.selected_attrs = ['Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Male', 'Young']
-    self.selected_attrs = ['Eyeglasses', 'Male', 'Mustache', 'No_Beard', 'Pale_Skin', 'Wearing_Hat', 'Young']
+    self.selected_attrs = ['Eyeglasses', 'Male', 'Pale_Skin', 'Smiling', 'Young'] #Sorted alphabetically
     self.filenames = []
     self.labels = []
 
@@ -279,7 +285,10 @@ class CelebA(Dataset):
       splits = line.split()
       img_size = '_'+str(self.image_size) if self.image_size==128 else '' 
       if os.path.isdir('/home/afromero/ssd2/CelebA'):
-        filename = os.path.abspath('/home/afromero/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
+        if 'faces' in self.metadata_path:
+          filename = os.path.abspath('/home/afromero/ssd2/CelebA/Faces/{}'.format(splits[0]))
+        else:
+          filename = os.path.abspath('/home/afromero/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
         # filename = os.path.abspath('/home/afromero/ssd2/CelebA/Faces/{}'.format(splits[0]))
       else:
         filename = os.path.abspath('/home/roandres/bcv002/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
@@ -330,7 +339,7 @@ class DEMO(Dataset):
     self.transform = transform
 
     if os.path.isdir(img_path):
-      self.lines = glob.glob(os.path.join(img_path, '*.jpg'))+glob.glob(os.path.join(img_path, '*.png'))
+      self.lines = sorted(glob.glob(os.path.join(img_path, '*.jpg'))+glob.glob(os.path.join(img_path, '*.png')))
     else:
       self.lines = [self.img_path]
     self.len = len(self.lines)
@@ -354,10 +363,10 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
   # resize = image_size + (image_size//20)
   crop_size = image_size 
 
-  if 'face' in metadata_path:
+  if 'face' not in metadata_path:
     transform_resize = [transforms.Resize((crop_size+5, crop_size+5), interpolation=Image.ANTIALIAS)] if crop_size==64 else [] 
   else:
-    transform_resize = [transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS)] if crop_size==64 else [] 
+    transform_resize = [transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS)] 
 
   if mode == 'train':
     if color_jitter:
