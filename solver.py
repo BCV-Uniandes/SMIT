@@ -39,6 +39,7 @@ class Solver(object):
     elif 'AdaIn' in self.config.GAN_options:
       if 'DRIT' not in self.config.GAN_options: from model import AdaInGEN as GEN
       else: from model import DRITGEN as GEN
+    elif 'DRITZ' in self.config.GAN_options: from model import DRITZGEN as GEN
     else: from model import Generator as GEN
     self.G = GEN(self.config, debug=True)
 
@@ -185,6 +186,15 @@ class Solver(object):
   #=======================================================================================#
   def PRINT(self, str):  
     PRINT(self.config.log, str)
+
+  #=======================================================================================#
+  #=======================================================================================#
+  def _criterion_style(self, output_style, target_style):
+    criterion_style = torch.nn.MSELoss() if 'mse_style' in self.config.GAN_options else torch.nn.L1Loss()
+    loss = 0
+    for style in output_style:
+      loss += criterion_style(style, target_style)
+    return loss
 
   #=======================================================================================#
   #=======================================================================================#
@@ -350,15 +360,15 @@ class Solver(object):
           ############################## Stochastic Part ##################################
           if 'Stochastic' in GAN_options:
             # style_real1 = self.G.get_style(real_x1)
-            style_fake1 = [to_var(self.G.random_style(real_x1))]
-            style_rec1 = [to_var(self.G.random_style(real_x1))]
+            style_fake1 = to_var(self.G.random_style(real_x1))
+            style_rec1 = to_var(self.G.random_style(real_x1))
             if 'style_labels' in GAN_options:
-              style_rec1 = [s*real_c1.unsqueeze(2) for s in style_rec1]  
-              style_fake1 = [s*fake_c1.unsqueeze(2) for s in style_fake1]     
+              style_rec1 = style_rec1*real_c1.unsqueeze(-1)
+              style_fake1 = style_fake1*fake_c1.unsqueeze(-1)     
           else:
-            style_fake1 = style_rec1 = [None]
+            style_fake1 = style_rec1 = None
 
-          fake_x1 = self.G(real_x1, fake_c1, stochastic = style_fake1[0], CONTENT='content_loss' in GAN_options)
+          fake_x1 = self.G(real_x1, fake_c1, stochastic = style_fake1, CONTENT='content_loss' in GAN_options)
 
           ## GAN LOSS
           if 'StyleDisc' in GAN_options:
@@ -373,7 +383,7 @@ class Solver(object):
           self.update_loss('Gcls', self.loss['Gcls'])
 
           ## REC LOSS
-          rec_x1  = self.G(fake_x1[0], real_c1, stochastic = style_rec1[0], CONTENT='content_loss' in GAN_options) 
+          rec_x1  = self.G(fake_x1[0], real_c1, stochastic = style_rec1, CONTENT='content_loss' in GAN_options) 
           if self.config.PerceptualLoss:  
             g_loss_recp = self.config.lambda_perceptual*self._compute_vgg_loss(real_x1, rec_x1[0])     
             self.loss['Grecp'] = get_loss_value(g_loss_recp)
@@ -422,7 +432,7 @@ class Solver(object):
 
           ##############################   Idt Part   ###################################
           if 'idt_loss' in GAN_options:
-            idt_x1 = self.G(real_x1, real_c1*0, stochastic = style_rec1[0]*0)
+            idt_x1 = self.G(real_x1, real_c1*0, stochastic = style_rec1*0)
             g_loss_idt = self.config.lambda_rec * criterion_l1(idt_x1[0], real_x1[0])
             self.loss['Gidt'] = get_loss_value(g_loss_idt)
             self.update_loss('Gidt', self.loss['Gidt'])       
@@ -438,8 +448,8 @@ class Solver(object):
           ############################## Stochastic Part ###################################
           if 'Stochastic' in GAN_options: 
             if 'StyleDisc' not in GAN_options: _style_fake1 = self.G.get_style(fake_x1[0])
-            criterion_style = torch.nn.MSELoss() if 'mse_style' in GAN_options else criterion_l1
-            s_loss_style = (self.config.lambda_style) * criterion_style(_style_fake1[0], style_fake1[0])
+            # ipdb.set_trace()
+            s_loss_style = (self.config.lambda_style) * self._criterion_style(_style_fake1, style_fake1)
             self.loss['Gsty'] = get_loss_value(s_loss_style)
             self.update_loss('Gsty', self.loss['Gsty'])
             # if self.loss['Gsty']>0.75 and e>6 and style_flag:
@@ -452,7 +462,7 @@ class Solver(object):
                 _, g_loss_rec_cls, _style_rec1, _ = self._GAN_LOSS(rec_x1[0], fake_x1[0], real_c1, is_fake=True)
               else:
                 _style_rec1 = self.G.get_style(rec_x1[0])
-              s_loss_style_rec = (self.config.lambda_style) * criterion_style(_style_rec1[0], style_rec1[0].detach())
+              s_loss_style_rec = (self.config.lambda_style) * self._criterion_style(_style_rec1, style_rec1.detach())
               self.loss['Gstyr'] = get_loss_value(s_loss_style_rec)
               self.update_loss('Gstyr', self.loss['Gstyr'])
               g_loss += s_loss_style_rec              
