@@ -10,8 +10,9 @@ def get_aus(image_size, dataset):
   import imageio, glob, torch
   import skimage.transform  
   import numpy as np
+  import ipdb
   resize = lambda x: skimage.transform.resize(imageio.imread(line), (image_size, image_size))
-  imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('data/{}/aus_flat/*.jpeg'.format(dataset)))]
+  imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('data/{}/aus_flat/*g'.format(dataset)))]
   # ipdb.set_trace()   
   imgs = torch.from_numpy(np.concatenate(imgs, axis=2).astype(np.float32)).unsqueeze(0)
   return imgs  
@@ -31,26 +32,27 @@ def imgShow(img):
   from torchvision.utils import save_image
   try:save_image(denorm(img).cpu(), 'dummy.jpg')
   except: save_image(denorm(img.data).cpu(), 'dummy.jpg')
-  #os.system('eog dummy.jpg')  
-  #os.remove('dummy.jpg')    
 
 #=======================================================================================#
 #=======================================================================================#
-def load_vgg16(model_dir):
-  """ Use the model from https://github.com/abhiskk/fast-neural-style/blob/master/neural_style/utils.py """
-  if not os.path.exists(model_dir):
-    os.mkdir(model_dir)
-  if not os.path.exists(os.path.join(model_dir, 'vgg16.weight')):
-    if not os.path.exists(os.path.join(model_dir, 'vgg16.t7')):
-      os.system('wget https://www.dropbox.com/s/76l3rt4kyi3s8x7/vgg16.t7?dl=1 -O ' + os.path.join(model_dir, 'vgg16.t7'))
-    vgglua = load_lua(os.path.join(model_dir, 'vgg16.t7'))
-    vgg = Vgg16()
-    for (src, dst) in zip(vgglua.parameters()[0], vgg.parameters()):
-      dst.data[:] = src
-    torch.save(vgg.state_dict(), os.path.join(model_dir, 'vgg16.weight'))
-  vgg = Vgg16()
-  vgg.load_state_dict(torch.load(os.path.join(model_dir, 'vgg16.weight')))
-  return vgg
+def make_gif(imgs, path):
+  import imageio, numpy as np
+  if 'jpg' in path: path = path.replace('jpg', 'gif')
+  imgs = (imgs[1:].cpu().numpy().transpose(0,2,3,1)*255).astype(np.uint8)
+  size = imgs.shape[1]
+  target_size = (imgs.shape[1], imgs.shape[1], imgs.shape[-1])
+  img_list = []
+  for bs in range(imgs.shape[0]):
+    for x in range(imgs.shape[2]//imgs.shape[1]):
+      img_short = imgs[bs,:,size*x:size*(x+1)]
+      assert img_short.shape==target_size
+      img_list.append(img_short)
+  imageio.mimsave(path, img_list, duration=0.3)
+
+  writer = imageio.get_writer(path.replace('gif','mp4'), fps=3)
+  for im in img_list:
+      writer.append_data(im)
+  writer.close()
 
 #=======================================================================================#
 #=======================================================================================#
@@ -80,6 +82,23 @@ def pdf2png(filename):
       bg.composite(img,0,0)
       bg.save(filename="{}.png".format(filename))
   os.remove('{}.pdf'.format(filename))
+
+#=======================================================================================#
+#=======================================================================================#
+def send_mail(msg="bcv002", list=[], to='rv.andres10@uniandes.edu.co'):
+  import os,ipdb,time
+  content_type = {'jpg':'image/jpeg', 'gif':'image/gif', 'mp4':'video/mp4'}
+  if len(list):
+    enclosed = []
+    for line in list:
+      format = line.split('.')[-1]
+      enclosed.append('--content-type={} --attach {}'.format(content_type[format], line))
+    enclosed = ' '.join(enclosed)
+  else:
+    enclosed = ''
+  mail = 'echo "{}" | mail -s "Message from bcv002" {} {}'.format(msg, enclosed, to)
+  # print(mail)
+  os.system(mail)
 
 #=======================================================================================#
 #=======================================================================================#
@@ -115,21 +134,23 @@ def to_cuda(x):
 
 #=======================================================================================#
 #=======================================================================================#
-def to_var(x, volatile=False, requires_grad=False):
+def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
   import torch
+  if not no_cuda: x = to_cuda(x)
   if int(torch.__version__.split('.')[1])>3:
-    return to_cuda(x)
+    return x
   else:
     from torch.autograd import Variable      
-    return Variable(to_cuda(x), volatile=volatile, requires_grad=requires_grad)  
+    return Variable(x, volatile=volatile, requires_grad=requires_grad)  
 
 #=======================================================================================#
 #=======================================================================================#
 def vgg_preprocess(batch, meta):
   import torch
   tensortype = type(batch.data)
-  (r, g, b) = torch.chunk(batch, 3, dim = 1)
-  batch = torch.cat((b, g, r), dim = 1) # convert RGB to BGR
+  if meta['name']=='DeepFace':
+    (r, g, b) = torch.chunk(batch, 3, dim = 1)
+    batch = torch.cat((b, g, r), dim = 1) # convert RGB to BGR
   batch = (batch + 1) * 255 * 0.5 # [-1, 1] -> [0, 255]
   # batch = resize(batch, )
   mean = tensortype(batch.data.size())
