@@ -56,7 +56,8 @@ def config_GENERATOR(config, update_folder):
 
   if 'Stochastic' in config.GAN_options:
     config.mlp_dim=256
-    if not 'AdaIn' in config.GAN_options: config.GAN_options.append('AdaIn')    
+    if not 'AdaIn' in config.GAN_options and not 'DRIT' in config.GAN_options and not 'DRITZ' in config.GAN_options:
+      config.GAN_options.append('AdaIn')    
     update_folder(config, 'Stochastic') 
     update_folder(config, 'style_{}_dim_{}'.format(config.lambda_style, config.style_dim))   
     if config.style_dim==8 and not 'FC' in config.GAN_options: config.GAN_options.append('FC')
@@ -76,8 +77,14 @@ def config_GENERATOR(config, update_folder):
     elif 'InterStyleConcatLabels' in config.GAN_options:
       update_folder(config, 'InterStyleConcatLabels')
 
-    if 'DRIT' in config.GAN_options:   
-      update_folder(config, 'DRIT')       
+    if 'DRITZ' in config.GAN_options: 
+      if 'Split_Optim' in config.GAN_options: config.GAN_options.remove('Split_Optim')  
+      update_folder(config, 'DRITZ')    
+
+    elif 'DRIT' in config.GAN_options:   
+      if 'Split_Optim' in config.GAN_options: config.GAN_options.remove('Split_Optim')
+      update_folder(config, 'DRIT')    
+
     if 'style_labels' in config.GAN_options:
       update_folder(config, 'style_labels') 
 
@@ -89,8 +96,8 @@ def config_GENERATOR(config, update_folder):
 
     if 'kl_loss' in config.GAN_options: 
       update_folder(config, 'kl_loss_'+str(config.lambda_kl))
-    if not 'Stochastic' in config.GAN_options: 
-      update_folder(config, 'AdaIn')    
+      if not 'Stochastic' in config.GAN_options: 
+        update_folder(config, 'AdaIn')    
 
   if 'StyleDisc' in config.GAN_options:
     update_folder(config, 'StyleDisc')
