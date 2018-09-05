@@ -8,6 +8,7 @@ import tqdm
 import glob
 import imageio
 import skimage.transform
+import horovod.torch as hvd
 
 def imshow(im_file, resize=0):
     import matplotlib.pyplot as plt
@@ -17,14 +18,15 @@ def imshow(im_file, resize=0):
     plt.show()
 
 
-def get_resize(org_file, resized_file, img_size, OF=False):
-    if type(img_size)==int: img_size = [img_size, img_size]
-    elif type(img_size)==list and len(img_size)==1: img_size = [img_file[0], img_size[0]]
-    folder = os.path.dirname(resized_file)
-    if not os.path.isdir(folder): os.makedirs(folder) 
-    # ipdb.set_trace()
-    imageio.imwrite(resized_file, \
-        (skimage.transform.resize(imageio.imread(org_file), (img_size[0], img_size[1]))*255).astype(np.uint8))
+def get_resize(org_file, resized_file, img_size):
+    if not os.path.isfile(face_file):
+        if type(img_size)==int: img_size = [img_size, img_size]
+        elif type(img_size)==list and len(img_size)==1: img_size = [img_file[0], img_size[0]]
+        folder = os.path.dirname(resized_file)
+        if not os.path.isdir(folder): os.makedirs(folder) 
+        # ipdb.set_trace()
+        imageio.imwrite(resized_file, \
+            (skimage.transform.resize(imageio.imread(org_file), (img_size[0], img_size[1]))*255).astype(np.uint8))
   
 class Face():
     def __init__(self):
@@ -48,20 +50,25 @@ class Face():
         return img_face
 
     def get_face_and_save(self, org_file, face_file):
-        face = self.get_face_from_file(org_file)
-        imageio.imwrite(face_file, face)    
+        if not os.path.isfile(face_file):
+            face = self.get_face_from_file(org_file)
+            imageio.imwrite(face_file, face)    
 
 if __name__ == '__main__':    
     import argparse
     import imageio
+    import random
 
     parser = argparse.ArgumentParser(description='Txt file with path_to_image and 12 different AUs to LMDB')
     parser.add_argument('--img_size', type=int, default=128, help='size of the image to resize')
+    parser.add_argument('--GPU', type=int, default=0)
     parser.add_argument('--resize',  action='store_true', default=False)
     parser.add_argument('--face',  action='store_true', default=False)
     args = parser.parse_args()
     modes = ['train', 'val']
     folder_root = '/home/afromero/ssd2/EmotionNet2018/data'
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(int(float(args.GPU)))
 
     option='|'
     if args.face:
@@ -79,7 +86,7 @@ if __name__ == '__main__':
         if not os.path.isdir(size_root): os.makedirs(size_root)  
 
     img_files = [sorted(glob.glob(folder_root+'/'+mode+'/*.jpg')) for mode in modes]
-
+    # [random.shuffle(img) for img in img_files]
     for idx, mode in enumerate(modes):   
         for org_file in tqdm.tqdm(img_files[idx], total=len(img_files[idx]), \
                 desc='%s Files [%s]'%(option,mode), ncols=80, leave=True):
