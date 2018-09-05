@@ -57,7 +57,7 @@ class Discriminator(nn.Module):
     conv_dim = config.d_conv_dim
     repeat_num = config.d_repeat_num    
     self.c_dim = config.c_dim
-    self.s_dim = self.c_dim = config.c_dim if config.style_dim!=8 else 1
+    self.s_dim = config.c_dim if config.style_dim!=8 else 1
     color_dim = config.color_dim
     SN = 'SpectralNorm' in config.GAN_options
     self.StyleDisc = 'StyleDisc' in config.GAN_options
@@ -90,7 +90,7 @@ class Discriminator(nn.Module):
         layers0.append(nn.Linear(256, 256, bias=True))  
         layers0.append(nn.Dropout(0.5))
         self.fc = nn.Sequential(*layers0)
-        out_dim = self.s_dim*self.style_dim  
+        out_dim = self.s_dim*style_dim  
         self.style_mu = nn.Linear(256, out_dim)   
       else:
         self.style_mu = nn.Conv2d(curr_dim, self.s_dim, kernel_size=3, stride=1, padding=1, bias=False)
@@ -120,12 +120,12 @@ class Discriminator(nn.Module):
         fc_input = h.view(h.size(0), -1)
         h = self.fc(fc_input)
       style_mu = self.style_mu(h)   
-      style = [style_mu]
+      style = style_mu
       if get_style: 
-        style = [style[0].view(style[0].size(0), self.c_dim, -1)]
+        style = style.view(style[0].size(0), self.c_dim, -1)
         return style
     else:
-      style = [None] 
+      style = None
 
     return [out_real], [out_aux], [style]
 
@@ -142,7 +142,8 @@ class MultiDiscriminator(nn.Module):
     self.conv_dim = config.d_conv_dim
     self.repeat_num = config.d_repeat_num    
     self.c_dim = config.c_dim
-    self.s_dim = self.c_dim = config.c_dim if config.style_dim!=8 else 1
+    self.DRITZ = 'DRITZ' in config.GAN_options
+    self.s_dim = 1 if config.style_dim==8 or self.DRITZ else config.c_dim
     self.color_dim = config.color_dim
     SN = 'SpectralNorm' in config.GAN_options
     self.StyleDisc = 'StyleDisc' in config.GAN_options
@@ -156,12 +157,13 @@ class MultiDiscriminator(nn.Module):
     self.cnns_src = nn.ModuleList()
     self.cnns_aux = nn.ModuleList()
     if self.StyleDisc: self.cnns_sty = nn.ModuleList()
+    else: self.cnns_sty = []
     # ipdb.set_trace()
     for idx in range(config.MultiDis):
       self.cnns_main.append(self._make_net(idx)[0])
       self.cnns_src.append(self._make_net(idx)[1])
       self.cnns_aux.append(self._make_net(idx)[2])
-      if self.StyleDisc: self.cnns_sty.append(self._make_net(idx)[3])
+      self.cnns_sty.append(self._make_net(idx)[3])
 
     if debug:
       feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True, no_cuda=True)
@@ -229,16 +231,16 @@ class MultiDiscriminator(nn.Module):
         if self.FC:
           main = main.view(main.size(0), -1) 
         _sty = sty(main)
-        outs_sty.append(_sty.unsqueeze(0))
-      
+        outs_sty.append(_sty)
+      else:
+        outs_sty.append(None)
 
       x = self.downsample(x)
-    if self.StyleDisc:
-      outs_sty = [torch.cat(outs_sty,dim=0).mean(dim=0)]
-    else:
-      outs_sty = [None]
-    if get_style: 
-      outs_sty = [outs_sty[0].view(outs_sty[0].size(0), self.c_dim, -1)]
+
+    if get_style and self.StyleDisc: 
+      outs_sty = [out.unsqueeze(0) for out in outs_sty]
+      outs_sty = torch.cat(outs_sty,dim=0).mean(dim=0)
+      outs_sty = [outs_sty.view(outs_sty[0].size(0), self.c_dim, -1)]
       return outs_sty
     return outs_src, outs_aux, outs_sty
 
@@ -255,18 +257,21 @@ class Generator(nn.Module):
     self.image_size = config.image_size
     self.c_dim = config.c_dim    
     self.color_dim = config.color_dim
+    self.style_dim = config.style_dim
     self.Attention = 'Attention' in config.GAN_options
     self.InterLabels = 'InterLabels' in config.GAN_options
     self.InterStyleLabels = 'InterStyleLabels' in config.GAN_options
     self.InterStyleConcatLabels = 'InterStyleConcatLabels' in config.GAN_options
     self.style_gen = 'style_gen' in config.GAN_options
     self.DRIT = 'DRIT' in config.GAN_options and not self.InterStyleLabels
+    self.DRITZ = 'DRITZ' in config.GAN_options and not self.InterStyleLabels
     self.AdaIn = 'AdaIn' in config.GAN_options and not 'DRIT' in config.GAN_options
     self.AdaIn2 = 'AdaIn2' in config.GAN_options and not 'DRIT' in config.GAN_options 
     self.AdaIn3 = 'AdaIn3' in config.GAN_options and not 'DRIT' in config.GAN_options 
     if self.AdaIn2: AdaIn_res=True
     else: AdaIn_res = False
     if self.InterLabels or self.InterStyleConcatLabels: in_dim=self.color_dim
+    elif self.DRITZ: in_dim=self.color_dim+self.c_dim+self.style_dim
     else: in_dim=self.color_dim+self.c_dim
     layers.append(nn.Conv2d(in_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
@@ -346,6 +351,9 @@ class Generator(nn.Module):
       elif self.InterLabels or self.InterStyleConcatLabels:
         c_dim = self.c_dim
         in_dim = self.color_dim
+      elif self.DRITZ:
+        c_dim = self.c_dim
+        in_dim = self.color_dim+self.c_dim +self.style_dim     
       elif self.DRIT:
         c_dim = self.c_dim
         in_dim = self.color_dim+self.c_dim
@@ -372,6 +380,12 @@ class Generator(nn.Module):
     # replicate spatially and concatenate domain information
     if self.InterLabels or self.InterStyleConcatLabels:
       x_cat = x
+    elif self.DRITZ:
+      c = c.unsqueeze(2).unsqueeze(3)
+      c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
+      stochastic = stochastic.unsqueeze(2).unsqueeze(3)
+      stochastic = stochastic.expand(stochastic.size(0), stochastic.size(1), x.size(2), x.size(3))      
+      x_cat = torch.cat([x, c, stochastic], dim=1)      
     else:
       c = c.unsqueeze(2).unsqueeze(3)
       c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
@@ -434,6 +448,43 @@ class Generator(nn.Module):
       output += [content]
 
     return output
+
+#===============================================================================================#
+#===============================================================================================#
+class DRITZGEN(nn.Module):
+  def __init__(self, config, debug=False):
+    super(DRITZGEN, self).__init__()
+
+    self.image_size = config.image_size    
+    self.color_dim = config.color_dim
+    self.style_dim = config.style_dim
+    self.c_dim = config.c_dim
+
+    self.enc_style = StyleEncoder(config, debug=True)
+    self.generator = Generator(config, debug=False)
+    self.debug()
+
+  def debug(self):
+    # feed = to_var(torch.ones(1, self.color_dim+self.c_dim+self.style_dim, self.image_size, self.image_size), volatile=True, no_cuda=True)
+    # style = to_var(self.random_style(feed), volatile=True)
+    self.generator.debug()
+    
+  def forward(self, x, c, stochastic=None, CONTENT=False, JUST_CONTENT=False):
+    if stochastic is None:
+      style = self.get_style(x)
+    else:
+      style = stochastic
+    return self.generator(x, c, stochastic=style, CONTENT=CONTENT, JUST_CONTENT=JUST_CONTENT)
+
+  def random_style(self,x):
+    z = torch.randn(x.size(0), self.style_dim)
+    return z
+
+  def get_style(self, x, volatile=False):
+    style = self.enc_style(x)
+    style = style[0].view(style[0].size(0), -1)
+    return [style]
+
 #===============================================================================================#
 #===============================================================================================#
 class DRITGEN(nn.Module):
@@ -579,15 +630,7 @@ class AdaInGEN(nn.Module):
 
   def get_style(self, x, volatile=False):
     style = self.enc_style(x)
-    if len(style)==1:
-      style = [style[0].view(style[0].size(0), self.c_dim, -1)]
-    else:
-      style[0] = style[0].view(style[0].size(0), self.c_dim, -1)
-      style[1] = style[1].view(style[1].size(0), self.c_dim, -1)
-      std = style[1].data.mul(0.5).exp_()
-      eps = self.random_style(style[0].data)
-      if style[1].data.is_cuda: eps = to_cuda(eps)
-      style = [to_var(eps.mul(std).add_(style[0].data), volatile=volatile)] + style
+    style = [style[0].view(style[0].size(0), self.c_dim, -1)]
     return style
 
   def apply_style(self, image, style, label=None):
@@ -630,10 +673,10 @@ class StyleEncoder(nn.Module):
     conv_dim = config.g_conv_dim//2
     color_dim = config.color_dim
     style_dim = config.style_dim
+    self.DRITZ = 'DRITZ' in config.GAN_options    
     self.c_dim = config.c_dim
-    self.mono_style = 'mono_style' in config.GAN_options
+    self.s_dim = 1 if style_dim==8 or self.DRITZ else config.c_dim*style_dim
     self.FC = 'FC' in config.GAN_options
-    self.lognet = 'LOGVAR' in config.GAN_options
     layers = []
     norm = 'none'
     activ = 'relu'
@@ -678,17 +721,10 @@ class StyleEncoder(nn.Module):
       layers0.append(nn.Linear(256, 256, bias=True))  
       layers0.append(nn.Dropout(0.5))
       self.fc = nn.Sequential(*layers0)
-      if style_dim==8:
-        out_dim = style_dim
-      else:
-        out_dim = self.c_dim*k_size*k_size
+      out_dim = self.s_dim*style_dim
       self.style_mu = nn.Linear(256, out_dim)
-      if self.lognet:
-        self.style_var = nn.Linear(256, out_dim)
     else:
       self.style_mu = nn.Conv2d(curr_dim, self.c_dim, kernel_size=1, stride=1, padding=0)
-      if self.lognet:
-        self.style_var = nn.Conv2d(curr_dim, self.c_dim, kernel_size=1, stride=1, padding=0)
     self.main = nn.Sequential(*layers)
 
     if debug:
@@ -699,8 +735,6 @@ class StyleEncoder(nn.Module):
         fc_in = features.view(features.size(0), -1)
         features = print_debug(fc_in, layers0)
       _ = print_debug(features, [self.style_mu]) 
-      if self.lognet:
-        _ = print_debug(features, [self.style_var]) 
 
   def forward(self, x):
     features = self.main(x)
@@ -709,11 +743,7 @@ class StyleEncoder(nn.Module):
       features = self.fc(fc_input)
 
     style_mu = self.style_mu(features)
-    if self.lognet:
-      style_var = self.style_var(features)
-      style = [style_mu, style_var]
-    else:
-      style = [style_mu]
+    style = [style_mu]
     return style
     
 #===============================================================================================#
