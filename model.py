@@ -57,6 +57,7 @@ class Discriminator(nn.Module):
     conv_dim = config.d_conv_dim
     repeat_num = config.d_repeat_num    
     self.c_dim = config.c_dim
+    self.s_dim = self.c_dim = config.c_dim if config.style_dim!=8 else 1
     color_dim = config.color_dim
     SN = 'SpectralNorm' in config.GAN_options
     self.StyleDisc = 'StyleDisc' in config.GAN_options
@@ -89,13 +90,10 @@ class Discriminator(nn.Module):
         layers0.append(nn.Linear(256, 256, bias=True))  
         layers0.append(nn.Dropout(0.5))
         self.fc = nn.Sequential(*layers0)
-        if style_dim==8:
-          out_dim = style_dim
-        else:
-          out_dim = self.c_dim*k_size*k_size   
+        out_dim = self.s_dim*self.style_dim  
         self.style_mu = nn.Linear(256, out_dim)   
       else:
-        self.style_mu = nn.Conv2d(curr_dim, self.c_dim, kernel_size=3, stride=1, padding=1, bias=False)
+        self.style_mu = nn.Conv2d(curr_dim, self.s_dim, kernel_size=3, stride=1, padding=1, bias=False)
     if debug:
       feed = to_var(torch.ones(1,color_dim,image_size,image_size), volatile=True, no_cuda=True)
       print('-- Discriminator:')
@@ -144,31 +142,39 @@ class MultiDiscriminator(nn.Module):
     self.conv_dim = config.d_conv_dim
     self.repeat_num = config.d_repeat_num    
     self.c_dim = config.c_dim
+    self.s_dim = self.c_dim = config.c_dim if config.style_dim!=8 else 1
     self.color_dim = config.color_dim
     SN = 'SpectralNorm' in config.GAN_options
+    self.StyleDisc = 'StyleDisc' in config.GAN_options
+    if self.StyleDisc: 
+      self.style_dim = config.style_dim
+      self.FC = 'FC' in config.GAN_options
     self.SpectralNorm = get_SN(SN)
     
     self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
     self.cnns_main = nn.ModuleList() 
     self.cnns_src = nn.ModuleList()
     self.cnns_aux = nn.ModuleList()
+    if self.StyleDisc: self.cnns_sty = nn.ModuleList()
     # ipdb.set_trace()
     for idx in range(config.MultiDis):
       self.cnns_main.append(self._make_net(idx)[0])
       self.cnns_src.append(self._make_net(idx)[1])
       self.cnns_aux.append(self._make_net(idx)[2])
+      if self.StyleDisc: self.cnns_sty.append(self._make_net(idx)[3])
 
     if debug:
       feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True, no_cuda=True)
       # ipdb.set_trace()
-      for idx, (model, src, aux) in enumerate(zip(self.cnns_main, self.cnns_src, self.cnns_aux)):
+      for idx, (model, src, aux, sty) in enumerate(zip(self.cnns_main, self.cnns_src, self.cnns_aux, self.cnns_sty)):
         # ipdb.set_trace()
         print('-- MultiDiscriminator ({}):'.format(idx))
         features = print_debug(feed, model)
         _ = print_debug(features, src)
         _ = print_debug(features, aux).view(feed.size(0), -1)     
+        if self.StyleDisc: _ = print_debug(features.view(feed.size(0), -1), sty)
         feed = self.downsample(feed)      
-
+        
   def _make_net(self, idx=0):
     conv_size = self.image_size/(2**(idx))   
     layers = [] 
@@ -181,38 +187,60 @@ class MultiDiscriminator(nn.Module):
       curr_dim *= 2     
       conv_size /= 2
 
-    # ipdb.set_trace()
     main = nn.Sequential(*layers)
     src = nn.Sequential(*[nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)])
     aux = nn.Sequential(*[nn.Conv2d(curr_dim, self.c_dim, kernel_size=conv_size//2, bias=False)])
-    return main, src, aux
+    if self.StyleDisc: 
+      layers = []
+      if self.style_dim==1 or self.style_dim==8: 
+        layers.append(nn.AdaptiveAvgPool2d(1)) # global average pooling
+      if self.FC:
+        # ipdb.set_trace()
+        k_size = int(self.image_size / (np.power(2, self.repeat_num-1)*(2**idx)))
+        layers.append(nn.Linear(curr_dim*k_size*k_size, 256, bias=True))  
+        layers.append(nn.Dropout(0.5))  
+        layers.append(nn.Linear(256, 256, bias=True))  
+        layers.append(nn.Dropout(0.5))
+        # self.fc = nn.Sequential(*layers0)
+        if self.style_dim==8:
+          out_dim = self.style_dim
+        else:
+          out_dim = self.s_dim*self.style_dim 
+        layers.append(nn.Linear(256, out_dim))
+      else:
+        layers.append(nn.Conv2d(curr_dim, self.s_dim, kernel_size=3, stride=1, padding=1, bias=False))
+      sty =  nn.Sequential(*layers)
+    else:
+      sty = None
 
+    return main, src, aux, sty
 
-    # layers = []
-    # cnn_x += [Conv2dBlock(self.c_dim, dim, 4, 2, 1, norm='none', activation=self.activ, pad_type=self.pad_type)]
-    # conv_size /= 2 
-    # for i in range(self.repeat_num - 1):
-    #   cnn_x += [Conv2dBlock(dim, dim * 2, 4, 2, 1, norm=self.norm, activation=self.activ, pad_type=self.pad_type)]
-    #   dim *= 2
-    #   conv_size /= 2 
-    # # ipdb.set_trace()
-    # main = nn.Sequential(*cnn_x)
-    # src = nn.Sequential(*[nn.Conv2d(dim, 1, 1, 1, 0)])
-    # aux = nn.Sequential(*[nn.Conv2d(dim, self.c_dim, conv_size, 1, 0)])
-    # return main, src, aux
-
-  def forward(self, x):
-    outs_src = []; outs_aux = []
+  def forward(self, x, get_style=False):
+    outs_src = []; outs_aux = []; outs_sty = []
     # ipdb.set_trace()
-    for model, src, aux in zip(self.cnns_main, self.cnns_src, self.cnns_aux):
+    for model, src, aux, sty in zip(self.cnns_main, self.cnns_src, self.cnns_aux, self.cnns_sty):
       # ipdb.set_trace()
       main = model(x)
-      src = src(main)
-      aux = aux(main).view(main.size(0), -1)
-      outs_src.append(src)
-      outs_aux.append(aux)
+      _src = src(main)
+      _aux = aux(main).view(main.size(0), -1)
+      outs_src.append(_src)
+      outs_aux.append(_aux)
+      if self.StyleDisc:
+        if self.FC:
+          main = main.view(main.size(0), -1) 
+        _sty = sty(main)
+        outs_sty.append(_sty.unsqueeze(0))
+      
+
       x = self.downsample(x)
-    return outs_src, outs_aux, None
+    if self.StyleDisc:
+      outs_sty = [torch.cat(outs_sty,dim=0).mean(dim=0)]
+    else:
+      outs_sty = [None]
+    if get_style: 
+      outs_sty = [outs_sty[0].view(outs_sty[0].size(0), self.c_dim, -1)]
+      return outs_sty
+    return outs_src, outs_aux, outs_sty
 
 
 #===============================================================================================#
