@@ -62,8 +62,8 @@ def main(config):
   elif config.mode == 'val':
     solver.val(load=True)
   elif config.mode == 'test':
-    if config.DEMO_path:
-      solver.DEMO(config.DEMO_path)    
+    if config.DEMO_PATH:
+      solver.DEMO(config.DEMO_PATH)    
     else:
       solver.test(dataset=config.dataset_real)
 
@@ -74,64 +74,70 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
 
   # Model hyper-parameters
-  parser.add_argument('--dataset_fake',     type=str, default='EmotionNet', choices=['BP4D', 'EmotionNet', 'CelebA', 'MNIST'])
-  parser.add_argument('--dataset_real',     type=str, default='', choices=['','BP4D', 'EmotionNet', 'CelebA'])  
-  parser.add_argument('--fold',             type=str, default='0')
-  parser.add_argument('--mode_data',        type=str, default='normal', choices=['normal', 'faces'])   
-  parser.add_argument('--mode_train',       type=str, default='GAN', choices=['GAN', 'CLS'])   
-  parser.add_argument('--mode',             type=str, default='train', choices=['train', 'val', 'test']) 
-  parser.add_argument('--c_dim',            type=int, default=12)
-  parser.add_argument('--color_dim',        type=int, default=3)
-  parser.add_argument('--image_size',       type=int, default=128)
-  parser.add_argument('--batch_size',       type=int, default=64)
-  parser.add_argument('--num_workers',      type=int, default=4)
-  parser.add_argument('--num_epochs',       type=int, default=200)
-  parser.add_argument('--num_epochs_decay', type=int, default=50)
-  parser.add_argument('--beta1',            type=float, default=0.5)
-  parser.add_argument('--beta2',            type=float, default=0.999)
-  parser.add_argument('--pretrained_model', type=str, default=None)  
+  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=['BP4D', 'EmotionNet', 'CelebA', 'MNIST'])
+  parser.add_argument('--dataset_real',       type=str, default='', choices=['','BP4D', 'EmotionNet', 'CelebA'])  
+  parser.add_argument('--fold',               type=str, default='0')
+  parser.add_argument('--mode_data',          type=str, default='normal', choices=['normal', 'faces'])   
+  parser.add_argument('--mode_train',         type=str, default='GAN', choices=['GAN', 'CLS'])   
+  parser.add_argument('--mode',               type=str, default='train', choices=['train', 'val', 'test']) 
+  parser.add_argument('--c_dim',              type=int, default=12)
+  parser.add_argument('--color_dim',          type=int, default=3)
+  parser.add_argument('--image_size',         type=int, default=128)
+  parser.add_argument('--batch_size',         type=int, default=64)
+  parser.add_argument('--num_workers',        type=int, default=4)
+  parser.add_argument('--num_epochs',         type=int, default=200)
+  parser.add_argument('--num_epochs_decay',   type=int, default=50)
+  parser.add_argument('--beta1',              type=float, default=0.5)
+  parser.add_argument('--beta2',              type=float, default=0.999)
+  parser.add_argument('--pretrained_model',   type=str, default=None)  
 
   # Path
-  parser.add_argument('--metadata_path',    type=str, default='./data')
-  parser.add_argument('--log_path',         type=str, default='./snapshot/logs')
-  parser.add_argument('--model_save_path',  type=str, default='./snapshot/models')
-  parser.add_argument('--sample_path',      type=str, default='./snapshot/samples')
-  parser.add_argument('--DEMO_path',        type=str, default='')
+  parser.add_argument('--metadata_path',      type=str, default='./data')
+  parser.add_argument('--log_path',           type=str, default='./snapshot/logs')
+  parser.add_argument('--model_save_path',    type=str, default='./snapshot/models')
+  parser.add_argument('--sample_path',        type=str, default='./snapshot/samples')
+  parser.add_argument('--DEMO_PATH',          type=str, default='')
 
   # Generative 
-  parser.add_argument('--MultiDis',         type=int, default=0)
-  parser.add_argument('--PerceptualLoss',   type=str, default='', choices=['', 'DeepFace'])
-  parser.add_argument('--g_conv_dim',       type=int, default=64)
-  parser.add_argument('--d_conv_dim',       type=int, default=64)
-  parser.add_argument('--g_repeat_num',     type=int, default=6)
-  parser.add_argument('--d_repeat_num',     type=int, default=6)
-  parser.add_argument('--g_lr',             type=float, default=0.0001)
-  parser.add_argument('--d_lr',             type=float, default=0.0001)
-  parser.add_argument('--lambda_cls',       type=float, default=1)  
-  parser.add_argument('--lambda_rec',       type=float, default=10.0)
-  parser.add_argument('--lambda_gp',        type=float, default=10.0)
-  parser.add_argument('--lambda_style',     type=float, default=1.0)
-  parser.add_argument('--lambda_kl',        type=float, default=0.001)
-  parser.add_argument('--lambda_content',   type=float, default=10.0)
+  parser.add_argument('--MultiDis',           type=int, default=0)
+  parser.add_argument('--PerceptualLoss',     type=str, default='', choices=['', 'DeepFace', 'EmoNet'])
+  parser.add_argument('--g_conv_dim',         type=int, default=64)
+  parser.add_argument('--d_conv_dim',         type=int, default=64)
+  parser.add_argument('--g_repeat_num',       type=int, default=6)
+  parser.add_argument('--d_repeat_num',       type=int, default=6)
+  parser.add_argument('--g_lr',               type=float, default=0.0001)
+  parser.add_argument('--d_lr',               type=float, default=0.0001)
+  parser.add_argument('--lambda_cls',         type=float, default=1)  
+  parser.add_argument('--lambda_rec',         type=float, default=10.0)
+  parser.add_argument('--lambda_gp',          type=float, default=10.0)
+  parser.add_argument('--lambda_perceptual',  type=float, default=1.0)
+  parser.add_argument('--lambda_l1',          type=float, default=1.0)
+  parser.add_argument('--lambda_l1perceptual',type=float, default=1.0)  
+  parser.add_argument('--lambda_style',       type=float, default=1.0)
+  parser.add_argument('--lambda_mask',        type=float, default=1.0)
+  parser.add_argument('--lambda_mask_smooth', type=float, default=0.0001)
+  parser.add_argument('--lambda_kl',          type=float, default=0.001)
+  parser.add_argument('--lambda_content',     type=float, default=1.0)
 
-  parser.add_argument('--style_dim',        type=int, default=16, choices=[1, 4, 16])
+  parser.add_argument('--style_dim',          type=int, default=16, choices=[1, 4, 8, 16])
 
-  parser.add_argument('--d_train_repeat',   type=int, default=5)
+  parser.add_argument('--d_train_repeat',     type=int, default=5)
 
   # Generative settings
-  parser.add_argument('--GAN_options',      type=str, default='')
+  parser.add_argument('--GAN_options',        type=str, default='')
 
   # Misc
-  parser.add_argument('--use_tensorboard',  action='store_true', default=False)
-  parser.add_argument('--TEST',             action='store_true', default=False)  
-  parser.add_argument('--DISPLAY_NET',      action='store_true', default=False) 
-  parser.add_argument('--DELETE',           action='store_true', default=False)
-  parser.add_argument('--GPU',              type=str, default='0')
+  parser.add_argument('--use_tensorboard',    action='store_true', default=False)
+  parser.add_argument('--TEST',               action='store_true', default=False)  
+  parser.add_argument('--DISPLAY_NET',        action='store_true', default=False) 
+  parser.add_argument('--DELETE',             action='store_true', default=False)
+  parser.add_argument('--FOLDER',             action='store_true', default=False)
+  parser.add_argument('--GPU',                type=str, default='0')
 
   # Step size
-  parser.add_argument('--log_step',         type=int, default=10)
-  parser.add_argument('--sample_step',      type=int, default=500)
-  parser.add_argument('--model_save_step',  type=int, default=10000)
+  parser.add_argument('--log_step',           type=int, default=10)
+  parser.add_argument('--sample_step',        type=int, default=500)
+  parser.add_argument('--model_save_step',    type=int, default=10000)
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
@@ -141,6 +147,9 @@ if __name__ == '__main__':
 
   config = cfg.update_config(config)
 
+  if config.FOLDER:
+    print(os.path.abspath(config.sample_path))
+    sys.exit() 
 
   if config.mode=='train':
     # Create directories if not exist
@@ -161,8 +170,8 @@ if __name__ == '__main__':
   else:
     file_log = 'logs/dummy.txt'
 
-  if not 'GOOGLE' in config.GAN_options:
-    of = 'a' if os.path.isfile(file_log) else 'wb'
+  if config.mode=='train':
+    of = 'w' if os.path.isfile(file_log) else 'wb'
     with open(file_log, of) as config.log:
       print >> config.log, ' '.join(sys.argv)
       config.log.flush()
