@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore')
 
 class Solver(object):
 
-  def __init__(self, data_loader, config):
+  def __init__(self, config, data_loader=None):
     # Data loader
     self.data_loader = data_loader
     self.config = config
@@ -41,7 +41,7 @@ class Solver(object):
       else: from model import DRITGEN as GEN
     elif 'DRITZ' in self.config.GAN_options: from model import DRITZGEN as GEN
     else: from model import Generator as GEN
-    self.G = GEN(self.config, debug=True)
+    self.G = GEN(self.config, debug=self.config.mode=='train')
 
     if 'Stochastic' in self.config.GAN_options and ('Split_Optim' in self.config.GAN_options or 'Split_Optim_all' in self.config.GAN_options):
       if 'Split_Optim_all' in self.config.GAN_options:
@@ -62,16 +62,17 @@ class Solver(object):
     self.g_optimizer = torch.optim.Adam(G_parameters, self.config.g_lr, [self.config.beta1, self.config.beta2])
     to_cuda(self.G)
 
+    self.D = Discriminator(self.config, debug=self.config.mode=='train') 
+
     if self.config.mode=='train': 
-      self.D = Discriminator(self.config, debug=True) 
       D_parameters = self.D.parameters()
       D_parameters = filter(lambda p: p.requires_grad, D_parameters)
       self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr, [self.config.beta1, self.config.beta2])
-      to_cuda(self.D)
       self.print_network(self.D, 'Discriminator')
-    self.print_network(self.G, 'Generator')
+      self.print_network(self.G, 'Generator')
+    to_cuda(self.D)
 
-    if self.config.PerceptualLoss:
+    if 'L1_Perceptual' in self.config.GAN_options or 'Perceptual' in self.config.GAN_options:
       import importlib
       perceptual = importlib.import_module('models.perceptual.{}'.format(self.config.PerceptualLoss))
       self.vgg = getattr(perceptual, self.config.PerceptualLoss)()
@@ -123,8 +124,7 @@ class Solver(object):
   def load_pretrained_model(self):
     name = os.path.join(self.config.model_save_path, '{}_{}.pth'.format(self.config.pretrained_model, '{}'))
     self.G.load_state_dict(torch.load(name.format('G')))#, map_location=lambda storage, loc: storage))
-    if self.config.mode=='train':  
-      self.D.load_state_dict(torch.load(name.format('D')))#, map_location=lambda storage, loc: storage))
+    self.D.load_state_dict(torch.load(name.format('D')))#, map_location=lambda storage, loc: storage))
     self.PRINT('loaded trained models (step: {})..!'.format(self.config.pretrained_model))
 
   #=======================================================================================#
@@ -185,7 +185,8 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
   def PRINT(self, str):  
-    PRINT(self.config.log, str)
+    if self.config.mode=='train': PRINT(self.config.log, str)
+    else: print(str)
 
   #=======================================================================================#
   #=======================================================================================#
@@ -384,7 +385,7 @@ class Solver(object):
 
           ## REC LOSS
           rec_x1  = self.G(fake_x1[0], real_c1, stochastic = style_rec1, CONTENT='content_loss' in GAN_options) 
-          if self.config.PerceptualLoss:  
+          if 'Perceptual' in GAN_options:
             g_loss_recp = self.config.lambda_perceptual*self._compute_vgg_loss(real_x1, rec_x1[0])     
             self.loss['Grecp'] = get_loss_value(g_loss_recp)
             self.update_loss('Grecp', self.loss['Grecp'])
@@ -393,6 +394,8 @@ class Solver(object):
             self.loss['Grec'] = get_loss_value(g_loss_rec) 
             self.update_loss('Grec', self.loss['Grec'])
 
+            g_loss_rec += g_loss_recp
+
           else:
             g_loss_rec = self.config.lambda_rec*criterion_l1(rec_x1[0], real_x1)
             self.loss['Grec'] = get_loss_value(g_loss_rec) 
@@ -400,7 +403,6 @@ class Solver(object):
 
           # Backward + Optimize
           g_loss = g_loss_src + g_loss_rec + g_loss_cls 
-          if self.config.PerceptualLoss: g_loss += g_loss_recp
 
           ############################## Background Consistency Part ###################################
           if 'L1_LOSS' in GAN_options:
@@ -453,7 +455,7 @@ class Solver(object):
             self.loss['Gsty'] = get_loss_value(s_loss_style)
             self.update_loss('Gsty', self.loss['Gsty'])
             # if self.loss['Gsty']>0.75 and e>6 and style_flag:
-            #   send_mail(msg='Gsty still in {}'.format(self.loss['Gsty']))
+            #   send_mail(body='Gsty still in {}'.format(self.loss['Gsty']))
             #   style_flag = False
             g_loss += s_loss_style
 
@@ -540,8 +542,9 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
 
-  def save_fake_output(self, real_x, save_path, label=None, output=False, gif=False):
+  def save_fake_output(self, real_x, save_path, label=None, output=False, gif=False, only_one=False):
     self.G.eval()  
+    self.D.eval()
     Attention = 'Attention' in self.config.GAN_options
     Stochastic = 'Stochastic' in self.config.GAN_options
     Output = []
@@ -564,7 +567,7 @@ class Solver(object):
       # Start translations
       fake_image_list = [real_x]
       if Stochastic: 
-        n_rep = 11
+        n_rep = 15
         n_img = 5
         real_x0 = real_x[n_img].repeat(n_rep,1,1,1)
         fake_rand_list = [real_x0]
@@ -572,25 +575,43 @@ class Solver(object):
           rand_attn_list = [to_var(denorm(real_x0.data), volatile=True)]
       if Attention: 
         fake_attn_list = [to_var(denorm(real_x.data), volatile=True)]
-      for target_c in target_c_list:
+
+      if not self.config.NO_LABELCUM:
+        out_label = self.D(real_x)[1]
+        if len(out_label)>1:
+          # ipdb.set_trace()
+          out_label = torch.cat([F.sigmoid(out.unsqueeze(-1)) for out in out_label], dim=-1).mean(dim=-1)
+        else:
+          out_label = F.sigmoid(out_label[0])
+        out_label = (out_label>0.5).float()
+
+      for idx, _target_c in enumerate(target_c_list):
+        if not self.config.NO_LABELCUM:
+          target_c = torch.clamp(_target_c+out_label,max=1)
+        # ipdb.set_trace()
         if Stochastic: 
           if 'StyleDisc' in self.config.GAN_options:
             style = self.D(real_x, get_style=True)[0]
             # ipdb.set_trace()
           else:
             style = self.G.get_style(real_x, volatile=True)[0]
+          if self.config.NO_STYLE: style*=0
           fake_x = self.G(real_x, target_c, stochastic=style)
-
-          target_c0 = target_c[:n_rep]
-          # ipdb.set_trace()
+          target_c0 = target_c[n_img].repeat(n_rep,1)
           style_rand=to_var(self.G.random_style(real_x0), volatile=True)#* target_c0.unsqueeze(2)
           # style_rand *= target_c0.unsqueeze(1)
-          style_rand[0] = style[n_img]#* target_c0[0].unsqueeze(1) #Compare with the original style
-          style_rand[1] = style[6]#* target_c0[0].unsqueeze(1)
-          if self.config.style_dim==8: _target = 1
-          else: _target = target_c0[0].unsqueeze(1)
-          style_rand[2] = style[9]* _target
-          for i in range(3,7): style_rand[i] = style_rand[i]*_target
+          # style_rand[0] = style[n_img]#* target_c0[0].unsqueeze(1) #Compare with the original style
+          # style_rand[1] = style[6]#* target_c0[0].unsqueeze(1)
+          # if self.config.style_dim==8: _target = 1
+          # else: _target = target_c0[0].unsqueeze(1)
+          # style_rand[2] = style[9]* _target
+          # ipdb.set_trace()
+          if self.config.NO_STYLE: style_rand*=0
+          else:
+            for i in range(5,10): 
+              style_rand[i] = style_rand[i]*_target_c[0].unsqueeze(-1)
+            for i in range(10,15): 
+              style_rand[i] = style_rand[i]*0
           fake_x0 = self.G(real_x0, target_c0, stochastic=style_rand)   
           fake_rand_list.append(fake_x0[0])    
           if Attention: rand_attn_list.append(fake_x0[1].repeat(1,3,1,1))          
@@ -600,29 +621,30 @@ class Solver(object):
         if Attention: fake_attn_list.append(fake_x[1].repeat(1,3,1,1))
 
       fake_images = denorm(torch.cat(fake_image_list, dim=3).data.cpu())
-      fake_images = torch.cat((self.get_aus(), fake_images), dim=0)
+      if not only_one: fake_images = torch.cat((self.get_aus(), fake_images), dim=0)
       save_image(fake_images, save_path, nrow=1, padding=0)
-      if gif: make_gif(fake_images, save_path)
+      if gif: make_gif(fake_images, save_path, only_one=only_one)
       if output: Output.append(save_path)
       if output and gif: 
         Output.append(save_path.replace('jpg', 'gif'))
         Output.append(save_path.replace('jpg', 'mp4'))
       if Attention: 
         fake_attn = torch.cat(fake_attn_list, dim=3).data.cpu()
-        fake_attn = torch.cat((self.get_aus(), fake_attn), dim=0)
+        if not only_one: fake_attn = torch.cat((self.get_aus(), fake_attn), dim=0)
         save_image(fake_attn, save_path.replace('fake', 'attn'), nrow=1, padding=0)
         if output: Output.append(save_path.replace('fake', 'attn'))
       if Stochastic:
         fake_images = denorm(torch.cat(fake_rand_list, dim=3).data.cpu())
-        fake_images = torch.cat((self.get_aus(), fake_images), dim=0)
+        if not only_one: fake_images = torch.cat((self.get_aus(), fake_images), dim=0)
         save_image(fake_images, save_path.replace('fake', 'style'), nrow=1, padding=0)
         if output: Output.append(save_path.replace('fake', 'style'))
         if Attention:
           fake_attn = torch.cat(rand_attn_list, dim=3).data.cpu()
-          fake_attn = torch.cat((self.get_aus(), fake_attn), dim=0)
+          if not only_one: fake_attn = torch.cat((self.get_aus(), fake_attn), dim=0)
           save_image(fake_attn, save_path.replace('fake', 'style_attn'), nrow=1, padding=0)        
           if output: Output.append(save_path.replace('fake', 'style_attn'))
     self.G.train()
+    self.D.train()
     if output: return Output 
 
   #=======================================================================================#
@@ -638,9 +660,10 @@ class Solver(object):
     else:
       last_name = self.config.pretrained_model
 
-    G_path = os.path.join(self.config.model_save_path, '{}_G.pth'.format(last_name))
-    self.G.load_state_dict(torch.load(G_path))
-    self.G.eval()
+    # self.load_pretrained_model()
+    # G_path = os.path.join(self.config.model_save_path, '{}_G.pth'.format(last_name))
+    # self.G.load_state_dict(torch.load(G_path))
+    # self.G.eval()
 
     data_loader_val = get_loader(self.config.metadata_path, self.config.image_size,
                  self.config.image_size, self.config.batch_size, shuffling = True,
@@ -648,14 +671,20 @@ class Solver(object):
 
     for i, (real_x, org_c, files) in enumerate(data_loader_val):
       save_path = os.path.join(self.config.sample_path, '{}_z_fake_{}_{}_{}.jpg'.format(last_name, dataset, i+1, '{}'))
-      name = os.path.abspath(save_path.format(TimeNow_str()))
+      string = '{}'
+      if self.config.NO_LABELCUM:
+        string += '_{}'.format('NO_Label_Cum','{}')
+      if self.config.NO_STYLE:
+        string += '{}_{}'.format('NO_STYLE','{}')
+      string = string.format(TimeNow_str())
+      name = os.path.abspath(save_path.format(string))
       if 'real_cS' in self.config.GAN_options: 
         self.save_fake_output(real_x, name, label=org_c)
       else: 
         output = self.save_fake_output(real_x, name, output=True)
-        send_mail(msg='Images from '+self.config.sample_path, list=output)
+        # send_mail(body='Images from '+self.config.sample_path, attach=output)
       self.PRINT('Translated test images and saved into "{}"..!'.format(name))
-      if i==1: break   
+      if i==self.config.iter_test-1: break   
 
   #=======================================================================================#
   #=======================================================================================#
@@ -676,9 +705,8 @@ class Solver(object):
     data_loader = get_loader(path, self.config.image_size,
                  self.config.image_size, self.config.batch_size, shuffling = True,
                  dataset='DEMO', mode='test', AU=self.config.AUs)
-
     for real_x in data_loader:
       save_path = os.path.join(self.config.sample_path, '{}_fake_val_DEMO_{}.jpg'.format(last_name, TimeNow_str()))
-      output = self.save_fake_output(real_x, save_path, output=True, gif=True)
-      send_mail(msg='Images from '+self.config.sample_path, list=output)
+      output = self.save_fake_output(real_x, save_path, output=True, gif=True, only_one=True)
+      send_mail(body='Images from '+self.config.sample_path, attach=output)
       self.PRINT('Translated test images and saved into "{}"..!'.format(save_path))
