@@ -31,28 +31,23 @@ def PRINT(config):
 def main(config):
   from torch.backends import cudnn
   import torch  
+  from solver import Solver
   # For fast training
   cudnn.benchmark = True
 
-  data_loader = get_loader(config.metadata_path, config.image_size,
+  if config.mode=='train':
+    data_loader = get_loader(config.metadata_path, config.image_size,
                    config.image_size, config.batch_size, config.dataset, config.mode, \
                    color_jitter='COLOR_JITTER' in config.GAN_options, AU=config.AUs,\
                    mean=config.mean, std=config.std, num_workers=config.num_workers)   
 
-
-  if config.mode_train=='CLS':
-    from solver_cls import Solver
+    solver = Solver(config, data_loader)
   else:
-    from solver import Solver
-
-  solver = Solver(data_loader, config)
+    solver = Solver(config)
 
   if config.DISPLAY_NET and config.mode_train=='GAN': 
     solver.display_net(name='discriminator')
     solver.display_net(name='generator')
-    return
-  elif config.DISPLAY_NET and config.mode_train=='CLS': 
-    solver.display_net(name='classifier')
     return
 
   if config.mode == 'train':
@@ -84,6 +79,7 @@ if __name__ == '__main__':
   parser.add_argument('--color_dim',          type=int, default=3)
   parser.add_argument('--image_size',         type=int, default=128)
   parser.add_argument('--batch_size',         type=int, default=64)
+  parser.add_argument('--iter_test',          type=int, default=1)
   parser.add_argument('--num_workers',        type=int, default=4)
   parser.add_argument('--num_epochs',         type=int, default=200)
   parser.add_argument('--num_epochs_decay',   type=int, default=50)
@@ -100,7 +96,7 @@ if __name__ == '__main__':
 
   # Generative 
   parser.add_argument('--MultiDis',           type=int, default=0)
-  parser.add_argument('--PerceptualLoss',     type=str, default='', choices=['', 'DeepFace', 'EmoNet'])
+  parser.add_argument('--PerceptualLoss',     type=str, default='DeepFace', choices=['DeepFace', 'EmoNet'])
   parser.add_argument('--g_conv_dim',         type=int, default=64)
   parser.add_argument('--d_conv_dim',         type=int, default=64)
   parser.add_argument('--g_repeat_num',       type=int, default=6)
@@ -112,7 +108,7 @@ if __name__ == '__main__':
   parser.add_argument('--lambda_gp',          type=float, default=10.0)
   parser.add_argument('--lambda_perceptual',  type=float, default=1.0)
   parser.add_argument('--lambda_l1',          type=float, default=1.0)
-  parser.add_argument('--lambda_l1perceptual',type=float, default=1.0)  
+  parser.add_argument('--lambda_l1perceptual',type=float, default=0.1)  
   parser.add_argument('--lambda_style',       type=float, default=1.0)
   parser.add_argument('--lambda_mask',        type=float, default=1.0)
   parser.add_argument('--lambda_mask_smooth', type=float, default=0.0001)
@@ -132,6 +128,8 @@ if __name__ == '__main__':
   parser.add_argument('--DISPLAY_NET',        action='store_true', default=False) 
   parser.add_argument('--DELETE',             action='store_true', default=False)
   parser.add_argument('--FOLDER',             action='store_true', default=False)
+  parser.add_argument('--NO_LABELCUM',        action='store_true', default=False)
+  parser.add_argument('--NO_STYLE',           action='store_true', default=False)
   parser.add_argument('--GPU',                type=str, default='0')
 
   # Step size
