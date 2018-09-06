@@ -5,7 +5,8 @@ def config_GENERATOR(config, update_folder):
   if config.MultiDis>0:
     update_folder(config, 'MultiDis_scale'+str(config.MultiDis))
 
-  if config.PerceptualLoss:
+  # if config.PerceptualLoss:
+  if 'Perceptual' in config.GAN_options:
     update_folder(config, 'PerceptualLoss_'+config.PerceptualLoss)  
 
   if 'L1_Perceptual' in config.GAN_options: 
