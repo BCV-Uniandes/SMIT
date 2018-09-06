@@ -39,6 +39,7 @@ class BP4D(Dataset):
     self.shuffling = shuffling
     self.image_size = image_size
     self.AUs = AUs
+    self.metadata_path = metadata_path
     self.name = 'BP4D'
     self.labels_au = get_aus_emotionnet(metadata_path, mode)
     file_txt = os.path.abspath(os.path.join(metadata_path.format('BP4D'), mode+'.txt'))
@@ -62,7 +63,8 @@ class BP4D(Dataset):
       filename = splits[0]
       # name = 'Faces' if not 'aligned' in filename else 'Faces_aligned'
       # filename = filename.replace('Faces', 'Faces_256')#+str(self.image_size))
-      filename = filename.replace('Faces', 'Sequences_400')#+str(self.image_size))
+      if not 'faces' in self.metadata_path:
+        filename = filename.replace('Faces', 'Sequences_400')#+str(self.image_size))
       if not os.path.isfile(filename) or os.stat(filename).st_size==0: 
         # continue
         ipdb.set_trace()
@@ -346,6 +348,8 @@ class DEMO(Dataset):
 
   def __getitem__(self, index):
     image = Image.open(self.lines[index]).convert('RGB')
+    # size = min(image.size)-1 if min(image.size)%2 else min(image.size)
+    # image.thumbnail((size,size), Image.ANTIALIAS)
     return self.transform(image)
 
   def __len__(self):
@@ -388,8 +392,10 @@ def get_loader(metadata_path, crop_size, image_size, batch_size, \
 
 
   else:
-    transform = transforms.Compose([
-      transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS),
+    # if dataset!='DEMO': resize = [transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS)]
+    # else: resize = []
+    resize = [transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS)]
+    transform = transforms.Compose(resize+[
       transforms.ToTensor(),
       transforms.Normalize(mean, std)])
 
