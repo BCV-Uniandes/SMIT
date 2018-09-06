@@ -35,10 +35,12 @@ def imgShow(img):
 
 #=======================================================================================#
 #=======================================================================================#
-def make_gif(imgs, path):
+def make_gif(imgs, path, only_one=False):
   import imageio, numpy as np
+  if only_one: n=0
+  else: n=1
   if 'jpg' in path: path = path.replace('jpg', 'gif')
-  imgs = (imgs[1:].cpu().numpy().transpose(0,2,3,1)*255).astype(np.uint8)
+  imgs = (imgs[n:].cpu().numpy().transpose(0,2,3,1)*255).astype(np.uint8)
   size = imgs.shape[1]
   target_size = (imgs.shape[1], imgs.shape[1], imgs.shape[-1])
   img_list = []
