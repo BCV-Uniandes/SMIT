@@ -194,8 +194,8 @@ class MultiDiscriminator(nn.Module):
     aux = nn.Sequential(*[nn.Conv2d(curr_dim, self.c_dim, kernel_size=conv_size//2, bias=False)])
     if self.StyleDisc: 
       layers = []
-      if self.style_dim==1 or self.style_dim==8: 
-        layers.append(nn.AdaptiveAvgPool2d(1)) # global average pooling
+      # if self.style_dim==1 or self.style_dim==8: 
+      #   layers.append(nn.AdaptiveAvgPool2d(1)) # global average pooling
       if self.FC:
         # ipdb.set_trace()
         k_size = int(self.image_size / (np.power(2, self.repeat_num-1)*(2**idx)))
@@ -238,9 +238,13 @@ class MultiDiscriminator(nn.Module):
       x = self.downsample(x)
 
     if get_style and self.StyleDisc: 
+      # ipdb.set_trace()
       outs_sty = [out.unsqueeze(0) for out in outs_sty]
       outs_sty = torch.cat(outs_sty,dim=0).mean(dim=0)
-      outs_sty = [outs_sty.view(outs_sty[0].size(0), self.c_dim, -1)]
+      if self.DRITZ:
+        outs_sty = [outs_sty.view(outs_sty.size(0), -1)]
+      else:
+        outs_sty = [outs_sty.view(outs_sty.size(0), self.s_dim, -1)]
       return outs_sty
     return outs_src, outs_aux, outs_sty
 
@@ -598,12 +602,12 @@ class AdaInGEN(nn.Module):
     self.c_dim = config.c_dim if config.style_dim!=8 else 1
     self.StyleDisc = 'StyleDisc' in config.GAN_options
     self.InterStyleConcatLabels= 'InterStyleConcatLabels' in config.GAN_options
-    if not self.StyleDisc: self.enc_style = StyleEncoder(config, debug=True)
+    if not self.StyleDisc: self.enc_style = StyleEncoder(config, debug=debug)
     self.generator = Generator(config, debug=False)
     in_dim = self.style_dim*self.c_dim
     if self.InterStyleConcatLabels: in_dim *=2
-    self.adain_net = MLP(in_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=True)
-    self.debug()
+    self.adain_net = MLP(in_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=debug)
+    if debug: self.debug()
 
   def debug(self):
     feed = to_var(torch.ones(1,self.color_dim,self.image_size,self.image_size), volatile=True, no_cuda=True)
@@ -637,8 +641,8 @@ class AdaInGEN(nn.Module):
     # apply style code to an image
     if self.InterStyleConcatLabels:
       # ipdb.set_trace()
-      label = label.unsqueeze(2).expand_as(style)
-      style = torch.cat([style, label], dim=2)
+      label = label.unsqueeze(-1).expand_as(style)
+      style = torch.cat([style, label], dim=-1)
     adain_params = self.adain_net(style)
     self.assign_adain_params(adain_params, self.generator)
 
@@ -721,8 +725,7 @@ class StyleEncoder(nn.Module):
       layers0.append(nn.Linear(256, 256, bias=True))  
       layers0.append(nn.Dropout(0.5))
       self.fc = nn.Sequential(*layers0)
-      out_dim = self.s_dim*style_dim
-      self.style_mu = nn.Linear(256, out_dim)
+      self.style_mu = nn.Linear(256, self.s_dim)
     else:
       self.style_mu = nn.Conv2d(curr_dim, self.c_dim, kernel_size=1, stride=1, padding=0)
     self.main = nn.Sequential(*layers)
