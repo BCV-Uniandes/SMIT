@@ -1,18 +1,32 @@
 #=======================================================================================#
 #=======================================================================================#
+def create_dir(dir):
+  import os
+  if '.' in os.path.basename(dir):
+    dir = os.path.dirname(dir)
+  if not os.path.isdir(dir): os.makedirs(dir)
+
+#=======================================================================================#
+#=======================================================================================#
 def denorm(x):
   out = (x + 1) / 2
   return out.clamp_(0, 1)
 
 #=======================================================================================#
 #=======================================================================================#
-def get_aus(image_size, dataset):
+def get_aus(image_size, dataset, attr=None):
   import imageio, glob, torch
   import skimage.transform  
   import numpy as np
   import ipdb
   resize = lambda x: skimage.transform.resize(imageio.imread(line), (image_size, image_size))
-  imgs = [resize(line).transpose(2,0,1) for line in sorted(glob.glob('data/{}/aus_flat/*g'.format(dataset)))]
+  if dataset=='CelebA':
+    imgs_file = sorted(glob.glob('data/{}/aus_flat/00*g'.format(dataset)))
+    labels = attr.selected_attrs
+    imgs_file += sorted(['data/{}/aus_flat/{}.jpeg'.format(dataset,l) for l in labels])
+  else:
+    imgs_file = sorted(glob.glob('data/{}/aus_flat/*g'.format(dataset)))
+  imgs = [resize(line).transpose(2,0,1) for line in imgs_file]
   # ipdb.set_trace()   
   imgs = torch.from_numpy(np.concatenate(imgs, axis=2).astype(np.float32)).unsqueeze(0)
   return imgs  
@@ -35,12 +49,10 @@ def imgShow(img):
 
 #=======================================================================================#
 #=======================================================================================#
-def make_gif(imgs, path, only_one=False):
+def make_gif(imgs, path):
   import imageio, numpy as np
-  if only_one: n=0
-  else: n=1
   if 'jpg' in path: path = path.replace('jpg', 'gif')
-  imgs = (imgs[n:].cpu().numpy().transpose(0,2,3,1)*255).astype(np.uint8)
+  imgs = (imgs.cpu().numpy().transpose(0,2,3,1)*255).astype(np.uint8)
   size = imgs.shape[1]
   target_size = (imgs.shape[1], imgs.shape[1], imgs.shape[-1])
   img_list = []
@@ -104,6 +116,18 @@ def send_mail(body="bcv002", attach=[], subject='Message from bcv002', to='rv.an
 
 #=======================================================================================#
 #=======================================================================================#
+def target_debug_list(size, dim):
+  import torch
+  target_c= torch.zeros(size, dim)
+  target_c_list = [to_var(target_c, volatile=True)]
+  for j in range(dim):
+    target_c[:]=0 
+    target_c[:,j]=1       
+    target_c_list.append(to_var(target_c, volatile=True))        
+  return target_c_list
+
+#=======================================================================================#
+#=======================================================================================#
 def TimeNow():
   import datetime, pytz
   return str(datetime.datetime.now(pytz.timezone('Europe/Amsterdam'))).split('.')[0]
@@ -136,6 +160,23 @@ def to_cuda(x):
 
 #=======================================================================================#
 #=======================================================================================#
+def to_cpu(x):
+  return x.cpu() if x.is_cuda else x
+
+#=======================================================================================#
+#=======================================================================================#
+def to_data(x, cpu=False):
+  import torch
+  if int(torch.__version__.split('.')[1])>3:
+    x = x.data
+  else:
+    from torch.autograd import Variable
+    if isinstance(x, Variable): x = x.data
+  if cpu: x = to_cpu(x)
+  return x
+
+#=======================================================================================#
+#=======================================================================================#
 def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
   import torch
   if not no_cuda: x = to_cuda(x)
@@ -143,6 +184,7 @@ def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
     return x
   else:
     from torch.autograd import Variable      
+    if isinstance(x, Variable): return x
     return Variable(x, volatile=volatile, requires_grad=requires_grad)  
 
 #=======================================================================================#
