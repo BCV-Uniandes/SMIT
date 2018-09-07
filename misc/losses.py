@@ -54,8 +54,8 @@ def _CLS_LOSS(output, target):
 def _GAN_LOSS(Disc, real_x, fake_x, label, opts, is_fake=False):
   import torch
   import torch.nn.functional as F
-  src_real, cls_real, style_real = Disc(real_x)
-  src_fake, cls_fake, style_fake = Disc(fake_x)
+  src_real, cls_real = Disc(real_x)
+  src_fake, cls_fake = Disc(fake_x)
 
   loss_src = 0; loss_cls = 0
   for i in range(len(src_real)):
@@ -83,10 +83,7 @@ def _GAN_LOSS(Disc, real_x, fake_x, label, opts, is_fake=False):
 
     loss_cls += _CLS_LOSS(cls_real[i], label)
 
-  if is_fake and 'StyleDisc' in opts:
-    return loss_src, loss_cls, style_real, style_fake
-  else:
-    return  loss_src, loss_cls
+  return  loss_src, loss_cls
 
 #=======================================================================================#
 #=======================================================================================#
@@ -95,7 +92,7 @@ def _get_gradient_penalty(Disc, real_x, fake_x):
   from utils import to_cuda, to_var
   alpha = to_cuda(torch.rand(real_x.size(0), 1, 1, 1).expand_as(real_x))
   interpolated = to_var((alpha * real_x + (1 - alpha) * fake_x), requires_grad = True)
-  out, _, _ = Disc(interpolated)
+  out, _ = Disc(interpolated)
   d_loss_gp = 0
   for idx in range(len(out)):
     grad = torch.autograd.grad(outputs=out[idx],
