@@ -1,6 +1,10 @@
 def config_GENERATOR(config, update_folder):
   if config.dataset_fake=='CelebA':
-    config.c_dim=5
+    if config.ALL_CELEBA_ATTR:
+      update_folder(config, 'ALL_CELEBA_ATTR')
+      config.c_dim = 40
+    else:
+      config.c_dim=5
 
   if config.MultiDis>0:
     update_folder(config, 'MultiDis_scale'+str(config.MultiDis))
@@ -78,6 +82,10 @@ def config_GENERATOR(config, update_folder):
     elif 'InterStyleConcatLabels' in config.GAN_options:
       update_folder(config, 'InterStyleConcatLabels')
 
+    elif 'InterStyleMulLabels' in config.GAN_options:
+      if not 'style_labels' in config.GAN_options: config.GAN_options.append('style_labels')
+      update_folder(config, 'InterStyleMulLabels')      
+
     if 'DRITZ' in config.GAN_options: 
       if 'Split_Optim' in config.GAN_options: config.GAN_options.remove('Split_Optim')  
       update_folder(config, 'DRITZ')    
@@ -87,6 +95,7 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'DRIT')    
 
     if 'style_labels' in config.GAN_options:
+      config.style_label_debug = 1
       update_folder(config, 'style_labels') 
 
     if 'LOGVAR' in config.GAN_options:
@@ -100,15 +109,9 @@ def config_GENERATOR(config, update_folder):
       if not 'Stochastic' in config.GAN_options: 
         update_folder(config, 'AdaIn')    
 
-  if 'StyleDisc' in config.GAN_options:
-    update_folder(config, 'StyleDisc')
-    if 'Split_Optim' in config.GAN_options: config.GAN_options.remove('Split_Optim')
-
-  if 'Split_Optim_all' in config.GAN_options: 
-    update_folder(config, 'Split_Optim_all') 
-
-  elif 'Split_Optim' in config.GAN_options: 
-    update_folder(config, 'Split_Optim') 
+  # elif 'Split_Optim' in config.GAN_options: 
+  #   update_folder(config, 'Split_Optim') 
+  update_folder(config, 'Split_Optim') 
 
   if 'mse_style' in config.GAN_options: 
     update_folder(config, 'mse_style') 
@@ -153,24 +156,13 @@ def remove_folder(config):
 
 def update_config(config):
   import os, glob, math, imageio, ipdb
-  if 'GOOGLE' in config.GAN_options or 'TEST' in config.GAN_options: config.mode='test'
-  if 'VAL_SHOW' in config.GAN_options: config.mode='val'
-
-  config.AUs = {'EMOTIONNET': [1, 2, 4, 5, 6, 9, 12, 17, 20, 25, 26, 43],
-                'BP4D': [1, 2, 4, 6, 7, 10, 12, 14, 15, 17, 23, 24],
-                'CELEBA': [1, 2, 4, 5, 6, 9, 12, 17, 20, 25, 26, 43],
-                'MNIST': [],
-                'DEMO': []} #CelebA AUs are for training framework
-  config.AUs_Common=  [1, 2, 4, 6, 12, 17]
 
   replace_folder_gan(config)
 
   update_folder(config, os.path.join(config.mode_data, str(config.image_size), 'fold_'+config.fold))
   config.metadata_path = os.path.join(config.metadata_path, '{}', config.mode_data, 'fold_'+config.fold, )
-  config.g_repeat_num = 6 if config.image_size <256 else 9 #int(math.log(config.image_size,2)-1)
+  config.g_repeat_num = 6 if config.image_size <256 else 9 
   config.d_repeat_num = int(math.log(config.image_size,2)-1)
-  config.mean=(0.5,0.5,0.5)
-  config.std=(0.5,0.5,0.5)
 
   config_GENERATOR(config, update_folder)
 

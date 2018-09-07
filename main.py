@@ -35,15 +35,9 @@ def main(config):
   # For fast training
   cudnn.benchmark = True
 
-  if config.mode=='train':
-    data_loader = get_loader(config.metadata_path, config.image_size,
-                   config.image_size, config.batch_size, config.dataset, config.mode, \
-                   color_jitter='COLOR_JITTER' in config.GAN_options, AU=config.AUs,\
-                   mean=config.mean, std=config.std, num_workers=config.num_workers)   
-
-    solver = Solver(config, data_loader)
-  else:
-    solver = Solver(config)
+  data_loader = get_loader(config.metadata_path, config.image_size, config.batch_size, config.dataset, 
+                 config.mode, num_workers=config.num_workers, all_attr = config.ALL_CELEBA_ATTR)   
+  solver = Solver(config, data_loader)
 
   if config.DISPLAY_NET and config.mode_train=='GAN': 
     solver.display_net(name='discriminator')
@@ -79,7 +73,6 @@ if __name__ == '__main__':
   parser.add_argument('--color_dim',          type=int, default=3)
   parser.add_argument('--image_size',         type=int, default=128)
   parser.add_argument('--batch_size',         type=int, default=64)
-  parser.add_argument('--iter_test',          type=int, default=1)
   parser.add_argument('--num_workers',        type=int, default=4)
   parser.add_argument('--num_epochs',         type=int, default=200)
   parser.add_argument('--num_epochs_decay',   type=int, default=50)
@@ -103,7 +96,7 @@ if __name__ == '__main__':
   parser.add_argument('--d_repeat_num',       type=int, default=6)
   parser.add_argument('--g_lr',               type=float, default=0.0001)
   parser.add_argument('--d_lr',               type=float, default=0.0001)
-  parser.add_argument('--lambda_cls',         type=float, default=1)  
+  parser.add_argument('--lambda_cls',         type=float, default=4)  
   parser.add_argument('--lambda_rec',         type=float, default=10.0)
   parser.add_argument('--lambda_gp',          type=float, default=10.0)
   parser.add_argument('--lambda_perceptual',  type=float, default=1.0)
@@ -128,14 +121,20 @@ if __name__ == '__main__':
   parser.add_argument('--DISPLAY_NET',        action='store_true', default=False) 
   parser.add_argument('--DELETE',             action='store_true', default=False)
   parser.add_argument('--FOLDER',             action='store_true', default=False)
+  parser.add_argument('--ALL_CELEBA_ATTR',    action='store_true', default=False)  
   parser.add_argument('--NO_LABELCUM',        action='store_true', default=False)
-  parser.add_argument('--NO_STYLE',           action='store_true', default=False)
   parser.add_argument('--GPU',                type=str, default='0')
 
   # Step size
   parser.add_argument('--log_step',           type=int, default=10)
   parser.add_argument('--sample_step',        type=int, default=500)
   parser.add_argument('--model_save_step',    type=int, default=10000)
+
+  # Debug options
+  parser.add_argument('--iter_test',          type=int, default=1)
+  parser.add_argument('--iter_style',         type=int, default=20)
+  parser.add_argument('--style_debug',        type=int, default=6)
+  parser.add_argument('--style_label_debug',  type=int, default=3, choices=[0,1,2,3])
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
