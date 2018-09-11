@@ -8,6 +8,8 @@ from tqdm import tqdm
 from termcolor import colored
 from misc.utils import create_dir, denorm, get_aus, get_loss_value, make_gif, PRINT, send_mail, target_debug_list, TimeNow, TimeNow_str, to_cuda, to_data, to_var
 from misc.losses import _compute_kl, _compute_loss_smooth, _compute_vgg_loss, _GAN_LOSS, _get_gradient_penalty
+import torch.utils.data.distributed
+import horovod.torch as hvd
 warnings.filterwarnings('ignore')
 
 class Solver(object):
@@ -41,19 +43,18 @@ class Solver(object):
       else: from model import DRITGEN as GEN
     elif 'DRITZ' in self.config.GAN_options: from model import DRITZGEN as GEN
     else: from model import Generator as GEN
-    self.G = GEN(self.config, debug=self.config.mode=='train')
-
-    G_parameters = self.G.parameters()
-    self.g_optimizer = torch.optim.Adam(G_parameters, self.config.g_lr, [self.config.beta1, self.config.beta2])
+    self.G = GEN(self.config, debug=self.config.mode=='train' and not self.config.HOROVOD)
+    G_parameters = filter(lambda p: p.requires_grad, self.G.parameters())
+    self.g_optimizer = torch.optim.Adam(G_parameters, self.config.g_lr*hvd.size(), [self.config.beta1, self.config.beta2])
     to_cuda(self.G)
 
-    self.D = Discriminator(self.config, debug=self.config.mode=='train') 
+    self.D = Discriminator(self.config, debug=self.config.mode=='train' and not self.config.HOROVOD) 
+    to_cuda(self.D)
     if self.config.mode=='train': 
-      D_parameters = self.D.parameters()
-      self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr, [self.config.beta1, self.config.beta2])
+      D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
+      self.d_optimizer = torch.optim.Adam(D_parameters, self.config.d_lr*hvd.size(), [self.config.beta1, self.config.beta2])
       self.print_network(self.D, 'Discriminator')
       self.print_network(self.G, 'Generator')
-    to_cuda(self.D)
 
     if 'L1_Perceptual' in self.config.GAN_options or 'Perceptual' in self.config.GAN_options:
       import importlib
@@ -62,8 +63,16 @@ class Solver(object):
       to_cuda(self.vgg)
       self.vgg.eval()
       for param in self.vgg.parameters():
-          param.requires_grad = False                
+          param.requires_grad = False          
 
+    if self.config.HOROVOD and self.config.mode=='train':
+      self.d_optimizer = hvd.DistributedOptimizer(self.d_optimizer, named_parameters=self.D.named_parameters())      
+      hvd.broadcast_parameters(self.D.state_dict(), root_rank=0)
+      # hvd.broadcast_optimizer_state(self.d_optimizer, root_rank=0)          
+
+      self.g_optimizer = hvd.DistributedOptimizer(self.g_optimizer, named_parameters=self.G.named_parameters())
+      hvd.broadcast_parameters(self.G.state_dict(), root_rank=0)
+      # hvd.broadcast_optimizer_state(self.g_optimizer, root_rank=0)          
   #=======================================================================================#
   #=======================================================================================#
 
@@ -93,6 +102,7 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
   def save(self, Epoch, iter):
+    if hvd.rank() != 0: return
     name = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(Epoch, iter, '{}'))
     torch.save(self.G.state_dict(), name.format('G'))
     torch.save(self.D.state_dict(), name.format('D'))
@@ -104,6 +114,7 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
   def load_pretrained_model(self):
+    if hvd.rank() != 0: return
     name = os.path.join(self.config.model_save_path, '{}_{}.pth'.format(self.config.pretrained_model, '{}'))
     self.G.load_state_dict(torch.load(name.format('G')))#, map_location=lambda storage, loc: storage))
     self.D.load_state_dict(torch.load(name.format('D')))#, map_location=lambda storage, loc: storage))
@@ -129,9 +140,9 @@ class Solver(object):
   #=======================================================================================#
   def update_lr(self, g_lr, d_lr):
     for param_group in self.g_optimizer.param_groups:
-      param_group['lr'] = g_lr
+      param_group['lr'] = g_lr*hvd.size()
     for param_group in self.d_optimizer.param_groups:
-      param_group['lr'] = d_lr
+      param_group['lr'] = d_lr*hvd.size()
 
   #=======================================================================================#
   #=======================================================================================#
@@ -173,6 +184,7 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
   def PRINT(self, str):  
+    if self.config.HOROVOD and hvd.rank() != 0: return
     if self.config.mode=='train': PRINT(self.config.log, str)
     else: print(str)
 
@@ -203,6 +215,7 @@ class Solver(object):
   #=======================================================================================#
   def _SAVE_IMAGE(self, save_path, fake_list, attn_list=[], gif=False, mode='fake'):
     Output = []
+    if self.config.HOROVOD and hvd.rank() != 0: return Output
     fake_images = denorm(to_data(torch.cat(fake_list, dim=3), cpu=True))
     if gif: make_gif(fake_images, save_path)
     fake_images = torch.cat((self.get_aus(), fake_images), dim=0)
@@ -240,13 +253,13 @@ class Solver(object):
 
     ############################# Stochastic Part ##################################
     if 'Stochastic' in GAN_options:
-      style_fake0 = [to_var(self.G.random_style(real_x0))]
+      style_fake0 = to_var(self.G.random_style(real_x0))
       if 'style_labels' in GAN_options:
-        style_fake0 = [s*fake_c0.unsqueeze(2) for s in style_fake0]
+        style_fake0 = style_fake0*fake_c0.unsqueeze(2)
     else:
-      style_fake0 = [None]
+      style_fake0 = None
 
-    fake_x0 = self.G(real_x0, fake_c0, stochastic=style_fake0[0])[0]
+    fake_x0 = self.G(real_x0, fake_c0, stochastic=style_fake0)[0]
 
     #=======================================================================================#
     #======================================== Train D ======================================#
@@ -331,20 +344,28 @@ class Solver(object):
     for item in sorted(GAN_options):
       Log += ' [*{}]'.format(item.upper())
     Log += ' [*{}]'.format(self.config.dataset_fake)
+    if self.config.ALL_CELEBA_ATTR: Log += ' [*ALL_CELEBA_ATTR]'
     self.PRINT(Log)
     start_time = time.time()
 
     criterion_l1 = torch.nn.L1Loss()
     style_flag = True
+
+    if self.config.HOROVOD:
+      disable_tqdm = False#not hvd.rank() == 0
+    else:
+      disable_tqdm = False
+
     # Start training
     for e in range(start, self.config.num_epochs):
       E = str(e+1).zfill(3)
       self.D.train()
       self.G.train()
       self.LOSS = {}
+      if self.config.HOROVOD: self.data_loader.sampler.set_epoch(e)
       desc_bar = 'Epoch: %d/%d'%(e,self.config.num_epochs)
       progress_bar = tqdm(enumerate(self.data_loader), unit_scale=True, 
-          total=len(self.data_loader), desc=desc_bar, ncols=5)
+          total=len(self.data_loader), desc=desc_bar, ncols=5, disable=disable_tqdm)
       for i, (real_x, real_c, files) in progress_bar: 
 
         self.loss = {}
@@ -558,22 +579,24 @@ class Solver(object):
         Output.extend(self._SAVE_IMAGE(save_path, fake_image_list, attn_list=fake_attn_list, gif=gif))
 
       #Same image different style
-      if Stochastic:
-        for idx, real_x0 in enumerate(real_x):
-          if training:
-            _save_path = save_path
-          else:
-            _save_path = os.path.join(save_path.replace('.jpg', ''), '{}_{}.jpg'.format(Style, str(idx).zfill(3)))
-            create_dir(_save_path)
-          real_x0 = real_x0.repeat(n_rep,1,1,1)#.unsqueeze(0)
-          _out_label = out_label[idx].repeat(n_rep,1)
-          fake_image_list = [real_x0]
-          fake_attn_list  = []            
-          for _target_c in target_c_list:
-            _target_c  = _target_c[0].repeat(n_rep,1)
-            target_c = torch.clamp(_target_c+_out_label, max=1)
+      for idx, real_x0 in enumerate(real_x):
+        if training:
+          _save_path = save_path
+        else:
+          _save_path = os.path.join(save_path.replace('.jpg', ''), '{}_{}.jpg'.format(Style, str(idx).zfill(3)))
+          create_dir(_save_path)
+        real_x0 = real_x0.repeat(n_rep,1,1,1)#.unsqueeze(0)
+        _out_label = out_label[idx].repeat(n_rep,1)
+        fake_image_list = [real_x0]
+        fake_attn_list  = []       
+        if Attention: 
+          fake_attn_list = [to_var(denorm(real_x0.data), volatile=True)]             
+        for _target_c in target_c_list:
+          _target_c  = _target_c[0].repeat(n_rep,1)
+          target_c = torch.clamp(_target_c+_out_label, max=1)
+          
+          if Stochastic:
             style=to_var(self.G.random_style(real_x0), volatile=True)
-
             if Style==1:
               for j, i in enumerate(range(real_x0.size(0))): 
                 style[i] = style[0].clone()#*_target_c[0].unsqueeze(-1)
@@ -582,22 +605,30 @@ class Solver(object):
               for j, i in enumerate(range(real_x0.size(0))): 
                 style[i] = style[i]*0
                 target_c[i] = target_c[i]*(0.2*j)
-            elif Style==3:
+            if Style==3:
               for j, i in enumerate(range(real_x0.size(0))): 
-                style[i] = style[i]*_target_c[0].unsqueeze(-1)
+                style[i] = style[0].clone()#*_target_c[0].unsqueeze(-1)
+                target_c[i] = _target_c[i]*(0.2*j)               
             elif Style==4:
+              for j, i in enumerate(range(real_x0.size(0))): 
+                style[i] = style[i]*_target_c[0].unsqueeze(-1)              
+            elif Style==5:
               #Extract style from the two before, current, and two after. 
               _real_x0 = torch.zeros_like(real_x0)
               for j, k in enumerate(range(-int(self.config.style_debug//2), 1+int(self.config.style_debug//2))):
                 kk = (k+idx)%real_x.size(0) if k+idx >= real_x.size(0) else k+idx
                 _real_x0[j] = real_x[kk]
               style = self.G.get_style(_real_x0)
+          else:
+            style = None
+            for j, i in enumerate(range(real_x0.size(0))): 
+              target_c[i] = target_c[i]*(0.2*j)            
 
-            fake_x = self.G(real_x0, target_c, stochastic=style)
-            fake_image_list.append(fake_x[0])
-            if Attention: fake_attn_list.append(fake_x[1].repeat(1,3,1,1))
-          Output.extend(self._SAVE_IMAGE(_save_path, fake_image_list, attn_list=fake_attn_list, gif=gif, mode='style'))
-          if idx==self.config.iter_style: break          
+          fake_x = self.G(real_x0, target_c, stochastic=style)
+          fake_image_list.append(fake_x[0])
+          if Attention: fake_attn_list.append(fake_x[1].repeat(1,3,1,1))
+        Output.extend(self._SAVE_IMAGE(_save_path, fake_image_list, attn_list=fake_attn_list, gif=gif, mode='style'))
+        if idx==self.config.iter_style or training: break          
     self.G.train()
     self.D.train()
     if output: return Output 
@@ -620,7 +651,11 @@ class Solver(object):
         string += '_{}'.format('NO_Label_Cum','{}')
       string = string.format(TimeNow_str())
       name = os.path.abspath(save_path.format(string))
-      for k in range(self.config.style_label_debug):
+      if 'Stochastic' in self.config.GAN_options:
+        _debug = self.config.style_label_debug+1
+      else:
+        _debug = 1
+      for k in range(_debug):
         output = self.save_fake_output(real_x, name, output=True, Style=k)
         # send_mail(body='Images from '+self.config.sample_path, attach=output)
       self.PRINT('Translated test images and saved into "{}"..!'.format(name))

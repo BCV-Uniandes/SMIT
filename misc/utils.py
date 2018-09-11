@@ -140,6 +140,11 @@ def TimeNow_str():
 
 #=======================================================================================#
 #=======================================================================================#
+def to_cpu(x):
+  return x.cpu() if x.is_cuda else x
+
+#=======================================================================================#
+#=======================================================================================#
 def to_cuda(x):
   import torch
   import torch.nn as nn
@@ -160,11 +165,6 @@ def to_cuda(x):
 
 #=======================================================================================#
 #=======================================================================================#
-def to_cpu(x):
-  return x.cpu() if x.is_cuda else x
-
-#=======================================================================================#
-#=======================================================================================#
 def to_data(x, cpu=False):
   import torch
   if int(torch.__version__.split('.')[1])>3:
@@ -177,11 +177,30 @@ def to_data(x, cpu=False):
 
 #=======================================================================================#
 #=======================================================================================#
+def to_parallel(main, input, list_gpu, horovod=False):
+  import torch
+  import torch.nn as nn
+  import ipdb
+  if len(list_gpu)>1 and input.is_cuda and not horovod:
+    if int(torch.__version__.split('.')[1])>3:
+      return nn.parallel.data_parallel(main, input,  device_ids = list_gpu)
+    else:  
+      return nn.parallel.data_parallel(main, input,  device_ids = list_gpu)
+      # ipdb.set_trace()
+  else:
+    return main(input)
+
+#=======================================================================================#
+#=======================================================================================#
 def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
   import torch
   if not no_cuda: x = to_cuda(x)
   if int(torch.__version__.split('.')[1])>3:
-    return x
+    if requires_grad:
+      return x.requires_grad_(True)
+    else:
+      return x
+
   else:
     from torch.autograd import Variable      
     if isinstance(x, Variable): return x

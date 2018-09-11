@@ -12,6 +12,9 @@ import warnings
 import ipdb
 import sys
 import torch
+import torch.utils.data.distributed
+import horovod.torch as hvd
+hvd.init()
 # warnings.filterwarnings('ignore')
 
 #./main.py -- --GPU 3 --GRAY --BLUR --L1_LOSS --lambda_l1 5
@@ -36,7 +39,8 @@ def main(config):
   cudnn.benchmark = True
 
   data_loader = get_loader(config.metadata_path, config.image_size, config.batch_size, config.dataset, 
-                 config.mode, num_workers=config.num_workers, all_attr = config.ALL_CELEBA_ATTR)   
+                 config.mode, num_workers=config.num_workers, all_attr = config.ALL_CELEBA_ATTR,
+                 HOROVOD=config.HOROVOD)   
   solver = Solver(config, data_loader)
 
   if config.DISPLAY_NET and config.mode_train=='GAN': 
@@ -74,8 +78,8 @@ if __name__ == '__main__':
   parser.add_argument('--image_size',         type=int, default=128)
   parser.add_argument('--batch_size',         type=int, default=64)
   parser.add_argument('--num_workers',        type=int, default=4)
-  parser.add_argument('--num_epochs',         type=int, default=200)
-  parser.add_argument('--num_epochs_decay',   type=int, default=50)
+  parser.add_argument('--num_epochs',         type=int, default=300)
+  parser.add_argument('--num_epochs_decay',   type=int, default=100)
   parser.add_argument('--beta1',              type=float, default=0.5)
   parser.add_argument('--beta2',              type=float, default=0.999)
   parser.add_argument('--pretrained_model',   type=str, default=None)  
@@ -117,12 +121,12 @@ if __name__ == '__main__':
 
   # Misc
   parser.add_argument('--use_tensorboard',    action='store_true', default=False)
-  parser.add_argument('--TEST',               action='store_true', default=False)  
   parser.add_argument('--DISPLAY_NET',        action='store_true', default=False) 
   parser.add_argument('--DELETE',             action='store_true', default=False)
   parser.add_argument('--FOLDER',             action='store_true', default=False)
   parser.add_argument('--ALL_CELEBA_ATTR',    action='store_true', default=False)  
   parser.add_argument('--NO_LABELCUM',        action='store_true', default=False)
+  parser.add_argument('--HOROVOD',            action='store_true', default=False)
   parser.add_argument('--GPU',                type=str, default='0')
 
   # Step size
@@ -134,18 +138,31 @@ if __name__ == '__main__':
   parser.add_argument('--iter_test',          type=int, default=1)
   parser.add_argument('--iter_style',         type=int, default=20)
   parser.add_argument('--style_debug',        type=int, default=6)
-  parser.add_argument('--style_label_debug',  type=int, default=3, choices=[0,1,2,3])
+  parser.add_argument('--style_label_debug',  type=int, default=3, choices=[0,1,2,3,4])
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
-  os.environ['CUDA_VISIBLE_DEVICES'] = str(int(float(config.GPU)))
+  
   if not torch.cuda.is_available():
     config.GPU='no_cuda'
+  elif config.HOROVOD:
+    _GPU = config.GPU.split(',')
+    print(hvd.local_rank(), hvd.size())
+    config.g_lr = config.g_lr/hvd.size()
+    config.d_lr = config.d_lr/hvd.size()    
+    torch.manual_seed(0)
+    torch.cuda.set_device(int(_GPU[hvd.local_rank()]))
+    torch.cuda.manual_seed(0)    
+  else:
+    config.GPU = map(int, config.GPU.split(','))
+    torch.cuda.set_device(config.GPU[0])
+
+    # os.environ['CUDA_VISIBLE_DEVICES'] = config.GPU
 
   config = cfg.update_config(config)
 
   if config.FOLDER:
-    print(os.path.abspath(config.sample_path))
+    if hvd.rank() == 0: print(os.path.abspath(sorted(glob.glob(os.path.join(config.sample_path, '*.jpg')))[-3]))
     sys.exit() 
 
   if config.mode=='train':
@@ -160,19 +177,20 @@ if __name__ == '__main__':
       file_log = 'logs/gpu{}_{}.txt'.format(config.GPU, config.mode_train)
     else:
       file_log = 'logs/gpu{}_{}_{}.txt'.format(config.GPU, config.PLACE, config.mode_train)
-    if os.path.isfile(file_log): os.remove(file_log)
-    # ipdb.set_trace()
-    os.symlink(org_log, file_log)
+
+    if hvd.rank() == 0:
+      if os.path.isfile(file_log): os.remove(file_log)
+      os.symlink(org_log, file_log)
 
   else:
     file_log = 'logs/dummy.txt'
 
   if config.mode=='train':
-    of = 'w' if os.path.isfile(file_log) else 'wb'
+    of = 'a' if os.path.isfile(file_log) else 'wb'
     with open(file_log, of) as config.log:
-      print >> config.log, ' '.join(sys.argv)
+      if hvd.rank() == 0: print >> config.log, ' '.join(sys.argv)
       config.log.flush()
-      PRINT(config) 
+      if hvd.rank() == 0: PRINT(config) 
       # print(config)
       main(config)
     # last_sample = sorted(glob.glob(config.sample_path+'/*.jpg'))[-1]

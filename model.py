@@ -6,7 +6,7 @@ import numpy as np
 from models.spectral import SpectralNorm as SpectralNormalization
 import ipdb
 import math
-from misc.utils import to_cuda, to_var
+from misc.utils import to_cuda, to_var,to_parallel
 from misc.blocks import AdaptiveInstanceNorm2d, ResidualBlock, LinearBlock, Conv2dBlock, LayerNorm
 
 def get_SN(bool):
@@ -41,6 +41,7 @@ class Discriminator(nn.Module):
     conv_dim = config.d_conv_dim
     repeat_num = config.d_repeat_num    
     self.c_dim = config.c_dim
+    self.config = config
     color_dim = config.color_dim
     SN = 'SpectralNorm' in config.GAN_options
     SpectralNorm = get_SN(SN)
@@ -67,11 +68,11 @@ class Discriminator(nn.Module):
       _ = print_debug(features, [self.conv2])          
 
   def forward(self, x):
-    h = self.main(x)
-    out_real = self.conv1(h).squeeze()
+    h = to_parallel(self.main, x, self.config.GPU)
+    out_real = to_parallel(self.conv1, h, self.config.GPU).squeeze()
     out_real = out_real.view(x.size(0), out_real.size(-2), out_real.size(-1))
 
-    out_aux = self.conv2(h).squeeze()
+    out_aux = to_parallel(self.conv2, h, self.config.GPU).squeeze()
     out_aux = out_aux.view(x.size(0), out_aux.size(-1))
 
     return [out_real], [out_aux]
@@ -90,6 +91,7 @@ class MultiDiscriminator(nn.Module):
     self.repeat_num = config.d_repeat_num    
     self.c_dim = config.c_dim
     self.color_dim = config.color_dim
+    self.config = config
     SN = 'SpectralNorm' in config.GAN_options
     self.SpectralNorm = get_SN(SN)
     
@@ -131,12 +133,10 @@ class MultiDiscriminator(nn.Module):
 
   def forward(self, x):
     outs_src = []; outs_aux = []
-    # ipdb.set_trace()
     for model, src, aux in zip(self.cnns_main, self.cnns_src, self.cnns_aux):
-      # ipdb.set_trace()
-      main = model(x)
-      _src = src(main)
-      _aux = aux(main).view(main.size(0), -1)
+      main = to_parallel(model, x, self.config.GPU)
+      _src = to_parallel(src, main, self.config.GPU)
+      _aux = to_parallel(aux, main, self.config.GPU).view(main.size(0), -1)
       outs_src.append(_src)
       outs_aux.append(_aux)
 
@@ -154,6 +154,7 @@ class Generator(nn.Module):
     layers = []
     conv_dim = config.g_conv_dim
     repeat_num = config.g_repeat_num
+    self.config = config
     self.image_size = config.image_size
     self.c_dim = config.c_dim    
     self.color_dim = config.color_dim
@@ -288,6 +289,7 @@ class Generator(nn.Module):
 
     if self.InterStyleLabels or self.InterLabels:
       content = self.content(x_cat)
+      # content = to_parallel(self.content, x_cat, self.config.GPU)
       if self.InterStyleLabels:
         if stochastic.size(-1)!=content.size(-1):
           stochastic = stochastic.repeat(1,1,content.size(-1)//stochastic.size(-1))        
@@ -299,7 +301,6 @@ class Generator(nn.Module):
       x_cat = torch.cat([content, c], dim=1)
 
       if self.DRIT and not self.InterStyleLabels:
-        # ipdb.set_trace()
         if stochastic.size(-1)!=content.size(-1):
           stochastic = stochastic.repeat(1,1,content.size(-1)//stochastic.size(-1))
         stochastic = stochastic.unsqueeze(3)
@@ -308,6 +309,7 @@ class Generator(nn.Module):
 
     elif self.DRIT:
       content = self.content(x_cat)
+      # content = to_parallel(self.content, x_cat, self.config.GPU)
       if self.InterLabels:
         c = c.unsqueeze(2).unsqueeze(3)
         c = c.expand(c.size(0), c.size(1), content.size(2), content.size(3))        
@@ -318,6 +320,7 @@ class Generator(nn.Module):
         x_cat = torch.cat([content, c, stochastic], dim=1)        
       else:
         content = self.content(x_cat)
+        # content = to_parallel(self.content, x_cat, self.config.GPU)
         stochastic = stochastic.unsqueeze(3)
         stochastic = stochastic.expand(stochastic.size(0), stochastic.size(1), stochastic.size(2), stochastic.size(2))
         x_cat = torch.cat([content, stochastic], dim=1)                
@@ -327,17 +330,19 @@ class Generator(nn.Module):
 
     if self.Attention: 
       features = self.main(x_cat)
-      fake_img = self.img_reg(features)
-      mask_img = self.attetion_reg(features)
+      fake_img = to_parallel(self.img_reg, features, self.config.GPU)
+      mask_img = to_parallel(self.attetion_reg, features, self.config.GPU)
       fake_img = mask_img * x + (1 - mask_img) * fake_img
       output = [fake_img, mask_img]
 
     elif self.AdaIn:  
       features = self.main(x_cat)
-      output = [self.img_reg(features)]
+      # output = [self.img_reg(features)]
+      output = [to_parallel(self.img_reg, features, self.config.GPU)]
 
     else: 
-      output = [self.main(x_cat)]
+      # output = [self.main(x_cat)]
+      output = [to_parallel(self.main, x_cat, self.config.GPU)]
 
     if CONTENT:
       output += [content]
@@ -377,7 +382,7 @@ class DRITZGEN(nn.Module):
 
   def get_style(self, x, volatile=False):
     style = self.enc_style(x)
-    style = style[0].view(style[0].size(0), -1)
+    style = style.view(style.size(0), -1)
     return style
 
 #===============================================================================================#
@@ -398,7 +403,7 @@ class AdaInGEN(nn.Module):
     self.generator = Generator(config, debug=False)
     in_dim = self.style_dim*self.c_dim
     if self.InterStyleConcatLabels: in_dim *=2
-    self.adain_net = MLP(in_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=debug)
+    self.adain_net = MLP(config, in_dim, self.get_num_adain_params(self.generator), mlp_dim, 3, norm='none', activ='relu', debug=debug)
     if debug: self.debug()
 
   def debug(self):
@@ -425,7 +430,7 @@ class AdaInGEN(nn.Module):
 
   def get_style(self, x, volatile=False):
     style = self.enc_style(x)
-    style = style[0].view(style[0].size(0), self.c_dim, -1)
+    style = style.view(style.size(0), self.c_dim, -1)
     return style
 
   def apply_style(self, image, style, label=None):
@@ -473,6 +478,7 @@ class StyleEncoder(nn.Module):
     self.c_dim = config.c_dim
     self.s_dim = 1 if style_dim==8 or self.DRITZ else config.c_dim*style_dim
     self.FC = 'FC' in config.GAN_options
+    self.config = config
     layers = []
     norm = 'none'
     activ = 'relu'
@@ -525,21 +531,21 @@ class StyleEncoder(nn.Module):
       _ = print_debug(features, [self.style_mu]) 
 
   def forward(self, x):
-    features = self.main(x)
+    features = to_parallel(self.main, x, self.config.GPU)
     if self.FC:
       fc_input = features.view(features.size(0), -1)
-      features = self.fc(fc_input)
+      features = to_parallel(self.fc, fc_input, self.config.GPU)
 
-    style_mu = self.style_mu(features)
-    style = [style_mu]
-    return style
+    style_mu = to_parallel(self.style_mu, features, self.config.GPU)
+    return style_mu
     
 #===============================================================================================#
 #===============================================================================================#
 class MLP(nn.Module):
-  def __init__(self, input_dim, output_dim, dim, n_blk, norm='none', activ='relu', debug=False):
+  def __init__(self, config, input_dim, output_dim, dim, n_blk, norm='none', activ='relu', debug=False):
 
     super(MLP, self).__init__()
+    self.config = config
     self._model = []
     self._model += [LinearBlock(input_dim, dim, norm=norm, activation=activ)]
     for i in range(n_blk - 2):
@@ -553,4 +559,4 @@ class MLP(nn.Module):
       _ = print_debug(feed, self._model)    
 
   def forward(self, x):
-    return self.model(x.view(x.size(0), -1))  
+    return to_parallel(self.model, x.view(x.size(0), -1), self.config.GPU)
