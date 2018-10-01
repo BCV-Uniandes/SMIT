@@ -7,9 +7,9 @@ class VGG(nn.Module):
 
     def __init__(self, features):
         super(VGG, self).__init__()
-        self.meta = {'name': 'EmoNet',
+        self.meta = {'name': 'ImageNet',
                      'mean':[0.485, 0.456, 0.406],
-                     'std': [1, 1, 1],
+                     'std':[0.229, 0.224, 0.225],
                      'imSize': [224, 224, 3]}        
         self.features = features
 
@@ -31,11 +31,11 @@ def make_layers(cfg):
 
 cfg = {'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512]}
 
-def EmoNet(weights_path='./models/perceptual/EmoNet.pth', **kwargs):
+def ImageNet(weights_path='./models/perceptual/ImageNet.pth', **kwargs):
     model = VGG(make_layers(cfg['D']), **kwargs)
-    print(' -- Loading EmoNet weights from '+os.path.abspath(weights_path))
+    print(' -- Loading ImageNet weights from '+os.path.abspath(weights_path))
     state_dict = torch.load(weights_path)
-    state_dict = {key.replace('model.',''):param for key,param in state_dict.items() if 'classifier' not in key}
+    state_dict = {key:param for key,param in state_dict.items() if 'classifier' not in key}
     # ipdb.set_trace()
     model.load_state_dict(state_dict)
     return model

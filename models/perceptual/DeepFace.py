@@ -10,7 +10,7 @@ class Vgg_face_dag(nn.Module):
         self.meta = {'name': 'DeepFace',
                      'mean': [129.186279296875, 104.76238250732422, 93.59396362304688],
                      'std': [1, 1, 1],
-                     'imageSize': [224, 224, 3]}
+                     'imSize': [224, 224, 3]}
 
         self.conv1_1 = nn.Conv2d(3, 64, kernel_size=[3, 3], stride=(1, 1), padding=(1, 1))
         self.relu1_1 = nn.ReLU()
