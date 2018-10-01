@@ -13,11 +13,11 @@ import ipdb
 import sys
 import torch
 import torch.utils.data.distributed
-import horovod.torch as hvd
+
+from misc.utils import _horovod
+hvd = _horovod()
 hvd.init()
 # warnings.filterwarnings('ignore')
-
-#./main.py -- --GPU 3 --GRAY --BLUR --L1_LOSS --lambda_l1 5
 
 def PRINT(config):
   string ='------------ Options -------------'
@@ -39,8 +39,9 @@ def main(config):
   cudnn.benchmark = True
 
   data_loader = get_loader(config.metadata_path, config.image_size, config.batch_size, config.dataset, 
-                 config.mode, num_workers=config.num_workers, all_attr = config.ALL_CELEBA_ATTR,
-                 HOROVOD=config.HOROVOD)   
+                 config.mode, num_workers=config.num_workers, all_attr = config.ALL_ATTR, c_dim=config.c_dim,
+                 HOROVOD=config.HOROVOD, continuous='CLS_L2' in config.GAN_options, 
+                 RafD_FRONTAL=config.RafD_FRONTAL, RafD_EMOTIONS=config.RafD_EMOTIONS)   
   solver = Solver(config, data_loader)
 
   if config.DISPLAY_NET and config.mode_train=='GAN': 
@@ -67,8 +68,8 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
 
   # Model hyper-parameters
-  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=['BP4D', 'EmotionNet', 'CelebA', 'MNIST'])
-  parser.add_argument('--dataset_real',       type=str, default='', choices=['','BP4D', 'EmotionNet', 'CelebA'])  
+  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=['BP4D', 'AwA2', 'RafD', 'Birds', 'EmotionNet', 'CelebA', 'MNIST'])
+  parser.add_argument('--dataset_real',       type=str, default='', choices=['','BP4D', 'AwA2', 'RafD', 'Birds', 'EmotionNet', 'CelebA'])  
   parser.add_argument('--fold',               type=str, default='0')
   parser.add_argument('--mode_data',          type=str, default='normal', choices=['normal', 'faces'])   
   parser.add_argument('--mode_train',         type=str, default='GAN', choices=['GAN', 'CLS'])   
@@ -78,8 +79,8 @@ if __name__ == '__main__':
   parser.add_argument('--image_size',         type=int, default=128)
   parser.add_argument('--batch_size',         type=int, default=64)
   parser.add_argument('--num_workers',        type=int, default=4)
-  parser.add_argument('--num_epochs',         type=int, default=300)
-  parser.add_argument('--num_epochs_decay',   type=int, default=100)
+  parser.add_argument('--num_epochs',         type=int, default=100)
+  parser.add_argument('--num_epochs_decay',   type=int, default=40)
   parser.add_argument('--beta1',              type=float, default=0.5)
   parser.add_argument('--beta2',              type=float, default=0.999)
   parser.add_argument('--pretrained_model',   type=str, default=None)  
@@ -93,26 +94,28 @@ if __name__ == '__main__':
 
   # Generative 
   parser.add_argument('--MultiDis',           type=int, default=0)
-  parser.add_argument('--PerceptualLoss',     type=str, default='DeepFace', choices=['DeepFace', 'EmoNet'])
+  parser.add_argument('--PerceptualLoss',     type=str, default='', choices=['', 'DeepFace', 'EmoNet', 'ImageNet'])
   parser.add_argument('--g_conv_dim',         type=int, default=64)
   parser.add_argument('--d_conv_dim',         type=int, default=64)
   parser.add_argument('--g_repeat_num',       type=int, default=6)
   parser.add_argument('--d_repeat_num',       type=int, default=6)
   parser.add_argument('--g_lr',               type=float, default=0.0001)
   parser.add_argument('--d_lr',               type=float, default=0.0001)
-  parser.add_argument('--lambda_cls',         type=float, default=4)  
+  parser.add_argument('--lambda_cls',         type=float, default=4.0)  #It was in 1
+  parser.add_argument('--lambda_cls_pose',    type=float, default=4.0)  
   parser.add_argument('--lambda_rec',         type=float, default=10.0)
   parser.add_argument('--lambda_gp',          type=float, default=10.0)
-  parser.add_argument('--lambda_perceptual',  type=float, default=1.0)
+  parser.add_argument('--lambda_perceptual',  type=float, default=10.0)
+  parser.add_argument('--lambda_idt',         type=float, default=20.0)
   parser.add_argument('--lambda_l1',          type=float, default=1.0)
   parser.add_argument('--lambda_l1perceptual',type=float, default=0.1)  
   parser.add_argument('--lambda_style',       type=float, default=1.0)
   parser.add_argument('--lambda_mask',        type=float, default=1.0)
-  parser.add_argument('--lambda_mask_smooth', type=float, default=0.0001)
+  parser.add_argument('--lambda_mask_smooth', type=float, default=0.00001)
   parser.add_argument('--lambda_kl',          type=float, default=0.001)
   parser.add_argument('--lambda_content',     type=float, default=1.0)
 
-  parser.add_argument('--style_dim',          type=int, default=16, choices=[1, 4, 8, 16])
+  parser.add_argument('--style_dim',          type=int, default=16, choices=[1, 4, 8, 16, 20])
 
   parser.add_argument('--d_train_repeat',     type=int, default=5)
 
@@ -124,8 +127,14 @@ if __name__ == '__main__':
   parser.add_argument('--DISPLAY_NET',        action='store_true', default=False) 
   parser.add_argument('--DELETE',             action='store_true', default=False)
   parser.add_argument('--FOLDER',             action='store_true', default=False)
-  parser.add_argument('--ALL_CELEBA_ATTR',    action='store_true', default=False)  
+  parser.add_argument('--ALL_ATTR',    type=int, default=0)
+  # parser.add_argument('--GRAY_DISC',          action='store_true', default=False)
+  # parser.add_argument('--GRAY_STYLE',         action='store_true', default=False)
+  # parser.add_argument('--STYLE_DISC',         action='store_true', default=False)
+  parser.add_argument('--LOAD_SMIT',          action='store_true', default=False)
   parser.add_argument('--NO_LABELCUM',        action='store_true', default=False)
+  parser.add_argument('--RafD_FRONTAL',       action='store_true', default=False)
+  parser.add_argument('--RafD_EMOTIONS',       action='store_true', default=False)
   parser.add_argument('--HOROVOD',            action='store_true', default=False)
   parser.add_argument('--GPU',                type=str, default='0')
 
@@ -135,10 +144,11 @@ if __name__ == '__main__':
   parser.add_argument('--model_save_step',    type=int, default=10000)
 
   # Debug options
-  parser.add_argument('--iter_test',          type=int, default=1)
+  parser.add_argument('--iter_test',          type=int, default=3)
   parser.add_argument('--iter_style',         type=int, default=20)
-  parser.add_argument('--style_debug',        type=int, default=6)
-  parser.add_argument('--style_label_debug',  type=int, default=3, choices=[0,1,2,3,4])
+  parser.add_argument('--style_debug',        type=int, default=9)
+  parser.add_argument('--style_train_debug',  type=int, default=7)
+  parser.add_argument('--style_label_debug',  type=int, default=7, choices=[0,1,2,3,4,5,6,7])
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
@@ -146,13 +156,15 @@ if __name__ == '__main__':
   if not torch.cuda.is_available():
     config.GPU='no_cuda'
   elif config.HOROVOD:
+    # mpirun -np -N_GPU ./main.py ...
     _GPU = config.GPU.split(',')
+    config.GPU = [_GPU]
     print(hvd.local_rank(), hvd.size())
     config.g_lr = config.g_lr/hvd.size()
     config.d_lr = config.d_lr/hvd.size()    
-    torch.manual_seed(0)
+    # torch.manual_seed(0)
     torch.cuda.set_device(int(_GPU[hvd.local_rank()]))
-    torch.cuda.manual_seed(0)    
+    # torch.cuda.manual_seed(0)    
   else:
     config.GPU = map(int, config.GPU.split(','))
     torch.cuda.set_device(config.GPU[0])
@@ -162,7 +174,9 @@ if __name__ == '__main__':
   config = cfg.update_config(config)
 
   if config.FOLDER:
-    if hvd.rank() == 0: print(os.path.abspath(sorted(glob.glob(os.path.join(config.sample_path, '*.jpg')))[-3]))
+    if hvd.rank() == 0: 
+      try: print(os.path.abspath(sorted(glob.glob(os.path.join(config.sample_path, '*.jpg')))[-config.style_train_debug-3]))
+      except: print(os.path.abspath(sorted(glob.glob(os.path.join(config.sample_path, '*.jpg')))[-2]))
     sys.exit() 
 
   if config.mode=='train':

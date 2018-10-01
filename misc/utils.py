@@ -20,10 +20,11 @@ def get_aus(image_size, dataset, attr=None):
   import numpy as np
   import ipdb
   resize = lambda x: skimage.transform.resize(imageio.imread(line), (image_size, image_size))
-  if dataset=='CelebA':
+  if dataset!='EmotionNet':
     imgs_file = sorted(glob.glob('data/{}/aus_flat/00*g'.format(dataset)))
     labels = attr.selected_attrs
-    imgs_file += sorted(['data/{}/aus_flat/{}.jpeg'.format(dataset,l) for l in labels])
+    imgs_file += ['data/{}/aus_flat/{}.jpeg'.format(dataset,l) for l in labels]
+    if dataset=='CelebA': imgs_file = sorted(imgs_file)
   else:
     imgs_file = sorted(glob.glob('data/{}/aus_flat/*g'.format(dataset)))
   imgs = [resize(line).transpose(2,0,1) for line in imgs_file]
@@ -42,6 +43,22 @@ def get_loss_value(x):
 
 #=======================================================================================#
 #=======================================================================================#
+def _horovod():
+  try:
+    import horovod.torch as hvd
+  except:
+    class hvd():
+      def init(self):
+        pass
+      def size(self):
+        return 1
+      def rank(self):
+        return 0
+    hvd = hvd()    
+  return hvd 
+
+#=======================================================================================#
+#=======================================================================================#
 def imgShow(img):
   from torchvision.utils import save_image
   try:save_image(denorm(img).cpu(), 'dummy.jpg')
@@ -49,19 +66,21 @@ def imgShow(img):
 
 #=======================================================================================#
 #=======================================================================================#
-def make_gif(imgs, path):
-  import imageio, numpy as np
+def make_gif(imgs, path, im_size=256):
+  import imageio, numpy as np, ipdb
   if 'jpg' in path: path = path.replace('jpg', 'gif')
   imgs = (imgs.cpu().numpy().transpose(0,2,3,1)*255).astype(np.uint8)
-  size = imgs.shape[1]
-  target_size = (imgs.shape[1], imgs.shape[1], imgs.shape[-1])
+  # ipdb.set_trace()
+  target_size = (im_size, im_size, imgs.shape[-1])
   img_list = []
-  for bs in range(imgs.shape[0]):
-    for x in range(imgs.shape[2]//imgs.shape[1]):
-      img_short = imgs[bs,:,size*x:size*(x+1)]
+  for x in range(imgs.shape[2]//im_size):
+    for bs in range(imgs.shape[0]):
+      if x==0 and bs>1: continue #Only save one image of the originals
+      if x==1: continue #Do not save any of the 'off' label
+      img_short = imgs[bs,:,im_size*x:im_size*(x+1)]
       assert img_short.shape==target_size
       img_list.append(img_short)
-  imageio.mimsave(path, img_list, duration=0.3)
+  imageio.mimsave(path, img_list, duration=0.8)
 
   writer = imageio.get_writer(path.replace('gif','mp4'), fps=3)
   for im in img_list:
@@ -99,6 +118,12 @@ def pdf2png(filename):
 
 #=======================================================================================#
 #=======================================================================================#
+def replace_weights(target, source, list):
+  for l in list:
+    target[l] = source[l] 
+
+#=======================================================================================#
+#=======================================================================================#
 def send_mail(body="bcv002", attach=[], subject='Message from bcv002', to='rv.andres10@uniandes.edu.co'):
   import os,ipdb,time
   content_type = {'jpg':'image/jpeg', 'gif':'image/gif', 'mp4':'video/mp4'}
@@ -116,13 +141,20 @@ def send_mail(body="bcv002", attach=[], subject='Message from bcv002', to='rv.an
 
 #=======================================================================================#
 #=======================================================================================#
-def target_debug_list(size, dim):
-  import torch
+def target_debug_list(size, dim, config=None):
+  import torch, ipdb
   target_c= torch.zeros(size, dim)
-  target_c_list = [to_var(target_c, volatile=True)]
-  for j in range(dim):
+  target_c_list = []
+  for j in range(dim+1):
     target_c[:]=0 
-    target_c[:,j]=1       
+    if j>0: target_c[:,j-1]=1 
+    if not config.RafD_FRONTAL:
+      if config.dataset_fake=='RafD' and j==0: target_c[:,2] = 1
+      if config.dataset_fake=='RafD' and j<=5: target_c[:,10] = 1
+      if config.dataset_fake=='RafD' and j>=6: target_c[:,2] = 1
+    else:
+      if config.dataset_fake=='RafD' and j==0: target_c[:,0] = 1
+    # ipdb.set_trace()
     target_c_list.append(to_var(target_c, volatile=True))        
   return target_c_list
 
@@ -177,11 +209,11 @@ def to_data(x, cpu=False):
 
 #=======================================================================================#
 #=======================================================================================#
-def to_parallel(main, input, list_gpu, horovod=False):
+def to_parallel(main, input, list_gpu):
   import torch
   import torch.nn as nn
   import ipdb
-  if len(list_gpu)>1 and input.is_cuda and not horovod:
+  if len(list_gpu)>1 and input.is_cuda:
     if int(torch.__version__.split('.')[1])>3:
       return nn.parallel.data_parallel(main, input,  device_ids = list_gpu)
     else:  
@@ -209,16 +241,34 @@ def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
 #=======================================================================================#
 #=======================================================================================#
 def vgg_preprocess(batch, meta):
-  import torch
+  import torch, ipdb
+  if batch.size(-1)==128:
+    batch = batch.repeat(1,1,2,2)
+
+  if batch.size(-1)>=256:
+    center = batch.size(-1)/2
+    vgg_size = meta['imSize']
+    batch = batch[:,:,center-vgg_size[0]/2:center+vgg_size[0]/2,center-vgg_size[1]/2:center+vgg_size[1]/2]
+
   tensortype = type(batch.data)
+  if meta['name']=='ImageNet' or meta['name']=='EmoNet':
+    batch = (batch + 1) * 0.5 # [-1, 1] -> [0, 1]
+
   if meta['name']=='DeepFace':
     (r, g, b) = torch.chunk(batch, 3, dim = 1)
     batch = torch.cat((b, g, r), dim = 1) # convert RGB to BGR
-  batch = (batch + 1) * 255 * 0.5 # [-1, 1] -> [0, 255]
-  # batch = resize(batch, )
+    batch = (batch + 1) * 255 * 0.5 # [-1, 1] -> [0, 255]
+
   mean = tensortype(batch.data.size())
   mean[:, 0, :, :] = meta['mean'][0] #103.939
   mean[:, 1, :, :] = meta['mean'][1] #116.779
   mean[:, 2, :, :] = meta['mean'][2] #123.680
+
+  std = tensortype(batch.data.size())
+  std[:, 0, :, :] = meta['std'][0] 
+  std[:, 1, :, :] = meta['std'][1] 
+  std[:, 2, :, :] = meta['std'][2] 
+
   batch = batch.sub(to_var(mean)) # subtract mean
+  batch = batch.div(to_var(std))  # divide std
   return batch    

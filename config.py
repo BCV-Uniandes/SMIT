@@ -1,10 +1,28 @@
 def config_GENERATOR(config, update_folder):
   if config.dataset_fake=='CelebA':
-    if config.ALL_CELEBA_ATTR:
+    if config.ALL_ATTR==1:
       update_folder(config, 'ALL_CELEBA_ATTR')
       config.c_dim = 40
-    else:
+      config.num_epochs = 500
+      config.num_epochs_decay = 100
+    elif config.ALL_ATTR==0:
       config.c_dim=5
+    elif config.ALL_ATTR==2:
+      config.c_dim=25
+      update_folder(config, 'ALL_CELEBA_ATTR_'+str(config.c_dim))
+
+  if config.dataset_fake=='AwA2':
+    if config.ALL_ATTR==1:
+      update_folder(config, 'ALL_AwA2_ATTR')
+      config.c_dim = 85
+      config.num_epochs = 300
+      config.num_epochs_decay = 100
+    elif config.ALL_ATTR==0:
+      config.c_dim=6   
+
+  if config.dataset_fake=='RafD':
+    if config.RafD_FRONTAL or config.RafD_EMOTIONS: config.c_dim=8
+    else: config.c_dim=13
 
   if config.MultiDis>0:
     update_folder(config, 'MultiDis_scale'+str(config.MultiDis))
@@ -12,6 +30,9 @@ def config_GENERATOR(config, update_folder):
   # if config.PerceptualLoss:
   if 'Perceptual' in config.GAN_options:
     update_folder(config, 'PerceptualLoss_'+config.PerceptualLoss)  
+
+  if 'NoPerceptualIn' in config.GAN_options:
+    update_folder(config, 'NoPerceptualIn')      
 
   if 'L1_Perceptual' in config.GAN_options: 
     update_folder(config, 'L1_Perceptual_'+str(config.lambda_l1perceptual)) 
@@ -22,6 +43,9 @@ def config_GENERATOR(config, update_folder):
 
   if config.d_train_repeat!=5:
     update_folder(config, 'd_train_repeat_'+str(config.d_train_repeat))
+
+  if config.lambda_cls!=4:
+    update_folder(config, 'lambda_cls_'+str(config.lambda_cls))
 
   if 'RaGAN' in config.GAN_options: 
     update_folder(config, 'RaGAN')
@@ -40,20 +64,21 @@ def config_GENERATOR(config, update_folder):
   if 'HINGE' in config.GAN_options: 
     update_folder(config, 'HINGE') 
 
-  if 'Idt' in config.GAN_options: 
-    update_folder(config, 'Idt')     
-
   if 'InterLabels' in config.GAN_options: 
     update_folder(config, 'InterLabels')    
 
   if 'content_loss' in config.GAN_options: 
-    if not 'InterLabels' in config.GAN_options: 
-      config.GAN_options.append('InterLabels')
-      update_folder(config, 'InterLabels')    
+    # if not 'InterLabels' in config.GAN_options: 
+    #   config.GAN_options.append('InterLabels')
+    #   update_folder(config, 'InterLabels')    
     update_folder(config, 'content_loss_'+str(config.lambda_content))             
 
   if 'Attention' in config.GAN_options: 
     update_folder(config, 'Attention')  
+  elif 'Attention2' in config.GAN_options: 
+    update_folder(config, 'Attention2')      
+  elif 'Attention3' in config.GAN_options: 
+    update_folder(config, 'Attention3')          
 
   if 'AdaIn' in config.GAN_options and not 'Stochastic' in config.GAN_options:
     config.mlp_dim=256
@@ -109,9 +134,10 @@ def config_GENERATOR(config, update_folder):
       if not 'Stochastic' in config.GAN_options: 
         update_folder(config, 'AdaIn')    
 
-  # elif 'Split_Optim' in config.GAN_options: 
+  if 'Split_Optim' in config.GAN_options: 
+    update_folder(config, 'Split_Optim') 
+  # if 'Stochastic' in config.GAN_options:
   #   update_folder(config, 'Split_Optim') 
-  update_folder(config, 'Split_Optim') 
 
   if 'mse_style' in config.GAN_options: 
     update_folder(config, 'mse_style') 
@@ -121,7 +147,31 @@ def config_GENERATOR(config, update_folder):
     config.GAN_options.append('rec_style')
 
   elif 'rec_style' in config.GAN_options: 
-    update_folder(config, 'rec_style')      
+    update_folder(config, 'rec_style')   
+
+  if config.LOAD_SMIT: 
+    update_folder(config, 'LOAD_SMIT') 
+
+  if 'STYLE_DISC' in config.GAN_options: 
+    update_folder(config, 'STYLE_DISC')    
+
+  if 'GRAY_DISC' in config.GAN_options: 
+    update_folder(config, 'GRAY_DISC') 
+
+  if 'GRAY_STYLE' in config.GAN_options: 
+    update_folder(config, 'GRAY_STYLE')     
+
+  if 'CLS_L2' in config.GAN_options: 
+    update_folder(config, 'CLS_L2') 
+
+  if 'CLS_L1' in config.GAN_options: 
+    update_folder(config, 'CLS_L1')     
+
+  if 'AttentionStyle' in config.GAN_options: 
+    update_folder(config, 'AttentionStyle') 
+
+  if 'Identity' in config.GAN_options: 
+    update_folder(config, 'Identity_'+str(config.lambda_idt))          
 
   if 'RaGAN' in config.GAN_options:
     config.batch_size *= 2
@@ -132,14 +182,13 @@ def update_folder(config, folder):
   config.sample_path = os.path.join(config.sample_path, folder)
   config.model_save_path =os.path.join(config.model_save_path, folder)
 
-def update_folder_generator(config, folder):
-  import os
-  config.Generator_path = os.path.join(config.Generator_path, folder)
-
 def replace_folder_gan(config):
   import os
   replaced = 'snapshot'
-  replace = os.path.join(replaced, config.mode_train, config.dataset_fake)
+  if config.RafD_FRONTAL: dataset = 'RafD_Frontal'
+  if config.RafD_EMOTIONS: dataset = 'RafD_EMOTIONS'
+  else: dataset = config.dataset_fake
+  replace = os.path.join(replaced, config.mode_train, dataset)
   config.log_path = config.log_path.replace(replaced, replace)
   config.sample_path = config.sample_path.replace(replaced, replace)
   config.model_save_path = config.model_save_path.replace(replaced, replace)
@@ -161,7 +210,13 @@ def update_config(config):
 
   update_folder(config, os.path.join(config.mode_data, str(config.image_size), 'fold_'+config.fold))
   config.metadata_path = os.path.join(config.metadata_path, '{}', config.mode_data, 'fold_'+config.fold, )
-  config.g_repeat_num = 6 if config.image_size <256 else 9 
+  config.g_repeat_num = 6 #if config.image_size <256  or ('Attention2' in config.GAN_options and 'InterStyleConcatLabels' in config.GAN_options) else 9 
+  config.g_conv_dim = config.g_conv_dim if config.image_size<256 else config.g_conv_dim/2
+  config.d_conv_dim = config.d_conv_dim if config.image_size<256 else config.d_conv_dim/2
+
+  config.g_conv_dim = config.g_conv_dim if config.image_size<512 else config.g_conv_dim/2
+  config.d_conv_dim = config.d_conv_dim if config.image_size<512 else config.d_conv_dim/2
+
   config.d_repeat_num = int(math.log(config.image_size,2)-1)
 
   config_GENERATOR(config, update_folder)
