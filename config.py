@@ -43,7 +43,7 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'ALL_ATTR')
       config.c_dim=50
     elif config.ALL_ATTR==0:
-      config.c_dim=8   
+      config.c_dim=5   
 
   if config.dataset_fake=='Animals':
     config.num_epochs_decay=20
@@ -52,7 +52,7 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'ALL_ATTR')
       config.c_dim=14
     elif config.ALL_ATTR==0:
-      config.c_dim=5         
+      config.c_dim=8         
 
   if config.dataset_fake=='WIDER':
     config.save_epoch = 10
