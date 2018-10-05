@@ -1,34 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from torch.autograd import Variable
 import numpy as np
+from models.utils import get_SN, print_debug
 from models.spectral import SpectralNorm as SpectralNormalization
 import ipdb
 import math
 from misc.utils import to_cuda, to_var,to_parallel
 from misc.blocks import AdaptiveInstanceNorm2d, ResidualBlock, LinearBlock, Conv2dBlock, LayerNorm
-
-def get_SN(bool):
-  if bool:
-    return SpectralNormalization
-  else:
-    return lambda x:x
-
-def print_debug(feed, layers):
-  print(feed.size())
-  for layer in layers:
-    try:feed = layer(feed)
-    except: ipdb.set_trace()
-    if isinstance(layer, nn.Conv2d) or isinstance(layer, nn.ConvTranspose2d) \
-                                    or isinstance(layer, nn.Linear) \
-                                    or isinstance(layer, ResidualBlock) \
-                                    or isinstance(layer, LinearBlock) \
-                                    or isinstance(layer, Conv2dBlock) \
-                                    or isinstance(layer, SpectralNormalization):
-      print(str(layer).split('(')[0], feed.size())
-  print(' ')
-  return feed
 
 #===============================================================================================#
 #===============================================================================================#
@@ -80,7 +59,6 @@ class Discriminator(nn.Module):
       features = print_debug(feed, layers_debug)
       _ = print_debug(features, [self.conv1])
       _ = print_debug(features, [self.conv2])
-      # if self.RafD: _ = print_debug(features, [self.pose])     
       if self.STYLE_DISC: 
         features = features.view(features.size(0), -1)
         _ = print_debug(features, self.style)
@@ -95,9 +73,6 @@ class Discriminator(nn.Module):
     out_aux = to_parallel(self.conv2, h, self.config.GPU).squeeze()
     out_aux = out_aux.view(x.size(0), out_aux.size(-1))
 
-    # if self.RafD:
-    #   out_pose = to_parallel(self.pose, h, self.config.GPU).squeeze()
-
     if self.STYLE_DISC: 
       h = h.view(h.size(0), -1)
       out_style = to_parallel(self.style, h, self.config.GPU).squeeze()
@@ -105,9 +80,6 @@ class Discriminator(nn.Module):
     else:
       out_style = None
 
-    # if self.RafD:
-    #   return [out_real], [out_aux], [out_pose], [out_style]
-    # else:
     return [out_real], [out_aux], [out_style]
 
 
@@ -557,7 +529,7 @@ class AdaInGEN(nn.Module):
   def get_style(self, x, volatile=False):
     style = self.enc_style(x)
     if self.STYLE_DISC: style = style[-1]
-    style = style.view(style.size(0), self.s_dim, -1)
+    style = style.view(style.size(0), self.s_dim, -1) if self.s_dim!=1 else style.view(style.size(0), -1)
     return style
 
   def apply_style(self, image, style, label=None):

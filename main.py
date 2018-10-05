@@ -68,8 +68,8 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
 
   # Model hyper-parameters
-  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=['BP4D', 'AwA2', 'RafD', 'Birds', 'EmotionNet', 'CelebA', 'MNIST'])
-  parser.add_argument('--dataset_real',       type=str, default='', choices=['','BP4D', 'AwA2', 'RafD', 'Birds', 'EmotionNet', 'CelebA'])  
+  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=['BP4D', 'WIDER', 'painters_14', 'AwA2', 'Animals', 'RafD', 'Birds', 'EmotionNet', 'CelebA', 'MNIST'])
+  parser.add_argument('--dataset_real',       type=str, default='', choices=['','BP4D', 'painters_14', 'WIDER', 'AwA2', 'Animals', 'RafD', 'Birds', 'EmotionNet', 'CelebA'])  
   parser.add_argument('--fold',               type=str, default='0')
   parser.add_argument('--mode_data',          type=str, default='normal', choices=['normal', 'faces'])   
   parser.add_argument('--mode_train',         type=str, default='GAN', choices=['GAN', 'CLS'])   
@@ -80,7 +80,8 @@ if __name__ == '__main__':
   parser.add_argument('--batch_size',         type=int, default=64)
   parser.add_argument('--num_workers',        type=int, default=4)
   parser.add_argument('--num_epochs',         type=int, default=100)
-  parser.add_argument('--num_epochs_decay',   type=int, default=40)
+  parser.add_argument('--num_epochs_decay',   type=int, default=30)
+  parser.add_argument('--save_epoch',         type=int, default=1) #Save models and weights every how many epochs
   parser.add_argument('--beta1',              type=float, default=0.5)
   parser.add_argument('--beta2',              type=float, default=0.999)
   parser.add_argument('--pretrained_model',   type=str, default=None)  
@@ -94,7 +95,7 @@ if __name__ == '__main__':
 
   # Generative 
   parser.add_argument('--MultiDis',           type=int, default=0)
-  parser.add_argument('--PerceptualLoss',     type=str, default='', choices=['', 'DeepFace', 'EmoNet', 'ImageNet'])
+  parser.add_argument('--PerceptualLoss',     type=str, default='', choices=['', 'DeepFace', 'Style', 'EmoNet', 'ImageNet'])
   parser.add_argument('--g_conv_dim',         type=int, default=64)
   parser.add_argument('--d_conv_dim',         type=int, default=64)
   parser.add_argument('--g_repeat_num',       type=int, default=6)
@@ -106,7 +107,7 @@ if __name__ == '__main__':
   parser.add_argument('--lambda_rec',         type=float, default=10.0)
   parser.add_argument('--lambda_gp',          type=float, default=10.0)
   parser.add_argument('--lambda_perceptual',  type=float, default=10.0)
-  parser.add_argument('--lambda_idt',         type=float, default=20.0)
+  parser.add_argument('--lambda_idt',         type=float, default=10.0)
   parser.add_argument('--lambda_l1',          type=float, default=1.0)
   parser.add_argument('--lambda_l1perceptual',type=float, default=0.1)  
   parser.add_argument('--lambda_style',       type=float, default=1.0)
@@ -127,7 +128,7 @@ if __name__ == '__main__':
   parser.add_argument('--DISPLAY_NET',        action='store_true', default=False) 
   parser.add_argument('--DELETE',             action='store_true', default=False)
   parser.add_argument('--FOLDER',             action='store_true', default=False)
-  parser.add_argument('--ALL_ATTR',    type=int, default=0)
+  parser.add_argument('--ALL_ATTR',           type=int, default=0)
   # parser.add_argument('--GRAY_DISC',          action='store_true', default=False)
   # parser.add_argument('--GRAY_STYLE',         action='store_true', default=False)
   # parser.add_argument('--STYLE_DISC',         action='store_true', default=False)
@@ -144,7 +145,7 @@ if __name__ == '__main__':
   parser.add_argument('--model_save_step',    type=int, default=10000)
 
   # Debug options
-  parser.add_argument('--iter_test',          type=int, default=3)
+  parser.add_argument('--iter_test',          type=int, default=1)
   parser.add_argument('--iter_style',         type=int, default=20)
   parser.add_argument('--style_debug',        type=int, default=9)
   parser.add_argument('--style_train_debug',  type=int, default=7)

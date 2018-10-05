@@ -3,15 +3,23 @@ def config_GENERATOR(config, update_folder):
     if config.ALL_ATTR==1:
       update_folder(config, 'ALL_CELEBA_ATTR')
       config.c_dim = 40
-      config.num_epochs = 500
+      config.num_epochs = 300
       config.num_epochs_decay = 100
+    elif config.ALL_ATTR==2:
+      config.c_dim=37
+      config.num_epochs = 300
+      config.num_epochs_decay = 100      
+      update_folder(config, 'ALL_CELEBA_ATTR_'+str(config.c_dim))      
+    elif config.ALL_ATTR==3:
+      config.c_dim=25
+      config.num_epochs = 300
+      config.num_epochs_decay = 100      
+      update_folder(config, 'ALL_CELEBA_ATTR_'+str(config.c_dim))        
     elif config.ALL_ATTR==0:
       config.c_dim=5
-    elif config.ALL_ATTR==2:
-      config.c_dim=25
-      update_folder(config, 'ALL_CELEBA_ATTR_'+str(config.c_dim))
 
   if config.dataset_fake=='AwA2':
+    config.save_epoch = 6
     if config.ALL_ATTR==1:
       update_folder(config, 'ALL_AwA2_ATTR')
       config.c_dim = 85
@@ -21,18 +29,49 @@ def config_GENERATOR(config, update_folder):
       config.c_dim=6   
 
   if config.dataset_fake=='RafD':
+    config.save_epoch = 20
     if config.RafD_FRONTAL or config.RafD_EMOTIONS: config.c_dim=8
     else: config.c_dim=13
+
+  if config.dataset_fake=='Birds':
+    config.c_dim=5
+
+  if config.dataset_fake=='painters_14':
+    config.num_epochs_decay=20
+    config.save_epoch = 20
+    if config.ALL_ATTR==1:
+      update_folder(config, 'ALL_ATTR')
+      config.c_dim=50
+    elif config.ALL_ATTR==0:
+      config.c_dim=8   
+
+  if config.dataset_fake=='Animals':
+    config.num_epochs_decay=20
+    config.save_epoch = 20
+    if config.ALL_ATTR==1:
+      update_folder(config, 'ALL_ATTR')
+      config.c_dim=14
+    elif config.ALL_ATTR==0:
+      config.c_dim=5         
+
+  if config.dataset_fake=='WIDER':
+    config.save_epoch = 10
+    if config.ALL_ATTR==1:
+      update_folder(config, 'ALL_ATTR')
+      config.c_dim = 14
+
+  config.num_epochs *= config.save_epoch#500
+  config.num_epochs_decay *= config.save_epoch#200    
 
   if config.MultiDis>0:
     update_folder(config, 'MultiDis_scale'+str(config.MultiDis))
 
   # if config.PerceptualLoss:
   if 'Perceptual' in config.GAN_options:
-    update_folder(config, 'PerceptualLoss_'+config.PerceptualLoss)  
+    update_folder(config, 'PerceptualLoss_{}_lambda_{}'.format(config.PerceptualLoss, config.lambda_perceptual))  
 
-  if 'NoPerceptualIn' in config.GAN_options:
-    update_folder(config, 'NoPerceptualIn')      
+  if 'NoPerceptualIN' in config.GAN_options:
+    update_folder(config, 'NoPerceptualIN')      
 
   if 'L1_Perceptual' in config.GAN_options: 
     update_folder(config, 'L1_Perceptual_'+str(config.lambda_l1perceptual)) 
@@ -175,6 +214,10 @@ def config_GENERATOR(config, update_folder):
 
   if 'RaGAN' in config.GAN_options:
     config.batch_size *= 2
+
+  import torch
+  if int(torch.__version__.split('.')[1])>3:
+    update_folder(config, 'Pytorch_'+str(torch.__version__))
 
 def update_folder(config, folder):
   import os

@@ -124,8 +124,8 @@ class Solver(object):
     if 'Split_Optim' in self.config.GAN_options:
       torch.save(self.s_optimizer.state_dict(), name.format('S_optim'))   
 
-    if int(Epoch)>2:
-      name_1 = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(str(int(Epoch)-1).zfill(3), iter, '{}'))
+    if int(Epoch)>self.config.save_epoch*2:
+      name_1 = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(str(int(Epoch)-self.config.save_epoch).zfill(3), iter, '{}'))
       if os.path.isfile(name_1.format('G')): os.remove(name_1.format('G'))
       if os.path.isfile(name_1.format('G_optim')): os.remove(name_1.format('G_optim'))
       if os.path.isfile(name_1.format('D')): os.remove(name_1.format('D'))
@@ -259,7 +259,7 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
   def _compute_vgg_loss(self, data_x, data_y):
-    return _compute_vgg_loss(self.vgg, data_x, data_y, IN=not 'NoPerceptualIn' in self.config.GAN_options)
+    return _compute_vgg_loss(self.vgg, data_x, data_y, IN=not 'NoPerceptualIN' in self.config.GAN_options)
 
   #=======================================================================================#
   #=======================================================================================#
@@ -303,8 +303,10 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
   def _GAN_LOSS(self, real_x, fake_x, label, is_fake=False):
-    RafD = False#self.config.dataset_fake=='RafD'
-    return _GAN_LOSS(self.D, real_x, fake_x, label, self.config.GAN_options, is_fake=is_fake, RafD=RafD)
+    cross_entropy = self.config.dataset_fake in ['painters_14', 'Animals']
+    if cross_entropy:
+      label = torch.max(label, dim=1)[1]
+    return _GAN_LOSS(self.D, real_x, fake_x, label, self.config.GAN_options, is_fake=is_fake, cross_entropy=cross_entropy)
 
   #=======================================================================================#
   #=======================================================================================#
@@ -397,8 +399,8 @@ class Solver(object):
       start = int(self.config.pretrained_model.split('_')[0])
       for i in range(start):
         if (i+1) %self.config.num_epochs_decay==0:
-          g_lr = (g_lr / 10.)
-          d_lr = (d_lr / 10.)
+          g_lr = (g_lr / 5.)
+          d_lr = (d_lr / 5.)
           self.update_lr(g_lr, d_lr)
           self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))     
     else:
@@ -513,10 +515,10 @@ class Solver(object):
             self.update_loss('Grecp', self.loss['Grecp'])
             g_loss_rec = g_loss_recp
 
-            g_loss_rec = 0.01*self.config.lambda_perceptual*self.config.lambda_rec*criterion_l1(rec_x1[0], real_x1)   
-            self.loss['Grec'] = get_loss_value(g_loss_rec) 
-            self.update_loss('Grec', self.loss['Grec'])
-            g_loss_rec += g_loss_recp
+            # g_loss_rec = 0.01*self.config.lambda_perceptual*self.config.lambda_rec*criterion_l1(rec_x1[0], real_x1)   
+            # self.loss['Grec'] = get_loss_value(g_loss_rec) 
+            # self.update_loss('Grec', self.loss['Grec'])
+            # g_loss_rec += g_loss_recp
 
           else:
             g_loss_rec = self.config.lambda_rec*criterion_l1(rec_x1[0], real_x1)
@@ -650,26 +652,28 @@ class Solver(object):
           name = os.path.join(self.config.sample_path, 'current_fake.jpg')
           self.save_fake_output(fixed_x, name, label=fixed_label, training=True, style_fixed=style_fixed)
 
-      # Translate fixed images for debugging
-      name = os.path.join(self.config.sample_path, '{}_{}_fake.jpg'.format(E, i+1))
-      self.save_fake_output(fixed_x, name, label=fixed_label, training=True, style_fixed=style_fixed)
-
-      self.save(E, i+1)
-                 
-      #Stats per epoch
-      elapsed = time.time() - start_time
-      elapsed = str(datetime.timedelta(seconds=elapsed))
-      log = '--> %s | Elapsed (%d/%d) : %s | %s\nTrain'%(TimeNow(), e, self.config.num_epochs, elapsed, Log)
-      for tag, value in sorted(self.LOSS.items()):
-        log += ", {}: {:.4f}".format(tag, np.array(value).mean())   
-
-      self.PRINT(log)
       self.data_loader.dataset.shuffle(e) #Shuffling dataset after each epoch
+
+      # Translate fixed images for debugging, and save
+      if e%self.config.save_epoch==0:
+        name = os.path.join(self.config.sample_path, '{}_{}_fake.jpg'.format(E, i+1))
+        self.save_fake_output(fixed_x, name, label=fixed_label, training=True, style_fixed=style_fixed)
+
+        self.save(E, i+1)
+                   
+        #Stats per epoch
+        elapsed = time.time() - start_time
+        elapsed = str(datetime.timedelta(seconds=elapsed))
+        log = '--> %s | Elapsed (%d/%d) : %s | %s\nTrain'%(TimeNow(), e, self.config.num_epochs, elapsed, Log)
+        for tag, value in sorted(self.LOSS.items()):
+          log += ", {}: {:.4f}".format(tag, np.array(value).mean())   
+        self.PRINT(log)
+
 
       # Decay learning rate     
       if (e+1) % self.config.num_epochs_decay ==0:
-        g_lr = (g_lr / 10)
-        d_lr = (d_lr / 10)
+        g_lr = (g_lr / 5)
+        d_lr = (d_lr / 5)
         self.update_lr(g_lr, d_lr)
         self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
@@ -707,7 +711,7 @@ class Solver(object):
       if Style==0:
         for k, target_c in enumerate(target_c_list):
           # target_c = torch.clamp(target_c+out_label,max=1)
-          if self.config.dataset_fake=='CelebA' or self.config.dataset_fake=='EmotionNet':
+          if self.config.dataset_fake in ['CelebA', 'EmotionNet', 'BP4D', 'DEMO']:
             target_c = (out_label-target_c)**2 #Swap labels
           if Stochastic: 
             if style_fixed is None:
@@ -737,6 +741,7 @@ class Solver(object):
           _save_path = os.path.join(save_path.replace('.jpg', ''), '{}_{}.jpg'.format(Style, str(idx).zfill(3)))
           create_dir(_save_path)
         real_x0 = real_x0.repeat(n_rep,1,1,1)#.unsqueeze(0)
+        _real_x0 = real_x0.clone()
         _out_label = out_label[idx].repeat(n_rep,1)
         label_space = np.linspace(0,1,n_rep)
 
@@ -747,7 +752,7 @@ class Solver(object):
         for n_label, _target_c in enumerate(target_c_list):
           _target_c  = _target_c[0].repeat(n_rep,1)
           # target_c = torch.clamp(_target_c+_out_label, max=1)
-          if self.config.dataset_fake=='CelebA' or self.config.dataset_fake=='EmotionNet':
+          if self.config.dataset_fake in ['CelebA', 'EmotionNet', 'BP4D', 'DEMO']:
             target_c = (_out_label-_target_c)**2 #Swap labels
           else: target_c = _target_c
           
@@ -757,9 +762,9 @@ class Solver(object):
             # Translate and translate back
             if Style==1:
               _style=to_var(self.G.random_style(real_x0), volatile=True)
-              real_x0 = self.G(real_x0, target_c, stochastic=_style)[0]
+              real_x0 = self.G(_real_x0, target_c, stochastic=_style)[0]
               # ipdb.set_trace()
-              if self.config.dataset_fake=='CelebA' or self.config.dataset_fake=='EmotionNet':
+              if self.config.dataset_fake in ['CelebA', 'EmotionNet', 'BP4D', 'DEMO']:
                 target_c = (target_c-_target_c)**2
 
             #Style constant | progressive swap label
@@ -801,12 +806,14 @@ class Solver(object):
 
             #Extract style from the two before, current, and two after. 
             elif Style==7:
-              _real_x0 = torch.zeros_like(real_x0)
-              _range = range(-int(n_rep//2), 1+int(n_rep//2))
-              if len(_range)>n_rep: _range.pop(0)
-              for j, k in enumerate(_range):
-                kk = (k+idx)%real_x.size(0) if k+idx >= real_x.size(0) else k+idx
-                _real_x0[j] = real_x[kk]
+              # _real_x0 = torch.zeros_like(real_x0)
+              # _range = range(-int(n_rep//2), 1+int(n_rep//2))
+              # if len(_range)>n_rep: _range.pop(0)
+              # for j, k in enumerate(_range):
+              #   kk = (k+idx)%real_x.size(0) if k+idx >= real_x.size(0) else k+idx
+                # _real_x0[j] = real_x[kk]
+              _real_x0 = real_x[:n_rep]
+              ipdb.set_trace()
               if 'STYLE_DISC' in self.config.GAN_options:
                 style = self.D(_real_x0)[-1][0]
               else:
@@ -834,13 +841,13 @@ class Solver(object):
     from data_loader import get_loader
     last_name = self.resume_name()
     save_folder = os.path.join(self.config.sample_path, '{}_test'.format(last_name))
+    create_dir(save_folder)
     if dataset=='': 
       dataset = self.config.dataset_fake
       data_loader_val = self.data_loader
     else:
       data_loader_val = get_loader(self.config.metadata_path, self.config.image_size, self.config.batch_size, shuffling=True, dataset=dataset, mode='test') 
     for i, (real_x, org_c, files) in enumerate(data_loader_val):
-      create_dir(save_folder)
       save_path = os.path.join(save_folder, '{}_{}_{}.jpg'.format(dataset, i+1, '{}'))
       string = '{}'
       if self.config.NO_LABELCUM:
@@ -856,8 +863,9 @@ class Solver(object):
       else:
         label = None
       self.PRINT('Translated test images and saved into "{}"..!'.format(name))
-      for k in range(_debug):
-        output = self.save_fake_output(real_x, name, label=label, output=True, Style=k, TIME=not i)
+      output = self.save_fake_output(real_x, name, label=label, output=True, Style=7, TIME=not i)
+      # for k in range(_debug):
+      #   output = self.save_fake_output(real_x, name, label=label, output=True, Style=k, TIME=not i)
         # send_mail(body='Images from '+self.config.sample_path, attach=output)
       if i==self.config.iter_test-1: break   
 
@@ -865,10 +873,11 @@ class Solver(object):
   #=======================================================================================#
 
   def DEMO(self, path):
-    from data_loader import get_loader
+    from data_loader import get_loader    
     import re
     last_name = self.resume_name()
     save_folder = os.path.join(self.config.sample_path, '{}_test'.format(last_name))
+    create_dir(save_folder)
     batch_size = self.config.batch_size if not 'Stochastic' in self.config.GAN_options else 1
     data_loader = get_loader(path, self.config.image_size, batch_size, shuffling = False, dataset='DEMO', mode='test')
     for i, real_x in enumerate(data_loader):

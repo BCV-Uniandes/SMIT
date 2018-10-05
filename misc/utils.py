@@ -20,11 +20,12 @@ def get_aus(image_size, dataset, attr=None):
   import numpy as np
   import ipdb
   resize = lambda x: skimage.transform.resize(imageio.imread(line), (image_size, image_size))
+  still = '00.*g' if dataset in ['RafD', 'painters_14'] else '00*g' #Exclude 'Off' image
   if dataset!='EmotionNet':
-    imgs_file = sorted(glob.glob('data/{}/aus_flat/00*g'.format(dataset)))
+    imgs_file = sorted(glob.glob('data/{}/aus_flat/{}'.format(dataset, still)))
     labels = attr.selected_attrs
     imgs_file += ['data/{}/aus_flat/{}.jpeg'.format(dataset,l) for l in labels]
-    if dataset=='CelebA': imgs_file = sorted(imgs_file)
+    # if dataset=='CelebA': imgs_file = sorted(imgs_file)
   else:
     imgs_file = sorted(glob.glob('data/{}/aus_flat/*g'.format(dataset)))
   imgs = [resize(line).transpose(2,0,1) for line in imgs_file]
@@ -36,10 +37,16 @@ def get_aus(image_size, dataset, attr=None):
 #=======================================================================================#
 def get_loss_value(x):
   import torch
-  if int(torch.__version__.split('.')[1])>3:
+  if get_torch_version()>0.3:
     return x.item()
   else:
     return x.data[0]
+
+#=======================================================================================#
+#=======================================================================================#
+def get_torch_version():
+  import torch
+  return float('.'.join(torch.__version__.split('.')[:2]))
 
 #=======================================================================================#
 #=======================================================================================#
@@ -147,6 +154,7 @@ def target_debug_list(size, dim, config=None):
   target_c_list = []
   for j in range(dim+1):
     target_c[:]=0 
+    if config.dataset_fake in ['RafD', 'painters_14'] and j==0: continue
     if j>0: target_c[:,j-1]=1 
     if not config.RafD_FRONTAL:
       if config.dataset_fake=='RafD' and j==0: target_c[:,2] = 1
@@ -180,7 +188,7 @@ def to_cpu(x):
 def to_cuda(x):
   import torch
   import torch.nn as nn
-  if int(torch.__version__.split('.')[1])>3:
+  if get_torch_version()>0.3:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if isinstance(x, nn.Module):
       x.to(device)
@@ -199,7 +207,7 @@ def to_cuda(x):
 #=======================================================================================#
 def to_data(x, cpu=False):
   import torch
-  if int(torch.__version__.split('.')[1])>3:
+  if get_torch_version()>0.3:
     x = x.data
   else:
     from torch.autograd import Variable
@@ -214,7 +222,7 @@ def to_parallel(main, input, list_gpu):
   import torch.nn as nn
   import ipdb
   if len(list_gpu)>1 and input.is_cuda:
-    if int(torch.__version__.split('.')[1])>3:
+    if get_torch_version()>0.3:
       return nn.parallel.data_parallel(main, input,  device_ids = list_gpu)
     else:  
       return nn.parallel.data_parallel(main, input,  device_ids = list_gpu)
@@ -227,7 +235,7 @@ def to_parallel(main, input, list_gpu):
 def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
   import torch
   if not no_cuda: x = to_cuda(x)
-  if int(torch.__version__.split('.')[1])>3:
+  if get_torch_version()>0.3:
     if requires_grad:
       return x.requires_grad_(True)
     else:
@@ -254,10 +262,12 @@ def vgg_preprocess(batch, meta):
   if meta['name']=='ImageNet' or meta['name']=='EmoNet':
     batch = (batch + 1) * 0.5 # [-1, 1] -> [0, 1]
 
-  if meta['name']=='DeepFace':
+  elif meta['name']=='DeepFace' or meta['name']=='Style':
     (r, g, b) = torch.chunk(batch, 3, dim = 1)
     batch = torch.cat((b, g, r), dim = 1) # convert RGB to BGR
     batch = (batch + 1) * 255 * 0.5 # [-1, 1] -> [0, 255]
+  else:
+    raise TypeError('You must preprocess data.')
 
   mean = tensortype(batch.data.size())
   mean[:, 0, :, :] = meta['mean'][0] #103.939

@@ -41,9 +41,9 @@ def _compute_vgg_loss(vgg, img, target, IN=True):
 
 #=======================================================================================#
 #=======================================================================================#
-def _CLS_LOSS(output, target, RafD=False):
+def _CLS_LOSS(output, target, cross_entropy=False):
   import torch.nn.functional as F
-  if RafD:
+  if cross_entropy:
     return F.cross_entropy(output, target)
   else:
     return F.binary_cross_entropy_with_logits(output, target, size_average=False) / output.size(0)
@@ -62,13 +62,10 @@ def _CLS_L2(output, target):
 
 #=======================================================================================#
 #=======================================================================================#
-def _GAN_LOSS(Disc, real_x, fake_x, label, opts, is_fake=False, RafD=False):
+def _GAN_LOSS(Disc, real_x, fake_x, label, opts, is_fake=False, cross_entropy=False):
   import torch, ipdb
   import torch.nn.functional as F
-  # if RafD:
-  #   src_real, cls_real, pose_real, style_real = Disc(real_x)
-  #   src_fake, cls_fake, pose_fake, style_fake = Disc(fake_x)    
-  # else:
+
   src_real, cls_real, style_real = Disc(real_x)
   src_fake, cls_fake, style_fake = Disc(fake_x)
 
@@ -96,23 +93,14 @@ def _GAN_LOSS(Disc, real_x, fake_x, label, opts, is_fake=False, RafD=False):
       if is_fake: loss_src += loss_real
       else: loss_src += loss_real + loss_fake  
 
-    if RafD:
-      len_pose = 5
-      # ipdb.set_trace()
-      loss_cls += _CLS_LOSS(cls_real[i][:,len_pose:], torch.max(label[:,len_pose:],dim=1)[1], True)
-      loss_cls_r += _CLS_LOSS(cls_real[i][:,:len_pose], torch.max(label[:,:len_pose],dim=1)[1], True)
+    if 'CLS_L2' in opts:
+      loss_cls += _CLS_L2(cls_real[i], label)
+    elif 'CLS_L1' in opts:
+      loss_cls += _CLS_L1(cls_real[i], label)  
     else:
-      if 'CLS_L2' in opts:
-        loss_cls += _CLS_L2(cls_real[i], label)
-      elif 'CLS_L1' in opts:
-        loss_cls += _CLS_L1(cls_real[i], label)  
-      else:
-        loss_cls += _CLS_LOSS(cls_real[i], label)      
+      loss_cls += _CLS_LOSS(cls_real[i], label, cross_entropy=cross_entropy)      
 
-  if RafD:
-    return loss_src, loss_cls, loss_cls_r, [style_real, style_fake]
-  else:
-    return loss_src, loss_cls, [style_real, style_fake]
+  return loss_src, loss_cls, [style_real, style_fake]
 
 #=======================================================================================#
 #=======================================================================================#
