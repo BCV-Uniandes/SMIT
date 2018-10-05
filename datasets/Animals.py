@@ -75,6 +75,7 @@ class Animals(Dataset):
     if self.shuffling: random.shuffle(lines) 
     for i, line in enumerate(lines):
       _class = os.path.basename(line).split('_')[0]
+      if _class not in self.selected_attrs: continue
       label = []
       for idx, attr in enumerate(self.selected_attrs):
         if attr == _class:
