@@ -7,6 +7,7 @@ import ipdb
 import numpy as np
 import glob  
 from misc.utils import _horovod
+from generate_data import Face
 hvd = _horovod()   
 
 ######################################################################################################
@@ -22,9 +23,13 @@ class DEMO(Dataset):
     else:
       self.lines = [self.img_path]
     self.len = len(self.lines)
+    self.face = Face()
 
   def __getitem__(self, index):
-    image = Image.open(self.lines[index]).convert('RGB')
+    image, success = self.face.get_face_from_file(self.lines[index])
+    if not success: image = Image.open(self.lines[index]).convert('RGB')
+    else: image = Image.fromarray(image)
+    # image = Image.open(self.lines[index]).convert('RGB')
     # size = min(image.size)-1 if min(image.size)%2 else min(image.size)
     # image.thumbnail((size,size), Image.ANTIALIAS)
     return self.transform(image)

@@ -28,8 +28,10 @@ class Birds(Dataset):
 
   def preprocess(self):
     self.pose = [0,45,90,135,180]
-    self.selected_attrs = self.birds.selected_attrs #N most frequents
-    self.idx_selected = [self.birds.attributes2idx[_attr] for _attr in self.birds.selected_attrs]
+    self.selected_attrs = ['HasBackPattern_solid', 'HasCrownColor_black', 'HasWingColor_grey', 'HasLegColor_black', 'HasWingShape_rounded-wings']
+    # self.selected_attrs = self.birds.selected_attrs #N most frequents
+    # ipdb.set_trace()
+    self.idx_selected = [self.birds.attributes2idx[_attr] for _attr in self.selected_attrs]
     self.all_attrs = self.birds.idx2attributes.values()
     self.filenames = []
     self.labels = []

@@ -25,27 +25,24 @@ def get_loader(metadata_path, image_size, batch_size, \
   mean = (0.5,0.5,0.5)
   std  = (0.5,0.5,0.5)
 
-  crop_size = image_size 
-  if 'face' in metadata_path: window = 0
-  else: window = int(crop_size/10)
-  horizontal_flip = [transforms.RandomHorizontalFlip()] if dataset!='RafD' else []
-  if mode == 'train':
-    transform = transforms.Compose([
-      transforms.Resize((crop_size+window, crop_size+window), interpolation=Image.ANTIALIAS),
-      transforms.CenterCrop((crop_size, crop_size)),
-      ]+
-      horizontal_flip+
-      [
-      transforms.ToTensor(),
-      transforms.Normalize(mean, std)])  
+  transform = []
+  if 'face' in metadata_path or mode!='train':
+    transform+=[transforms.Resize((image_size, image_size), interpolation=Image.ANTIALIAS)]
+  elif dataset=='RafD': 
+    window = int(image_size/10)
+    transform+=[transforms.Resize((image_size+window, image_size+window), interpolation=Image.ANTIALIAS)]
+    # transform+=[transforms.CenterCrop((image_size, image_size))]
+    transform+=[transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0), ratio=(0.9, 1.2))]
   else:
-    # if dataset!='DEMO': resize = [transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS)]
-    # else: resize = []
-    resize = [transforms.Resize((crop_size, crop_size), interpolation=Image.ANTIALIAS)]
-    transform = transforms.Compose(resize+[
-      transforms.ToTensor(),
-      transforms.Normalize(mean, std)])
+    window = int(image_size/10)
+    transform+=[transforms.Resize((image_size+window, image_size+window), interpolation=Image.ANTIALIAS)]
+    # transform+=[transforms.CenterCrop((image_size, image_size))]
+    transform+=[transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0), ratio=(0.9, 1.2))]    
 
+  if dataset!='RafD' and mode=='train':  transform+=[transforms.RandomHorizontalFlip()]
+  transform+=[transforms.ToTensor(), transforms.Normalize(mean, std)]  
+
+  transform = transforms.Compose(transform)
   
   dataset_module = getattr(importlib.import_module('datasets.{}'.format(dataset)), dataset)
   dataset = dataset_module(image_size, metadata_path, transform, mode, shuffling=shuffling or mode=='train', **kwargs)

@@ -12,24 +12,20 @@ hvd = _horovod()
 ######################################################################################################
 ###                                              AwA2                                              ###
 ######################################################################################################
-class AwA2(Dataset):
+class Animals(Dataset):
   def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, all_attr=-1, continuous=True, **kwargs):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
-    self.name = 'AwA2'
+    self.name = 'Animals'
     self.all_attr = all_attr
     self.metadata_path = metadata_path
-    data_root = os.path.join('data','AwA2', 'Animals_with_Attributes2')
+    data_root = os.path.join('data','Animals', 'Animals_with_Attributes2')
     self.lines = sorted(glob.glob(os.path.abspath(os.path.join(data_root,'JPEGImages','*', '*.jpg'))))
     _replace = lambda line: line.strip().replace('   ',' ').replace('  ',' ').split(' ')
-    if continuous: self.cls2attr = np.array([map(float, _replace(line)) for line in open(os.path.join(data_root, 'predicate-matrix-continuous.txt')).readlines()])
-    else: self.cls2attr = np.array([map(int, _replace(line)) for line in open(os.path.join(data_root, 'predicate-matrix-binary.txt')).readlines()])
     key = lambda line: (int(line.strip().split('\t')[0])-1, line.strip().split('\t')[1])
     self.idx2cls = {key(line)[0]: key(line)[1] for line in open(os.path.join(data_root, 'classes.txt')).readlines()}
     self.cls2idx = {key(line)[1]: key(line)[0] for line in open(os.path.join(data_root, 'classes.txt')).readlines()}
-    self.idx2attr = {key(line)[0]: key(line)[1] for line in open(os.path.join(data_root, 'predicates.txt')).readlines()}
-    self.attr2idx = {key(line)[1]: key(line)[0] for line in open(os.path.join(data_root, 'predicates.txt')).readlines()}    
 
     if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
@@ -38,17 +34,17 @@ class AwA2(Dataset):
 
   def histogram(self):
     # ipdb.set_trace()
-    values = np.zeros(len(self.attr2idx))
+    values = np.zeros(len(self.cls2idx))
     for line in self.lines:
       _cls = self.cls2idx[line.split('/')[-2]]
-      attr = self.cls2attr[_cls]
-      values += attr
+      values[_cls] += 1
     # ipdb.set_trace()
-    keys_sorted = [key for key,value in sorted(self.attr2idx.iteritems(), key=lambda (k,v): (v,k))]
+    keys_sorted = [key for key,value in sorted(self.cls2idx.iteritems(), key=lambda (k,v): (v,k))]
     dict_={}
     for key, value in zip(keys_sorted, values):
       dict_[key] = value      
     total = 0
+    print('All attributes: '+str(keys_sorted))
     with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
       for key,value in sorted(dict_.iteritems(), key=lambda (k,v): (v,k), reverse=True):
         print(key, value)
@@ -60,21 +56,17 @@ class AwA2(Dataset):
     self.histogram()
     if self.all_attr==1: #ALL OF THEM
       self.selected_attrs = [
-        'black', 'white', 'blue', 'brown', 'gray', 'orange', 'red', 'yellow', 'patches', 
-        'spots', 'stripes', 'furry', 'hairless', 'toughskin', 'big', 'small', 'bulbous', 
-        'lean', 'flippers', 'hands', 'hooves', 'pads', 'paws', 'longleg', 'longneck', 'tail', 
-        'chewteeth', 'meatteeth', 'buckteeth', 'strainteeth', 'horns', 'claws', 'tusks', 
-        'smelly', 'flys', 'hops', 'swims', 'tunnels', 'walks', 'fast', 'slow', 'strong', 
-        'weak', 'muscle', 'bipedal', 'quadrapedal', 'active', 'inactive', 'nocturnal', 
-        'hibernate', 'agility', 'fish', 'meat', 'plankton', 'vegetation', 'insects', 
-        'forager', 'grazer', 'hunter', 'scavenger', 'skimmer', 'stalker', 'newworld', 
-        'oldworld', 'arctic', 'coastal', 'desert', 'bush', 'plains', 'forest', 'fields', 
-        'jungle', 'mountains', 'ocean', 'ground', 'water', 'tree', 'cave', 'fierce', 'timid', 
-        'smart', 'group', 'solitary', 'nestspot', 'domestic'
-      ]
+              'antelope', 'grizzly+bear', 'killer+whale', 'beaver', 'dalmatian', 'persian+cat', 'horse', 
+              'german+shepherd', 'blue+whale', 'siamese+cat', 'skunk', 'mole', 'tiger', 'hippopotamus', 
+              'leopard', 'moose', 'spider+monkey', 'humpback+whale', 'elephant', 'gorilla', 'ox', 'fox', 
+              'sheep', 'seal', 'chimpanzee', 'hamster', 'squirrel', 'rhinoceros', 'rabbit', 'bat', 'giraffe', 
+              'wolf', 'chihuahua', 'rat', 'weasel', 'otter', 'buffalo', 'zebra', 'giant+panda', 'deer', 
+              'bobcat', 'pig', 'lion', 'mouse', 'polar+bear', 'collie', 'walrus', 'raccoon', 'cow', 'dolphin'
+              ]
 
     elif self.all_attr==0:
-      self.selected_attrs = ['black', 'white', 'brown', 'stripes', 'water', 'tree'] 
+      self.selected_attrs = ['dalmatian', 'german+shepherd', 'chihuahua', 'persian+cat', 'collie',
+                            'siamese+cat', 'leopard', 'lion'] 
 
     self.filenames = []
     self.labels = []
@@ -83,16 +75,12 @@ class AwA2(Dataset):
     if self.shuffling: random.shuffle(lines) 
     for i, line in enumerate(lines):
       _class = os.path.basename(line).split('_')[0]
-      _class_idx = self.cls2idx[_class]
-      values = self.cls2attr[_class_idx]
       label = []
-      for idx, value in enumerate(values):
-        attr = self.idx2attr[idx]
-        if attr in self.selected_attrs:
-          if value == -1:
-            label.append(0)
-          else:
-            label.append(value)
+      for idx, attr in enumerate(self.selected_attrs):
+        if attr == _class:
+          label.append(1)
+        else:
+          label.append(0)
       self.filenames.append(line)
       self.labels.append(label)
 

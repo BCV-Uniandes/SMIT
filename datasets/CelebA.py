@@ -13,7 +13,7 @@ hvd = _horovod()
 ###                                              CelebA                                            ###
 ######################################################################################################
 class CelebA(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, all_attr=-1, **kwargs):
+  def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, all_attr=0, **kwargs):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
@@ -29,9 +29,28 @@ class CelebA(Dataset):
     self.preprocess()
     if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
+  def histogram(self):
+    values = np.array(map(int, self.lines[2].split()[1:]))*0
+    for line in self.lines[2:]:
+      value = np.array(map(int, line.split()[1:])).clip(min=0)
+      values += value
+    dict_ = {}
+    for key, value in zip(self.lines[1].split(), values):
+      dict_[key] = value
+    total = 0
+    with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
+      for key,value in sorted(dict_.iteritems(), key=lambda (k,v): (v,k), reverse=True):
+        print(key, value)
+        total+=value
+        print>>f, '{}\t{}'.format(key,value)
+      print>>f, 'TOTAL\t{}'.format(total)
+
+
 
   def preprocess(self):
     attrs = self.lines[1].split()
+    self.histogram()
+    # ipdb.set_trace()
     for i, attr in enumerate(attrs):
       self.attr2idx[attr] = i
       self.idx2attr[i] = attr
@@ -44,15 +63,26 @@ class CelebA(Dataset):
         'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Receding_Hairline', 'Rosy_Cheeks',
         'Sideburns', 'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings', 'Wearing_Hat', 'Wearing_Lipstick',
         'Wearing_Necklace', 'Wearing_Necktie', 'Young'
-      ]
+      ] # Total: 40
     elif self.all_attr==2:
       self.selected_attrs = [
-        'Big_Lips', 'Big_Nose',
-        'Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Bushy_Eyebrows', 'Chubby', 'Double_Chin', 'Eyeglasses',
-        'Goatee', 'Gray_Hair', 'Heavy_Makeup', 'Male', 'Mouth_Slightly_Open', 'Mustache',
+        '5_o_Clock_Shadow', 'Arched_Eyebrows', 'Attractive', 'Bags_Under_Eyes', 'Bald', 'Bangs', 'Big_Lips', 'Big_Nose',
+        'Black_Hair', 'Blond_Hair', 'Blurry', 'Brown_Hair', 'Bushy_Eyebrows', 'Chubby', 'Double_Chin', 'Eyeglasses',
+        'Goatee', 'Gray_Hair', 'Heavy_Makeup', 'High_Cheekbones', 'Male', 'Mouth_Slightly_Open', 'Mustache',
+        'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Receding_Hairline', 'Rosy_Cheeks',
+        'Sideburns', 'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings', 'Wearing_Lipstick',
+        'Young'
+      ] #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie'. Total: 37
+    elif self.all_attr==3:
+      self.selected_attrs = [
+        'Arched_Eyebrows', 'Bushy_Eyebrows', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair', 
+        'Brown_Hair', 'Gray_Hair', 'Straight_Hair', 'Wavy_Hair',
+        'Chubby', 'Eyeglasses', 'Heavy_Makeup', 'Male', 'Mouth_Slightly_Open', 'Mustache',
         'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Rosy_Cheeks',
-        'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Young'
-      ]
+        'Sideburns', 'Smiling', 'Young'
+      ] #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie',   
+      # '5_o_Clock_Shadow', 'Attractive', Bags_Under_Eyes', 'Bald', 'Blurry', 'Double_Chin', 'Goatee'
+      # 'High_Cheekbones', 'Receding_Hairline', 'Wearing_Earrings', 'Wearing_Lipstick'. Total: 25
 
     elif self.all_attr==0:
       self.selected_attrs = ['Eyeglasses', 'Male', 'Pale_Skin', 'Smiling', 'Young'] 
