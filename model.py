@@ -147,7 +147,7 @@ class MultiDiscriminator(nn.Module):
 
       x = self.downsample(x)
 
-    return outs_src, outs_aux
+    return outs_src, outs_aux, [None]*len(outs_aux)
 
 
 #===============================================================================================#
@@ -538,6 +538,10 @@ class AdaInGEN(nn.Module):
       if self.style_dim==8 or self.style_dim==20 or self.style_dim==16: 
         label = label.view(label.size(0),-1)
         style = style.view(style.size(0),-1)
+        # label = label.unsqueeze(1) #label.view(label.size(0),-1)
+        # style = style.unsqueeze(-1).repeat(1,1,label.size(-1)) #style.view(style.size(0),-1)
+        # style = torch.cat([style, label], dim=1)        
+
       else:
         label = label.unsqueeze(-1).expand_as(style)
       style = torch.cat([style, label], dim=-1)
