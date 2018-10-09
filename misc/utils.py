@@ -20,7 +20,7 @@ def get_aus(image_size, dataset, attr=None):
   import numpy as np
   import ipdb
   resize = lambda x: skimage.transform.resize(imageio.imread(line), (image_size, image_size))
-  still = '00.*g' if dataset in ['RafD', 'painters_14'] else '00*g' #Exclude 'Off' image
+  still = '00.*g' if dataset in ['RafD', 'painters_14', 'Animals', 'Image2Weather', 'Image2Season'] else '00*g' #Exclude 'Off' image
   if dataset!='EmotionNet':
     imgs_file = sorted(glob.glob('data/{}/aus_flat/{}'.format(dataset, still)))
     labels = attr.selected_attrs
@@ -154,7 +154,7 @@ def target_debug_list(size, dim, config=None):
   target_c_list = []
   for j in range(dim+1):
     target_c[:]=0 
-    if config.dataset_fake in ['RafD', 'painters_14'] and j==0: continue
+    if config.dataset_fake in ['RafD', 'painters_14', 'Animals', 'Image2Weather', 'Image2Season'] and j==0: continue
     if j>0: target_c[:,j-1]=1 
     if not config.RafD_FRONTAL:
       if config.dataset_fake=='RafD' and j==0: target_c[:,2] = 1

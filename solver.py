@@ -303,7 +303,8 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
   def _GAN_LOSS(self, real_x, fake_x, label, is_fake=False):
-    cross_entropy = self.config.dataset_fake in ['painters_14', 'Animals']
+    cross_entropy = self.config.dataset_fake in ['painters_14', 'Animals', 'Image2Weather', 'Image2Season']
+    cross_entropy = cross_entropy or (self.config.dataset_fake=='RafD' and self.config.RafD_FRONTAL)
     if cross_entropy:
       label = torch.max(label, dim=1)[1]
     return _GAN_LOSS(self.D, real_x, fake_x, label, self.config.GAN_options, is_fake=is_fake, cross_entropy=cross_entropy)
@@ -813,7 +814,7 @@ class Solver(object):
               #   kk = (k+idx)%real_x.size(0) if k+idx >= real_x.size(0) else k+idx
                 # _real_x0[j] = real_x[kk]
               _real_x0 = real_x[:n_rep]
-              ipdb.set_trace()
+              # ipdb.set_trace()
               if 'STYLE_DISC' in self.config.GAN_options:
                 style = self.D(_real_x0)[-1][0]
               else:
@@ -863,9 +864,9 @@ class Solver(object):
       else:
         label = None
       self.PRINT('Translated test images and saved into "{}"..!'.format(name))
-      output = self.save_fake_output(real_x, name, label=label, output=True, Style=7, TIME=not i)
-      # for k in range(_debug):
-      #   output = self.save_fake_output(real_x, name, label=label, output=True, Style=k, TIME=not i)
+      # output = self.save_fake_output(real_x, name, label=label, output=True, Style=7, TIME=not i)
+      for k in range(_debug):
+        output = self.save_fake_output(real_x, name, label=label, output=True, Style=k, TIME=not i)
         # send_mail(body='Images from '+self.config.sample_path, attach=output)
       if i==self.config.iter_test-1: break   
 

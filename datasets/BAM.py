@@ -33,12 +33,12 @@ class BAM(Dataset):
     for line in self.lines[2:]:
       value = np.array(map(int, line.split()[1:])).clip(min=0)
       values += value
-    dict_ = {}
+    self.hist = {}
     for key, value in zip(self.lines[1].split(), values):
-      dict_[key] = value
+      self.hist[key] = value
     total = 0
     with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
-      for key,value in sorted(dict_.iteritems(), key=lambda (k,v): (v,k), reverse=True):
+      for key,value in sorted(self.hist.iteritems(), key=lambda (k,v): (v,k), reverse=True):
         print(key, value)
         total+=value
         print>>f, '{}\t{}'.format(key,value)
@@ -57,7 +57,14 @@ class BAM(Dataset):
     if self.all_attr==1:
       self.selected_attrs = attrs # Total: 20
     else:
-      raise TypeError("Please specify attributes to train.")
+      self.selected_attrs = [
+                        'content_bicycle', 'content_bird', 'content_building', 'content_cars', 
+                        'content_cat', 'content_dog', 'content_flower', 'content_people', 'content_tree', 
+                        'emotion_gloomy', 'emotion_happy', 'emotion_peaceful', 'emotion_scary', 
+                        'media_3d_graphics', 'media_comic', 'media_graphite', 'media_oilpaint', 
+                        'media_pen_ink', 'media_vectorart', 'media_watercolor'      
+                        ] #ALL OF THEM
+      # raise TypeError("Please specify attributes to train.")
     self.filenames = []
     self.labels = []
 
@@ -67,7 +74,7 @@ class BAM(Dataset):
 
       splits = line.split()
       filename = os.path.abspath('data/BAM/data2m/{}'.format(splits[0]))
-      if not os.path.isfile(filename): ipdb.set_trace()
+      if not os.path.isfile(filename): continue#ipdb.set_trace()
       values = splits[1:]
 
       label = []
@@ -100,6 +107,27 @@ class BAM(Dataset):
     random.seed(seed)
     random.shuffle(self.labels)
 
+def create_img(url, img_file):
+  try:
+    img_data = requests.get(url).content
+    with open(img_file, 'wb') as handler:
+      handler.write(img_data)
+    im1 = Image.open(img_file).convert('RGB')  
+    im_small = im1.resize((256, 256), Image.ANTIALIAS)
+    im_small.save(img_file)
+    return True
+  except:
+    return False
+
+def get_labels(all_attr, df, index):
+  ru = lambda i: i.encode('ascii', 'ignore')
+  text2idx = lambda text: 1 if text=='p' else 0
+  labels = []
+  for attr in all_attr:
+    labels.append(text2idx(ru(df[attr][index])[0]))  
+  return labels
+
+
 if __name__ == '__main__':
   # mpirun -np 10 ipython datasets/BAM.py
   import pandas as pd, sqlite3, requests, random
@@ -113,33 +141,31 @@ if __name__ == '__main__':
                    sqlite3.connect(sql_file))
   
   ru = lambda i: i.encode('ascii', 'ignore')
-  # all_attr = pd.read_sql("select * from automatic_labels", sqlite3.connect(sql_file), index_col="mid")
-  # all_attr = sorted([ru(attr) for attr in all_attr.keys()])
-  # text2idx = lambda text: '1' if text.lower()=='positive' else '0'
-  # text = open(root+'list_attr_bam.txt', 'w')  
-  # text.writelines('{}\t# Initially. There must be some broken link that were not included in this file\n'.format(len(df)))
-  # text.writelines('{}\n'.format('\t'.join(all_attr)))
-  _range = range(len(df))
-  random.shuffle(_range)
-  for i in tqdm(_range, total=len(df), desc='Extracting images from BAM'):
-    url = ru(df['src'][i])
-    try:
-      img_data = requests.get(url).content
+  all_attr = pd.read_sql("select * from automatic_labels", sqlite3.connect(sql_file), index_col="mid")
+  all_attr = sorted([ru(attr) for attr in all_attr.keys()])
+  with open(root+'list_attr_bam.txt', 'w')  as text:
+    text.writelines('{}\t# Initially. There must be some broken link that were not included in this file\n'.format(len(df)))
+    text.writelines('{}\n'.format('\t'.join(all_attr)))
+    _range = range(len(df))
+    # random.shuffle(_range)
+
+    for i in tqdm(_range, total=len(df), desc='Extracting images from BAM'):
       img_file = '{}.jpg'.format(image_root+str(i).zfill(len(str(len(df)))))
       if not os.path.isfile(img_file):
-        with open(img_file, 'wb') as handler:
-            handler.write(img_data)
-        im1 = Image.open(img_file).convert('RGB')  
-        im_small = im1.resize((256, 256), Image.ANTIALIAS)
-        im_small.save(img_file)
-    except:
-      continue
+        continue
+        # success = create_img(df['src'][i], img_file)
+        # if not success: continue
 
-  #   labels = []
-  #   for attr in all_attr:
-  #     labels.append(text2idx(ru(df[attr][i])))
-
-  #   str_file = '{}\t{}\n'.format(os.path.basename(img_file), '\t'.join(labels))
-  # text.close()
+      txt_file = img_file.replace('jpg','txt')
+      if not os.path.isfile(txt_file):
+        continue
+        # labels = get_labels(txt_file, all_attr, df, i)
+        # string = '{}\n'.format('\t'.join(map(str, labels)))
+        # with open(txt_file, 'w')  as f: f.writelines(string)
+      else:
+        labels = open(txt_file).readline().strip().split()
+        if len(labels)!=20: continue
+        string = '{}\t{}\n'.format(os.path.basename(img_file), '\t'.join(labels))
+        text.writelines(string)
 
 

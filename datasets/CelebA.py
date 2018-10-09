@@ -74,13 +74,23 @@ class CelebA(Dataset):
         'Young'
       ] #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie'. Total: 37
     elif self.all_attr==3:
+      # self.selected_attrs = [
+      #   'Arched_Eyebrows', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair', 
+      #   'Brown_Hair', 'Bushy_Eyebrows',
+      #   'Chubby', 'Eyeglasses', 'Gray_Hair', 'Heavy_Makeup', 'Male', 'Mouth_Slightly_Open', 'Mustache',
+      #   'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Rosy_Cheeks',
+      #   'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Young'
+      # ] 
+
       self.selected_attrs = [
         'Arched_Eyebrows', 'Bushy_Eyebrows', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair', 
         'Brown_Hair', 'Gray_Hair', 'Straight_Hair', 'Wavy_Hair',
         'Chubby', 'Eyeglasses', 'Heavy_Makeup', 'Male', 'Mouth_Slightly_Open', 'Mustache',
         'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Rosy_Cheeks',
-        'Sideburns', 'Smiling', 'Young'
-      ] #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie',   
+        'Smiling', 'Young'
+      ] 
+
+      #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie', 'Sideburns',
       # '5_o_Clock_Shadow', 'Attractive', Bags_Under_Eyes', 'Bald', 'Blurry', 'Double_Chin', 'Goatee'
       # 'High_Cheekbones', 'Receding_Hairline', 'Wearing_Earrings', 'Wearing_Lipstick'. Total: 25
 
@@ -109,13 +119,22 @@ class CelebA(Dataset):
       values = splits[1:]
 
       label = []
-      for idx, value in enumerate(values):
-        attr = self.idx2attr[idx]
-        if attr in self.selected_attrs:
-          if value == '1':
-            label.append(1)
-          else:
-            label.append(0)
+      # for idx, value in enumerate(values):
+      #   attr = self.idx2attr[idx]
+      #   if attr in self.selected_attrs:
+      #     if value == '1':
+      #       label.append(1)
+      #     else:
+      #       label.append(0)
+
+      for attr in self.selected_attrs:
+        selected_value = values[self.attr2idx[attr]]
+        if selected_value == '1':
+          label.append(1)
+        else:
+          label.append(0)
+
+
       self.filenames.append(filename)
       self.labels.append(label)
 

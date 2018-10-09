@@ -68,8 +68,8 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
 
   # Model hyper-parameters
-  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=['BP4D', 'WIDER', 'painters_14', 'AwA2', 'Animals', 'RafD', 'Birds', 'EmotionNet', 'CelebA', 'MNIST'])
-  parser.add_argument('--dataset_real',       type=str, default='', choices=['','BP4D', 'painters_14', 'WIDER', 'AwA2', 'Animals', 'RafD', 'Birds', 'EmotionNet', 'CelebA'])  
+  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=['BAM', 'BP4D', 'Image2Weather', 'WIDER', 'painters_14', 'AwA2', 'Animals', 'RafD', 'Birds', 'EmotionNet', 'CelebA', 'MNIST', 'Image2Season'])
+  parser.add_argument('--dataset_real',       type=str, default='', choices=['','BAM', 'BP4D', 'Image2Weather', 'painters_14', 'WIDER', 'AwA2', 'Animals', 'RafD', 'Birds', 'EmotionNet', 'CelebA', 'Image2Season'])  
   parser.add_argument('--fold',               type=str, default='0')
   parser.add_argument('--mode_data',          type=str, default='normal', choices=['normal', 'faces'])   
   parser.add_argument('--mode_train',         type=str, default='GAN', choices=['GAN', 'CLS'])   
@@ -80,7 +80,7 @@ if __name__ == '__main__':
   parser.add_argument('--batch_size',         type=int, default=64)
   parser.add_argument('--num_workers',        type=int, default=4)
   parser.add_argument('--num_epochs',         type=int, default=100)
-  parser.add_argument('--num_epochs_decay',   type=int, default=30)
+  parser.add_argument('--num_epochs_decay',   type=int, default=60)
   parser.add_argument('--save_epoch',         type=int, default=1) #Save models and weights every how many epochs
   parser.add_argument('--beta1',              type=float, default=0.5)
   parser.add_argument('--beta2',              type=float, default=0.999)

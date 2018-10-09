@@ -3,17 +3,11 @@ def config_GENERATOR(config, update_folder):
     if config.ALL_ATTR==1:
       update_folder(config, 'ALL_CELEBA_ATTR')
       config.c_dim = 40
-      config.num_epochs = 300
-      config.num_epochs_decay = 100
     elif config.ALL_ATTR==2:
       config.c_dim=37
-      config.num_epochs = 300
-      config.num_epochs_decay = 100      
       update_folder(config, 'ALL_CELEBA_ATTR_'+str(config.c_dim))      
     elif config.ALL_ATTR==3:
       config.c_dim=25
-      config.num_epochs = 300
-      config.num_epochs_decay = 100      
       update_folder(config, 'ALL_CELEBA_ATTR_'+str(config.c_dim))        
     elif config.ALL_ATTR==0:
       config.c_dim=5
@@ -23,13 +17,12 @@ def config_GENERATOR(config, update_folder):
     if config.ALL_ATTR==1:
       update_folder(config, 'ALL_AwA2_ATTR')
       config.c_dim = 85
-      config.num_epochs = 300
-      config.num_epochs_decay = 100
     elif config.ALL_ATTR==0:
       config.c_dim=6   
 
   if config.dataset_fake=='RafD':
     config.save_epoch = 20
+    if config.RafD_FRONTAL: config.save_epoch = 120
     if config.RafD_FRONTAL or config.RafD_EMOTIONS: config.c_dim=8
     else: config.c_dim=13
 
@@ -37,28 +30,53 @@ def config_GENERATOR(config, update_folder):
     config.c_dim=5
 
   if config.dataset_fake=='painters_14':
-    config.num_epochs_decay=20
-    config.save_epoch = 20
-    if config.ALL_ATTR==1:
-      update_folder(config, 'ALL_ATTR')
-      config.c_dim=50
-    elif config.ALL_ATTR==0:
-      config.c_dim=5   
-
-  if config.dataset_fake=='Animals':
-    config.num_epochs_decay=20
     config.save_epoch = 20
     if config.ALL_ATTR==1:
       update_folder(config, 'ALL_ATTR')
       config.c_dim=14
     elif config.ALL_ATTR==0:
-      config.c_dim=8         
+      config.c_dim=5   
+
+  if config.dataset_fake=='Animals':
+    if config.ALL_ATTR==1:
+      update_folder(config, 'ALL_ATTR')
+      config.save_epoch = 6
+      config.c_dim=50
+    elif config.ALL_ATTR==0:
+      config.save_epoch = 30
+      config.c_dim=8       
+
+  if config.dataset_fake=='Image2Weather':
+    if config.ALL_ATTR==1:
+      update_folder(config, 'ALL_ATTR')
+      # config.save_epoch = 6
+      config.c_dim=5
+    elif config.ALL_ATTR==0:
+      config.save_epoch = 160
+      config.c_dim=4           
+
+  if config.dataset_fake=='Image2Season':
+    config.save_epoch = 30
+    if config.ALL_ATTR==1:
+      # update_folder(config, 'ALL_ATTR')
+      config.c_dim = 4
+    elif config.ALL_ATTR==0:
+      config.c_dim=4   
 
   if config.dataset_fake=='WIDER':
-    config.save_epoch = 10
+    config.save_epoch = 30
     if config.ALL_ATTR==1:
       update_folder(config, 'ALL_ATTR')
       config.c_dim = 14
+    elif config.ALL_ATTR==0:
+      config.c_dim=5         
+
+  if config.dataset_fake=='BAM':
+    if config.ALL_ATTR==1:
+      # update_folder(config, 'ALL_ATTR')
+      config.c_dim = 20
+    elif config.ALL_ATTR==0:
+      config.c_dim=20       
 
   config.num_epochs *= config.save_epoch#500
   config.num_epochs_decay *= config.save_epoch#200    
@@ -229,7 +247,7 @@ def replace_folder_gan(config):
   import os
   replaced = 'snapshot'
   if config.RafD_FRONTAL: dataset = 'RafD_Frontal'
-  if config.RafD_EMOTIONS: dataset = 'RafD_EMOTIONS'
+  elif config.RafD_EMOTIONS: dataset = 'RafD_EMOTIONS'
   else: dataset = config.dataset_fake
   replace = os.path.join(replaced, config.mode_train, dataset)
   config.log_path = config.log_path.replace(replaced, replace)
