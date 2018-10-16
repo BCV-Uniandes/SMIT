@@ -19,18 +19,20 @@ def get_aus(image_size, dataset, attr=None):
   import skimage.transform  
   import numpy as np
   import ipdb
-  resize = lambda x: skimage.transform.resize(imageio.imread(line), (image_size, image_size))
-  still = '00.*g' if dataset in ['RafD', 'painters_14', 'Animals', 'Image2Weather', 'Image2Season'] else '00*g' #Exclude 'Off' image
-  if dataset!='EmotionNet':
-    imgs_file = sorted(glob.glob('data/{}/aus_flat/{}'.format(dataset, still)))
-    labels = attr.selected_attrs
-    imgs_file += ['data/{}/aus_flat/{}.jpeg'.format(dataset,l) for l in labels]
-    # if dataset=='CelebA': imgs_file = sorted(imgs_file)
+
+  imread = lambda x: imageio.imread(x)
+  resize = lambda x: skimage.transform.resize(x, (image_size, image_size))
+  if dataset not in ['EmotionNet', 'BP4D']:
+    from data.attr2img import external2img
+    labels = ['Source']+attr.selected_attrs
+    imgs = external2img(labels, img_size=image_size)
+    imgs = [resize(np.array(img)).transpose(2,0,1) for img in imgs]
   else:
     imgs_file = sorted(glob.glob('data/{}/aus_flat/*g'.format(dataset)))
-  imgs = [resize(line).transpose(2,0,1) for line in imgs_file]
-  # ipdb.set_trace()   
+    imgs_file.pop(1) #Removing 'off'
+    imgs = [resize(imread(line)).transpose(2,0,1) for line in imgs_file]
   imgs = torch.from_numpy(np.concatenate(imgs, axis=2).astype(np.float32)).unsqueeze(0)
+  # from torchvision.utils import save_image; save_image(imgs, 'meh.jpg', nrow=1, padding=0)
   return imgs  
 
 #=======================================================================================#
@@ -131,6 +133,21 @@ def replace_weights(target, source, list):
 
 #=======================================================================================#
 #=======================================================================================#
+def slerp(val, low, high):
+  """
+  original: Animating Rotation with Quaternion Curves, Ken Shoemake
+  https://arxiv.org/abs/1609.04468
+  Code: https://github.com/soumith/dcgan.torch/issues/14, Tom White
+  """
+  import numpy as np
+  omega = np.arccos(np.dot(low / np.linalg.norm(low), high / np.linalg.norm(high)))
+  so = np.sin(omega)
+  if so == 0:
+    return (1.0-val) * low + val * high # L'Hopital's rule/LERP  
+  return np.sin((1.0 - val) * omega) / so * low + np.sin(val * omega) / so * high  
+
+#=======================================================================================#
+#=======================================================================================#
 def send_mail(body="bcv002", attach=[], subject='Message from bcv002', to='rv.andres10@uniandes.edu.co'):
   import os,ipdb,time
   content_type = {'jpg':'image/jpeg', 'gif':'image/gif', 'mp4':'video/mp4'}
@@ -154,7 +171,8 @@ def target_debug_list(size, dim, config=None):
   target_c_list = []
   for j in range(dim+1):
     target_c[:]=0 
-    if config.dataset_fake in ['RafD', 'painters_14', 'Animals', 'Image2Weather', 'Image2Season'] and j==0: continue
+    # if config.dataset_fake in ['RafD', 'painters_14', 'Animals', 'Image2Weather', 'Image2Season'] and j==0: continue
+    # if j==0: continue
     if j>0: target_c[:,j-1]=1 
     if not config.RafD_FRONTAL:
       if config.dataset_fake=='RafD' and j==0: target_c[:,2] = 1
@@ -162,6 +180,19 @@ def target_debug_list(size, dim, config=None):
       if config.dataset_fake=='RafD' and j>=6: target_c[:,2] = 1
     else:
       if config.dataset_fake=='RafD' and j==0: target_c[:,0] = 1
+
+    if config.dataset_fake=='BAM' and j<=10: 
+      target_c[:,10] = 1; target_c[:,13] = 1
+    elif config.dataset_fake=='BAM' and j<=14: 
+      target_c[:,0] = 1; target_c[:,13] = 1
+    elif config.dataset_fake=='BAM' and j<=20: 
+      target_c[:,0] = 1; target_c[:,10] = 1
+    # ipdb.set_trace()     
+# 9, 4, 7
+# 'content_bicycle', 'content_bird', 'content_building', 'content_cars', 'content_cat', 'content_dog', 'content_flower', 'content_people', 'content_tree', 
+# 'emotion_gloomy', 'emotion_happy', 'emotion_peaceful', 'emotion_scary', 
+# 'media_3d_graphics', 'media_comic', 'media_graphite', 'media_oilpaint', 'media_pen_ink', 'media_vectorart', 'media_watercolor'      
+
     # ipdb.set_trace()
     target_c_list.append(to_var(target_c, volatile=True))        
   return target_c_list
