@@ -1,27 +1,34 @@
 def config_GENERATOR(config, update_folder):
   if config.dataset_fake=='CelebA':
     if config.ALL_ATTR==1:
-      update_folder(config, 'ALL_CELEBA_ATTR')
+      update_folder(config, 'ALL_ATTR')
       config.c_dim = 40
     elif config.ALL_ATTR==2:
       config.c_dim=37
-      update_folder(config, 'ALL_CELEBA_ATTR_'+str(config.c_dim))      
+      update_folder(config, 'ALL_ATTR_'+str(config.c_dim))      
     elif config.ALL_ATTR==3:
+      config.num_epochs_decay = 30
       config.c_dim=25
-      update_folder(config, 'ALL_CELEBA_ATTR_'+str(config.c_dim))        
+      update_folder(config, 'ALL_ATTR_'+str(config.c_dim))
+    elif config.ALL_ATTR==4:
+      config.num_epochs_decay = 30
+      config.c_dim=10
+      update_folder(config, 'ALL_ATTR_'+str(config.c_dim))         
     elif config.ALL_ATTR==0:
       config.c_dim=5
 
   if config.dataset_fake=='AwA2':
     config.save_epoch = 6
     if config.ALL_ATTR==1:
-      update_folder(config, 'ALL_AwA2_ATTR')
+      update_folder(config, 'ALL_ATTR')
       config.c_dim = 85
     elif config.ALL_ATTR==0:
       config.c_dim=6   
 
   if config.dataset_fake=='RafD':
     config.save_epoch = 20
+    config.num_epochs = 40
+    config.num_epochs_decay = 20
     if config.RafD_FRONTAL: config.save_epoch = 120
     if config.RafD_FRONTAL or config.RafD_EMOTIONS: config.c_dim=8
     else: config.c_dim=13
@@ -42,6 +49,10 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'ALL_ATTR')
       config.save_epoch = 6
       config.c_dim=50
+    elif config.ALL_ATTR==2:
+      config.save_epoch = 10
+      config.c_dim=17
+      update_folder(config, 'ALL_ATTR_'+str(config.c_dim)) 
     elif config.ALL_ATTR==0:
       config.save_epoch = 30
       config.c_dim=8       
@@ -63,6 +74,20 @@ def config_GENERATOR(config, update_folder):
     elif config.ALL_ATTR==0:
       config.c_dim=4   
 
+  if config.dataset_fake=='Image2Edges':
+    # config.save_epoch = 30
+    if config.ALL_ATTR==1:
+      update_folder(config, 'ALL_ATTR')
+      config.c_dim = 4
+    elif config.ALL_ATTR==2:
+      config.c_dim = 2
+      update_folder(config, 'ALL_ATTR_Handbags') 
+    elif config.ALL_ATTR==3:
+      config.c_dim = 2 
+      update_folder(config, 'ALL_ATTR_Shoes') 
+    elif config.ALL_ATTR==0:
+      config.c_dim=4         
+
   if config.dataset_fake=='WIDER':
     config.save_epoch = 30
     if config.ALL_ATTR==1:
@@ -76,7 +101,12 @@ def config_GENERATOR(config, update_folder):
       # update_folder(config, 'ALL_ATTR')
       config.c_dim = 20
     elif config.ALL_ATTR==0:
-      config.c_dim=20       
+      config.c_dim=20   
+
+  if config.dataset_fake=='EmotionNet':
+    config.c_dim=12            
+    config.num_epochs = 20 #The same iterations as celebA given the high number of images in the dataset
+    config.num_epochs_decay = 6
 
   config.num_epochs *= config.save_epoch#500
   config.num_epochs_decay *= config.save_epoch#200    
@@ -109,11 +139,12 @@ def config_GENERATOR(config, update_folder):
     # config.d_train_repeat = 1
 
   if 'L1_LOSS' in config.GAN_options: 
-    if config.lambda_l1==1.0:
-      update_folder(config, 'L1_LOSS') 
-      update_folder(config, 'lambda_l1_10.0') 
-    else:
-      update_folder(config, 'L1_LOSS_'+str(config.lambda_l1)) 
+    update_folder(config, 'L1_LOSS_'+str(config.lambda_l1)) 
+    # if config.lambda_l1==1.0:
+    #   update_folder(config, 'L1_LOSS') 
+    #   update_folder(config, 'lambda_l1_10.0') 
+    # else:
+    #   update_folder(config, 'L1_LOSS_'+str(config.lambda_l1)) 
 
   if 'SpectralNorm' in config.GAN_options: 
     update_folder(config, 'SpectralNorm')
@@ -205,6 +236,8 @@ def config_GENERATOR(config, update_folder):
 
   elif 'rec_style' in config.GAN_options: 
     update_folder(config, 'rec_style')   
+  elif 'ORG_REC' in config.GAN_options: 
+    update_folder(config, 'ORG_REC')       
 
   if config.LOAD_SMIT: 
     update_folder(config, 'LOAD_SMIT') 
@@ -228,7 +261,13 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'AttentionStyle') 
 
   if 'Identity' in config.GAN_options: 
-    update_folder(config, 'Identity_'+str(config.lambda_idt))          
+    update_folder(config, 'Identity_'+str(config.lambda_idt))      
+
+  if 'LayerNorm' in config.GAN_options: 
+    update_folder(config, 'LayerNorm') 
+
+  if config.dataset_smit: 
+    update_folder(config, 'Finetuning_'+config.dataset_smit)         
 
   if 'RaGAN' in config.GAN_options:
     config.batch_size *= 2

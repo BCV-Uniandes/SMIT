@@ -40,7 +40,7 @@ class BP4D(Dataset):
       if not 'faces' in self.metadata_path:
         filename = filename.replace('Faces', 'Sequences_400')
       if not os.path.isfile(filename) or os.stat(filename).st_size==0: 
-        ipdb.set_trace()
+        continue#ipdb.set_trace()
       values = splits[1:]
       label = []
       for value in values:

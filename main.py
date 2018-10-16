@@ -4,20 +4,14 @@ import argparse
 from data_loader import get_loader
 import glob
 import math
-import ipdb
-import imageio
-import numpy as np
-import config as cfg
-import warnings
-import ipdb
-import sys
-import torch
-import torch.utils.data.distributed
+import os, glob, ipdb, imageio, numpy as np, config as cfg, warnings, sys, torch, torch.utils.data.distributed
 
 from misc.utils import _horovod
 hvd = _horovod()
 hvd.init()
 # warnings.filterwarnings('ignore')
+
+__DATASETS__ = [os.path.basename(line).split('.py')[0] for line in glob.glob('datasets/*.py')]
 
 def PRINT(config):
   string ='------------ Options -------------'
@@ -68,8 +62,9 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
 
   # Model hyper-parameters
-  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=['BAM', 'BP4D', 'Image2Weather', 'WIDER', 'painters_14', 'AwA2', 'Animals', 'RafD', 'Birds', 'EmotionNet', 'CelebA', 'MNIST', 'Image2Season'])
-  parser.add_argument('--dataset_real',       type=str, default='', choices=['','BAM', 'BP4D', 'Image2Weather', 'painters_14', 'WIDER', 'AwA2', 'Animals', 'RafD', 'Birds', 'EmotionNet', 'CelebA', 'Image2Season'])  
+  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=__DATASETS__)
+  parser.add_argument('--dataset_real',       type=str, default='', choices=['']+__DATASETS__)  
+  parser.add_argument('--dataset_smit',       type=str, default='', choices=['']+__DATASETS__)  
   parser.add_argument('--fold',               type=str, default='0')
   parser.add_argument('--mode_data',          type=str, default='normal', choices=['normal', 'faces'])   
   parser.add_argument('--mode_train',         type=str, default='GAN', choices=['GAN', 'CLS'])   
@@ -80,7 +75,7 @@ if __name__ == '__main__':
   parser.add_argument('--batch_size',         type=int, default=64)
   parser.add_argument('--num_workers',        type=int, default=4)
   parser.add_argument('--num_epochs',         type=int, default=100)
-  parser.add_argument('--num_epochs_decay',   type=int, default=60)
+  parser.add_argument('--num_epochs_decay',   type=int, default=30)
   parser.add_argument('--save_epoch',         type=int, default=1) #Save models and weights every how many epochs
   parser.add_argument('--beta1',              type=float, default=0.5)
   parser.add_argument('--beta2',              type=float, default=0.999)
@@ -135,9 +130,12 @@ if __name__ == '__main__':
   parser.add_argument('--LOAD_SMIT',          action='store_true', default=False)
   parser.add_argument('--NO_LABELCUM',        action='store_true', default=False)
   parser.add_argument('--RafD_FRONTAL',       action='store_true', default=False)
-  parser.add_argument('--RafD_EMOTIONS',       action='store_true', default=False)
+  parser.add_argument('--RafD_EMOTIONS',      action='store_true', default=False)
   parser.add_argument('--HOROVOD',            action='store_true', default=False)
+  parser.add_argument('--DISC_DILATE',        action='store_true', default=False)
   parser.add_argument('--GPU',                type=str, default='0')
+  parser.add_argument('--Interpolation',      type=str, default='Linear', choices=['Linear', 'Spherical'])
+
 
   # Step size
   parser.add_argument('--log_step',           type=int, default=10)
@@ -149,7 +147,7 @@ if __name__ == '__main__':
   parser.add_argument('--iter_style',         type=int, default=20)
   parser.add_argument('--style_debug',        type=int, default=9)
   parser.add_argument('--style_train_debug',  type=int, default=7)
-  parser.add_argument('--style_label_debug',  type=int, default=7, choices=[0,1,2,3,4,5,6,7])
+  parser.add_argument('--style_label_debug',  type=int, default=6, choices=[0,1,2,3,4,5,6,7])
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')

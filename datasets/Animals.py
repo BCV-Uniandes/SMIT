@@ -64,6 +64,14 @@ class Animals(Dataset):
               'bobcat', 'pig', 'lion', 'mouse', 'polar+bear', 'collie', 'walrus', 'raccoon', 'cow', 'dolphin'
               ]
 
+    elif self.all_attr==2:
+      self.selected_attrs = [
+                            'dalmatian', 'german+shepherd', 'collie', 'wolf',
+                            'grizzly+bear', 'gorilla', 'giant+panda', 'polar+bear',
+                            'antelope', 'horse', 'ox', 'buffalo', 'zebra', 'cow',
+                            'tiger', 'leopard', 'lion', 
+                            ] # 17
+
     elif self.all_attr==0:
       self.selected_attrs = ['dalmatian', 'german+shepherd', 'chihuahua', 'persian+cat', 'collie',
                             'siamese+cat', 'leopard', 'lion'] 

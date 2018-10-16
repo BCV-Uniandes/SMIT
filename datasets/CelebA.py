@@ -21,6 +21,8 @@ class CelebA(Dataset):
     self.all_attr = all_attr
     self.metadata_path = metadata_path
     self.lines = open(os.path.abspath('data/CelebA/list_attr_celeba.txt')).readlines()
+    self.splits = {line.split(',')[0]:int(line.strip().split(',')[1]) for line in  open(os.path.abspath('data/CelebA/train_val_test.txt')).readlines()[1:]}
+    self.mode_allowed = [0,1] if mode=='train' else [2]
     self.attr2idx = {}
     self.idx2attr = {}
 
@@ -74,14 +76,6 @@ class CelebA(Dataset):
         'Young'
       ] #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie'. Total: 37
     elif self.all_attr==3:
-      # self.selected_attrs = [
-      #   'Arched_Eyebrows', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair', 
-      #   'Brown_Hair', 'Bushy_Eyebrows',
-      #   'Chubby', 'Eyeglasses', 'Gray_Hair', 'Heavy_Makeup', 'Male', 'Mouth_Slightly_Open', 'Mustache',
-      #   'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Rosy_Cheeks',
-      #   'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Young'
-      # ] 
-
       self.selected_attrs = [
         'Arched_Eyebrows', 'Bushy_Eyebrows', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair', 
         'Brown_Hair', 'Gray_Hair', 'Straight_Hair', 'Wavy_Hair',
@@ -94,6 +88,14 @@ class CelebA(Dataset):
       # '5_o_Clock_Shadow', 'Attractive', Bags_Under_Eyes', 'Bald', 'Blurry', 'Double_Chin', 'Goatee'
       # 'High_Cheekbones', 'Receding_Hairline', 'Wearing_Earrings', 'Wearing_Lipstick'. Total: 25
 
+    elif self.all_attr==4:
+      self.selected_attrs = ['Eyeglasses', 'Bangs', 'Black_Hair', 'Blond_Hair', 
+        'Brown_Hair', 'Gray_Hair', 'Male', 'Pale_Skin', 'Smiling', 'Young'] 
+
+      #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie', 'Sideburns',
+      # '5_o_Clock_Shadow', 'Attractive', Bags_Under_Eyes', 'Bald', 'Blurry', 'Double_Chin', 'Goatee'
+      # 'High_Cheekbones', 'Receding_Hairline', 'Wearing_Earrings', 'Wearing_Lipstick'. Total: 25      
+
     elif self.all_attr==0:
       self.selected_attrs = ['Eyeglasses', 'Male', 'Pale_Skin', 'Smiling', 'Young'] 
     self.filenames = []
@@ -102,19 +104,13 @@ class CelebA(Dataset):
     lines = self.lines[2:]
     # if self.shuffling: random.shuffle(lines) 
     for i, line in enumerate(lines):
-
       splits = line.split()
+      if self.splits[splits[0]] not in self.mode_allowed: continue
       img_size = '_'+str(self.image_size) if self.image_size==128 else '' 
-      if os.path.isdir('/home/afromero/ssd2/CelebA'):
-        if 'faces' in self.metadata_path:
-          filename = os.path.abspath('/home/afromero/ssd2/CelebA/Faces/{}'.format(splits[0]))
-        else:
-          filename = os.path.abspath('/home/afromero/ssd2/CelebA/data{}/{}'.format(img_size, splits[0]))
+      if 'faces' in self.metadata_path:
+        filename = os.path.abspath('data/CelebA/Faces/{}'.format(splits[0]))
       else:
-        if 'faces' in self.metadata_path:
-          filename = os.path.abspath('data/CelebA/Faces/{}'.format(splits[0]))
-        else:
-          filename = os.path.abspath('data/CelebA/data{}/{}'.format(img_size, splits[0]))
+        filename = os.path.abspath('data/CelebA/data_align/{}'.format(splits[0]))
       if not os.path.isfile(filename): continue
       values = splits[1:]
 

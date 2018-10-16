@@ -32,7 +32,8 @@ class EmotionNet(Dataset):
     self.lines = open(file_txt, 'r').readlines()
 
     if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
-    random.seed(1234)
+    random.seed(1)
+    # random.seed(1234)
     self.preprocess()
     self.num_data = len(self.filenames)
     if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))

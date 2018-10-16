@@ -75,6 +75,11 @@ class BAM(Dataset):
       splits = line.split()
       filename = os.path.abspath('data/BAM/data2m/{}'.format(splits[0]))
       if not os.path.isfile(filename): continue#ipdb.set_trace()
+      # try:
+      #   success = Image.open(filename).convert('RGB')
+      # except IOError:
+      #   os.remove(filename)
+      #   continue
       values = splits[1:]
 
       label = []
@@ -143,29 +148,29 @@ if __name__ == '__main__':
   ru = lambda i: i.encode('ascii', 'ignore')
   all_attr = pd.read_sql("select * from automatic_labels", sqlite3.connect(sql_file), index_col="mid")
   all_attr = sorted([ru(attr) for attr in all_attr.keys()])
-  with open(root+'list_attr_bam.txt', 'w')  as text:
+  with open(root+'_list_attr_bam.txt', 'w')  as text:
     text.writelines('{}\t# Initially. There must be some broken link that were not included in this file\n'.format(len(df)))
     text.writelines('{}\n'.format('\t'.join(all_attr)))
     _range = range(len(df))
-    # random.shuffle(_range)
+    random.shuffle(_range)
 
     for i in tqdm(_range, total=len(df), desc='Extracting images from BAM'):
       img_file = '{}.jpg'.format(image_root+str(i).zfill(len(str(len(df)))))
       if not os.path.isfile(img_file):
-        continue
-        # success = create_img(df['src'][i], img_file)
-        # if not success: continue
+        # continue
+        success = create_img(df['src'][i], img_file)
+        if not success: continue
 
       txt_file = img_file.replace('jpg','txt')
       if not os.path.isfile(txt_file):
-        continue
-        # labels = get_labels(txt_file, all_attr, df, i)
-        # string = '{}\n'.format('\t'.join(map(str, labels)))
-        # with open(txt_file, 'w')  as f: f.writelines(string)
-      else:
-        labels = open(txt_file).readline().strip().split()
-        if len(labels)!=20: continue
-        string = '{}\t{}\n'.format(os.path.basename(img_file), '\t'.join(labels))
-        text.writelines(string)
+        # continue
+        labels = get_labels(all_attr, df, i)
+        string = '{}\n'.format('\t'.join(map(str, labels)))
+        with open(txt_file, 'w') as f: f.writelines(string)
+      # else:
+      #   labels = open(txt_file).readline().strip().split()
+      #   if len(labels)!=20: continue
+      #   string = '{}\t{}\n'.format(os.path.basename(img_file), '\t'.join(labels))
+      #   text.writelines(string)
 
 
