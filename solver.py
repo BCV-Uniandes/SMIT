@@ -6,7 +6,7 @@ from torchvision.utils import save_image
 import config as cfg
 from tqdm import tqdm
 from termcolor import colored
-from misc.utils import create_dir, denorm, get_aus, get_loss_value, make_gif, PRINT, send_mail, target_debug_list, TimeNow, TimeNow_str, to_cuda, to_data, to_var
+from misc.utils import create_dir, denorm, get_aus, get_loss_value, make_gif, PRINT, send_mail, slerp, target_debug_list, TimeNow, TimeNow_str, to_cpu, to_cuda, to_data, to_var
 from misc.losses import _compute_kl, _compute_loss_smooth, _compute_vgg_loss, _GAN_LOSS, _get_gradient_penalty
 import torch.utils.data.distributed
 from misc.utils import _horovod
@@ -20,6 +20,8 @@ class Solver(object):
     # Data loader
     self.data_loader = data_loader
     self.config = config
+
+    # self.get_aus()
     # ipdb.set_trace()
     # Build tensorboard if use
     self.build_model()
@@ -29,8 +31,9 @@ class Solver(object):
     # Start with trained model
     if self.config.pretrained_model:
       self.load_pretrained_model()
-    elif self.config.LOAD_SMIT:
+    elif self.config.dataset_smit:
       self.load_pretrained_smit()
+
 
   #=======================================================================================#
   #=======================================================================================#
@@ -164,19 +167,23 @@ class Solver(object):
   def load_pretrained_smit(self):
     from misc.utils import replace_weights
     if hvd.rank() != 0: return
-    smit_G = sorted(glob.glob('snapshot/GAN/CelebA/models/faces/128/fold_0/RaGAN/L1_LOSS/lambda_l1_10.0/Stochastic/style_1.0_dim_4/AdaIn2/InterStyleConcatLabels/FC/Split_Optim/rec_style/*.pth'))[-1]
+    if self.config.dataset_fake==self.config.dataset_smit:
+      if 'ALL_ATTR_' in self.config.model_save_path:
+        smit_model = self.config.model_save_path.replace('ALL_ATTR_{}/'.format(self.config.c_dim), '')  
+      elif 'ALL_ATTR' in self.config.model_save_path:
+        smit_model = self.config.model_save_path.replace('ALL_ATTR/', '')  
+      else:
+        ipdb.set_trace()
+    else:
+      smit_model = self.config.model_save_path.replace(self.config.dataset_fake, self.config.dataset_smit)
+    smit_model = smit_model.replace('/Finetuning_'+self.config.dataset_smit, '')
+    ipdb.set_trace()
+    smit_G = sorted(glob.glob(os.path.join(smit_model, '*G.pth')))[-1]
     smit_D = smit_G.replace('G.pth', 'D.pth')
-    d_weights = torch.load(smit_D)
-    replace_weights(d_weights, self.D.state_dict(), ['conv2.weight'])
-    self.D.load_state_dict(d_weights)#, map_location=lambda storage, loc: storage))
+    self.G.load_state_dict(smit_G)#, map_location=lambda storage, loc: storage))    
+    self.D.load_state_dict(torch.load(smit_D))#, map_location=lambda storage, loc: storage))
 
-    #Only loading G weights, not Style and not AdaIn.
-    g_weights = {key:param for key,param in torch.load(smit_G).items() if 'style' not in key and 'adain' not in key}
-    style_key = [key for key in self.G.state_dict().keys() if 'style' in key or 'adain' in key]
-    replace_weights(g_weights, self.G.state_dict(), style_key)
-    self.G.load_state_dict(g_weights)#, map_location=lambda storage, loc: storage))
-
-    self.PRINT('loaded trained smit model from: {}..!'.format(smit_G))    
+    self.PRINT('!!! Loaded trained SMIT model from: {}..!'.format(smit_G))    
 
   #=======================================================================================#
   #=======================================================================================#
@@ -245,6 +252,38 @@ class Solver(object):
 
   #=======================================================================================#
   #=======================================================================================#
+  def PRINT_LOG(self, batch_size):
+    Log = "---> batch size: {}, fold: {}, img: {}, GPU: {}, !{}, [{}]\n-> GAN_options:".format(\
+        batch_size, self.config.fold, self.config.image_size, \
+        self.config.GPU, self.config.mode_data, self.config.PLACE) 
+    for item in sorted(self.config.GAN_options):
+      Log += ' [*{}]'.format(item.upper())
+    if self.config.ALL_ATTR!=0: Log += ' [*ALL_ATTR={}]'.format(self.config.ALL_ATTR)
+    if self.config.MultiDis: Log += ' [*MultiDisc={}]'.format(self.config.MultiDis)
+    Log += ' [*{}]'.format(self.config.dataset_fake)
+    self.PRINT(Log)    
+    return Log
+
+  #=======================================================================================#
+  #=======================================================================================#
+  def debug_vars(self):
+    opt = torch.no_grad() if int(torch.__version__.split('.')[1])>3 else open('_null.txt', 'w')
+    with opt:
+      fixed_x = []
+      fixed_label = []
+      for i, (images, labels, files) in enumerate(self.data_loader):
+        # if self.config.dataset_fake=='Image2Edges': images = images[:,:,:,:256]
+        fixed_x.append(images)
+        fixed_label.append(labels)
+        if i == max(1,int(16/self.config.batch_size)):
+          break
+      fixed_x = torch.cat(fixed_x, dim=0)
+      fixed_label = torch.cat(fixed_label, dim=0)
+      if 'Stochastic' in self.config.GAN_options: fixed_style = self.G.random_style(fixed_x)
+      else: fixed_style = None    
+    return fixed_x, fixed_label, fixed_style
+  #=======================================================================================#
+  #=======================================================================================#
   def PRINT(self, str):  
     if self.config.HOROVOD and hvd.rank() != 0: return
     if self.config.mode=='train': PRINT(self.config.log, str)
@@ -303,7 +342,7 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
   def _GAN_LOSS(self, real_x, fake_x, label, is_fake=False):
-    cross_entropy = self.config.dataset_fake in ['painters_14', 'Animals', 'Image2Weather', 'Image2Season']
+    cross_entropy = self.config.dataset_fake in ['painters_14', 'Animals', 'Image2Weather', 'Image2Season', 'Image2Edges', 'Yosemite']
     cross_entropy = cross_entropy or (self.config.dataset_fake=='RafD' and self.config.RafD_FRONTAL)
     if cross_entropy:
       label = torch.max(label, dim=1)[1]
@@ -376,39 +415,33 @@ class Solver(object):
   #=======================================================================================#
   def train(self):
 
-    # Fixed inputs and target domain labels for debugging
     GAN_options = self.config.GAN_options
-    opt = torch.no_grad() if int(torch.__version__.split('.')[1])>3 else open('_null.txt', 'w')
-    with opt:
-      fixed_x = []
-      fixed_label = []
-      for i, (images, labels, files) in enumerate(self.data_loader):
-        fixed_x.append(images)
-        fixed_label.append(labels)
-        if i == max(1,int(16/self.config.batch_size)):
-          break
-      fixed_x = torch.cat(fixed_x, dim=0)
-      fixed_label = torch.cat(fixed_label, dim=0)
-      if 'Stochastic' in GAN_options: style_fixed = self.G.random_style(fixed_x)
-      else: style_fixed = None
+
     # lr cache for decaying
     g_lr = self.config.g_lr
     d_lr = self.config.d_lr
 
     # Start with trained model if exists
     if self.config.pretrained_model:
-      start = int(self.config.pretrained_model.split('_')[0])
-      for i in range(start):
-        if (i+1) %self.config.num_epochs_decay==0:
-          g_lr = (g_lr / 5.)
-          d_lr = (d_lr / 5.)
+      start = int(self.config.pretrained_model.split('_')[0])+1
+      for e in range(start):
+        if e >= self.config.num_epochs_decay:
+          g_lr -= (self.config.g_lr / float(self.config.num_epochs - self.config.num_epochs_decay))
+          d_lr -= (self.config.d_lr / float(self.config.num_epochs - self.config.num_epochs_decay))
           self.update_lr(g_lr, d_lr)
-          self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))     
+          self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))             
     else:
       start = 0
 
     # The number of iterations per epoch
     last_model_step = len(self.data_loader)
+
+    # Fixed inputs, target domain labels, and style for debugging
+    fixed_x, fixed_label, fixed_style = self.debug_vars()
+    if start==0:
+      name = os.path.join(self.config.sample_path, 
+        '{}_{}_fake.jpg'.format(str(0).zfill(3), str(0).zfill(len(str(last_model_step)))))
+      self.save_fake_output(fixed_x, name, label=fixed_label, fixed_style=fixed_style, training=True)
 
     self.PRINT("Current time: "+TimeNow())
 
@@ -420,19 +453,10 @@ class Solver(object):
     batch_size = self.config.batch_size//2  if 'RaGAN' in GAN_options else self.config.batch_size
 
     # Log info
-    Log = "---> batch size: {}, fold: {}, img: {}, GPU: {}, !{}, [{}]\n-> GAN_options:".format(\
-        batch_size, self.config.fold, self.config.image_size, \
-        self.config.GPU, self.config.mode_data, self.config.PLACE) 
-    for item in sorted(GAN_options):
-      Log += ' [*{}]'.format(item.upper())
-    Log += ' [*{}]'.format(self.config.dataset_fake)
-    if self.config.ALL_ATTR!=0: Log += ' [*ALL_ATTR={}]'.format(self.config.ALL_ATTR)
-    if self.config.MultiDis: Log += ' [*MultiDisc={}]'.format(self.config.MultiDis)
-    self.PRINT(Log)
+    Log = self.PRINT_LOG(batch_size)
     start_time = time.time()
 
     criterion_l1 = torch.nn.L1Loss()
-    style_flag = True
 
     if self.config.HOROVOD:
       disable_tqdm = False#not hvd.rank() == 0
@@ -441,7 +465,9 @@ class Solver(object):
 
     # Start training
     for e in range(start, self.config.num_epochs):
-      E = str(e+1).zfill(3)
+      # disable_tqdm =  e%self.config.save_epoch==0
+      E = str(e).zfill(3)
+
       self.D.train()
       self.G.train()
       self.LOSS = {}
@@ -450,15 +476,7 @@ class Solver(object):
       progress_bar = tqdm(enumerate(self.data_loader), unit_scale=True, 
           total=len(self.data_loader), desc=desc_bar, ncols=5, disable=disable_tqdm)
       for i, (real_x, real_c, files) in progress_bar: 
-
         self.loss = {}
-
-        #=======================================================================================#
-        #====================================== DATA2VAR =======================================#
-        #=======================================================================================#
-        # Convert tensor to variable
-        real_x = to_var(real_x)
-        real_c = to_var(real_c)       
 
         #RaGAN uses different data for Dis and Gen 
         if 'RaGAN' in GAN_options:
@@ -468,6 +486,16 @@ class Solver(object):
 
         real_x0, real_x1 = split(real_x)
         real_c0, real_c1 = split(real_c)          
+
+        #=======================================================================================#
+        #====================================== DATA2VAR =======================================# 
+        #=======================================================================================#
+        # Convert tensor to variable
+        real_x0 = to_var(real_x0)
+        real_c0 = to_var(real_c0)    
+
+        real_x1 = to_var(real_x1)
+        real_c1 = to_var(real_c1)            
 
         rand_idx1 = self.get_randperm(real_c1)
         fake_c1 = real_c1[rand_idx1]
@@ -483,7 +511,10 @@ class Solver(object):
           ############################## Stochastic Part ##################################
           if 'Stochastic' in GAN_options:
             style_fake1 = to_var(self.G.random_style(real_x1))
-            style_rec1 = to_var(self.G.random_style(real_x1))
+            if 'ORG_REC' in GAN_options:
+              style_rec1 = self.G.get_style(real_x1)
+            else:
+              style_rec1 = to_var(self.G.random_style(real_x1))
             # style_rec1 = self.G.get_style(real_x1)
             if 'style_labels' in GAN_options:
               style_rec1 = style_rec1*real_c1.unsqueeze(-1)
@@ -493,13 +524,6 @@ class Solver(object):
 
           fake_x1 = self.G(real_x1, fake_c1, stochastic = style_fake1, CONTENT='content_loss' in GAN_options)
 
-          ## GAN LOSS
-          # if self.config.dataset_fake=='RafD':
-          #   g_loss_src, g_loss_cls, g_loss_cls_pose, style_disc = self._GAN_LOSS(fake_x1[0], real_x1, fake_c1, is_fake=True)
-          #   g_loss_cls_pose = self.config.lambda_cls_pose * g_loss_cls_pose  
-          #   self.loss['Gcls_p'] = get_loss_value(g_loss_cls_pose)          
-          #   self.update_loss('Gcls_p', self.loss['Gcls_p'])      
-          # else:
           g_loss_src, g_loss_cls, style_disc = self._GAN_LOSS(fake_x1[0], real_x1, fake_c1, is_fake=True)          
 
           g_loss_cls = g_loss_cls*self.config.lambda_cls
@@ -598,9 +622,6 @@ class Solver(object):
             s_loss_style = (self.config.lambda_style) * self._criterion_style(_style_fake1, style_fake1)
             self.loss['Gsty'] = get_loss_value(s_loss_style)
             self.update_loss('Gsty', self.loss['Gsty'])
-            # if self.loss['Gsty']>0.75 and e>6 and style_flag:
-            #   send_mail(body='Gsty still in {}'.format(self.loss['Gsty']))
-            #   style_flag = False
             g_loss += s_loss_style
 
             if 'rec_style' in GAN_options:
@@ -637,9 +658,7 @@ class Solver(object):
             self.s_optimizer.step()
           self.g_optimizer.step()          
 
-        #=======================================================================================#
-        #========================================MISCELANEOUS===================================#
-        #=======================================================================================#
+        #===================================DEBUG====================================#
         # PRINT log info
         if (i+1) % self.config.log_step == 0 or (i+1)==last_model_step or i+e==0:
           progress_bar.set_postfix(**self.loss)
@@ -647,22 +666,26 @@ class Solver(object):
           if self.config.use_tensorboard:
             for tag, value in self.loss.items():
               self.logger.scalar_summary(tag, value, e * last_model_step + i + 1)
-
         # Save current fake
-        if (i+1) % self.config.sample_step == 0 or (i+1)==last_model_step or i+e==0:
+        if ((i+1) % self.config.sample_step == 0 or (i+1)==last_model_step or i+e==0) and self.config.image_size<=128:
           name = os.path.join(self.config.sample_path, 'current_fake.jpg')
-          self.save_fake_output(fixed_x, name, label=fixed_label, training=True, style_fixed=style_fixed)
+          self.save_fake_output(fixed_x, name, label=fixed_label, training=True, fixed_style=fixed_style)
 
-      self.data_loader.dataset.shuffle(e) #Shuffling dataset after each epoch
+      #=======================================================================================#
+      #========================================MISCELANEOUS===================================#
+      #=======================================================================================#
 
-      # Translate fixed images for debugging, and save
+      self.data_loader.dataset.shuffle(e) #Shuffling dataset each epoch
+
       if e%self.config.save_epoch==0:
+        # Save Translation
         name = os.path.join(self.config.sample_path, '{}_{}_fake.jpg'.format(E, i+1))
-        self.save_fake_output(fixed_x, name, label=fixed_label, training=True, style_fixed=style_fixed)
+        self.save_fake_output(fixed_x, name, label=fixed_label, training=True, fixed_style=fixed_style)
 
+        # Save Weights
         self.save(E, i+1)
                    
-        #Stats per epoch
+        # Debug INFO
         elapsed = time.time() - start_time
         elapsed = str(datetime.timedelta(seconds=elapsed))
         log = '--> %s | Elapsed (%d/%d) : %s | %s\nTrain'%(TimeNow(), e, self.config.num_epochs, elapsed, Log)
@@ -670,18 +693,18 @@ class Solver(object):
           log += ", {}: {:.4f}".format(tag, np.array(value).mean())   
         self.PRINT(log)
 
-
       # Decay learning rate     
-      if (e+1) % self.config.num_epochs_decay ==0:
-        g_lr = (g_lr / 5)
-        d_lr = (d_lr / 5)
+      # if (e+1) % self.config.num_epochs_decay ==0:
+      if e >= self.config.num_epochs_decay:
+        g_lr -= (self.config.g_lr / float(self.config.num_epochs - self.config.num_epochs_decay))
+        d_lr -= (self.config.d_lr / float(self.config.num_epochs - self.config.num_epochs_decay))
         self.update_lr(g_lr, d_lr)
         self.PRINT ('Decay learning rate to g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
   #=======================================================================================#
   #=======================================================================================#
 
-  def save_fake_output(self, real_x, save_path, label=None, gif=False, output=False, training=False, Style=0, style_fixed=None, TIME=False):
+  def save_fake_output(self, real_x, save_path, label=None, gif=False, output=False, training=False, Style=0, fixed_style=None, TIME=False):
     self.G.eval()  
     self.D.eval()
     Attention = 'Attention' in self.config.GAN_options or 'Attention2' in self.config.GAN_options or 'Attention3' in self.config.GAN_options
@@ -708,20 +731,26 @@ class Solver(object):
         else:
           out_label = to_var(label, volatile=True)
 
+      if Stochastic:
+        if fixed_style is None:
+          style_all = self.G.random_style(50)
+          style=to_var(style_all[:real_x.size(0)].clone(), volatile=True)
+        else:
+          style=to_var(fixed_style[:real_x.size(0)].clone(), volatile=True)
+        
+      else:
+        style = None
+
       # Batch of images
       if Style==0:
         for k, target_c in enumerate(target_c_list):
           # target_c = torch.clamp(target_c+out_label,max=1)
+          if k==0: continue
           if self.config.dataset_fake in ['CelebA', 'EmotionNet', 'BP4D', 'DEMO']:
             target_c = (out_label-target_c)**2 #Swap labels
-          if Stochastic: 
-            if style_fixed is None:
-              style = to_var(self.G.random_style(real_x), volatile=True)
-            else:
-              style = to_var(style_fixed, volatile=True)
-
-          else:
-            style = None
+            if self.config.dataset_fake == 'CelebA' and self.config.c_dim==10 and k>=3 and k<=6:
+              target_c[:,2:5]=0
+              target_c[:,k-1]=1
           start_time = time.time()
           fake_x = self.G(real_x, target_c, stochastic=style)
           elapsed = time.time() - start_time
@@ -739,7 +768,8 @@ class Solver(object):
         if training:
           _save_path = save_path
         else:
-          _save_path = os.path.join(save_path.replace('.jpg', ''), '{}_{}.jpg'.format(Style, str(idx).zfill(3)))
+          _name = '' if fixed_style is not None else '_Random'
+          _save_path = os.path.join(save_path.replace('.jpg', ''), '{}_{}{}.jpg'.format(Style, str(idx).zfill(3), _name))
           create_dir(_save_path)
         real_x0 = real_x0.repeat(n_rep,1,1,1)#.unsqueeze(0)
         _real_x0 = real_x0.clone()
@@ -748,48 +778,59 @@ class Solver(object):
 
         fake_image_list = [real_x0]
         fake_attn_list  = []       
+
         if Attention: 
           fake_attn_list = [to_var(denorm(real_x0.data), volatile=True)]             
         for n_label, _target_c in enumerate(target_c_list):
+          if n_label==0: continue
           _target_c  = _target_c[0].repeat(n_rep,1)
           # target_c = torch.clamp(_target_c+_out_label, max=1)
           if self.config.dataset_fake in ['CelebA', 'EmotionNet', 'BP4D', 'DEMO']:
             target_c = (_out_label-_target_c)**2 #Swap labels
+            if self.config.dataset_fake == 'CelebA' and self.config.c_dim==10 and n_label>=3 and n_label<=6:
+              target_c[:,2:5]=0
+              target_c[:,n_label-1]=1     
+              # ipdb.set_trace()       
           else: target_c = _target_c
           
           if Stochastic:
-            style=to_var(self.G.random_style(real_x0), volatile=True)
+            if fixed_style is None:
+              style_all = self.G.random_style(50)
+              style0 = to_var(style_all[:n_rep].clone(), volatile=True)  
+            else:
+              style0 = to_var(fixed_style[:n_rep].clone(), volatile=True)  
+            
+            style_rec0 = to_var(self.G.random_style(style0), volatile=True)
+            _style = style.clone()
+            _style0 = style0.clone()
 
-            # Translate and translate back
-            if Style==1:
-              _style=to_var(self.G.random_style(real_x0), volatile=True)
-              real_x0 = self.G(_real_x0, target_c, stochastic=_style)[0]
-              # ipdb.set_trace()
-              if self.config.dataset_fake in ['CelebA', 'EmotionNet', 'BP4D', 'DEMO']:
-                target_c = (target_c-_target_c)**2
+            #Style interpolation | Translate
+            if Style==1: 
+              z0 = to_data(style0[0], cpu=True).numpy(); z1 = to_data(style0[1], cpu=True).numpy()
+              z_interp = style0.clone()
+              z_interp[:] = torch.FloatTensor(np.array([slerp(sz, z0, z1) for sz in np.linspace(0,1,style0.size(0))]))
+              _style0 = z_interp
 
             #Style constant | progressive swap label
             elif Style==2: 
               for j, i in enumerate(range(real_x0.size(0))): 
-                style[i] = style[0].clone()
+                _style0[i] = style0[0].clone()
                 if n_label>0:
                   target_c[i][n_label-1].data.fill_((target_c[i][n_label-1]*label_space[j] + (1-target_c[i][n_label-1])*(1-label_space[j])).data[0])
                 else:
                   target_c[i] = target_c[i]*label_space[j] + (1-target_c[i])*(1-label_space[j])
 
-            #Style constant | progressive swap label
-            elif Style==3: 
-              for j, i in enumerate(range(real_x0.size(0))): 
-                style[i] = style[1].clone()
-                if n_label>0:
-                  target_c[i][n_label-1].data.fill_((target_c[i][n_label-1]*label_space[j] + (1-target_c[i][n_label-1])*(1-label_space[j])).data[0])
-                else:
-                  target_c[i] = target_c[i]*label_space[j] + (1-target_c[i])*(1-label_space[j])
+            # Translate and translate back
+            elif Style==3:
+              real_x0 = self.G(_real_x0, target_c, stochastic=style_rec0)[0]
+              # ipdb.set_trace()
+              if self.config.dataset_fake in ['CelebA', 'EmotionNet', 'BP4D', 'DEMO']:
+                target_c = (target_c-_target_c)**2
 
             #Style 0 | progressive swap label
             elif Style==4: 
               for j, i in enumerate(range(real_x0.size(0))): 
-                style[i] = style[0]*0
+                _style0[i] = style0[0]*0
                 if n_label>0:
                   target_c[i][n_label-1].data.fill_((target_c[i][n_label-1]*label_space[j] + (1-target_c[i][n_label-1])*(1-label_space[j])).data[0])
                 else:
@@ -798,7 +839,7 @@ class Solver(object):
             #Style constant | progressive label
             elif Style==5:
               for j, i in enumerate(range(real_x0.size(0))): 
-                style[i] = style[2].clone()
+                _style0[i] = style0[2].clone()
                 target_c[i] = _target_c[i]*0.2*j   
 
             #Style random | One label at a time
@@ -816,16 +857,17 @@ class Solver(object):
               _real_x0 = real_x[:n_rep]
               # ipdb.set_trace()
               if 'STYLE_DISC' in self.config.GAN_options:
-                style = self.D(_real_x0)[-1][0]
+                _style0 = self.D(_real_x0)[-1][0]
               else:
-                style = self.G.get_style(_real_x0)
+                _style0 = self.G.get_style(_real_x0)
           else:
-            style = None
+            _style0 = None
             for j, i in enumerate(range(real_x0.size(0))): 
               target_c[i] = target_c[i]*label_space[j]            
 
           # ipdb.set_trace()
-          fake_x = self.G(real_x0, target_c, stochastic=style)
+          # if n_label==2 and idx==0: ipdb.set_trace()
+          fake_x = self.G(real_x0, target_c, stochastic=_style0)
           fake_image_list.append(fake_x[0])
           if Attention: fake_attn_list.append(fake_x[1].repeat(1,3,1,1))
         if 'Stochastic' in self.config.GAN_options: Output.extend(self._SAVE_IMAGE(_save_path, fake_image_list, attn_list=fake_attn_list, im_size=self.config.image_size, gif=gif, mode='style_'+chr(65+idx)))
@@ -857,6 +899,7 @@ class Solver(object):
       name = os.path.abspath(save_path.format(string))
       if 'Stochastic' in self.config.GAN_options:
         _debug = self.config.style_label_debug+1
+        style_all = self.G.random_style(50)
       else:
         _debug = 1
       if self.config.dataset_fake==self.config.dataset_real:
@@ -866,7 +909,8 @@ class Solver(object):
       self.PRINT('Translated test images and saved into "{}"..!'.format(name))
       # output = self.save_fake_output(real_x, name, label=label, output=True, Style=7, TIME=not i)
       for k in range(_debug):
-        output = self.save_fake_output(real_x, name, label=label, output=True, Style=k, TIME=not i)
+        output = self.save_fake_output(real_x, name, label=label, output=True, Style=k, fixed_style=style_all, TIME=not i)
+        output = self.save_fake_output(real_x, name, label=label, output=True, Style=k) #random style
         # send_mail(body='Images from '+self.config.sample_path, attach=output)
       if i==self.config.iter_test-1: break   
 
