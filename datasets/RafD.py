@@ -58,16 +58,16 @@ class RafD(Dataset):
             label.append(1)
           else:
             label.append(0)
-      # ipdb.set_trace()
+
       for value in self.selected_attrs[index:]:
         if _class == value:
           label.append(1)
         else:
           label.append(0)
-      # ipdb.set_trace()
+
       self.filenames.append(line)
       self.labels.append(label)
-
+      # ipdb.set_trace()
     self.num_data = len(self.filenames)
 
   def get_data(self):

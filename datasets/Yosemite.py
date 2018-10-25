@@ -12,7 +12,7 @@ hvd = _horovod()
 ######################################################################################################
 ###                                              CelebA                                            ###
 ######################################################################################################
-class Image2Edges(Dataset):
+class Yosemite(Dataset):
   def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, all_attr=-1, **kwargs):
     self.transform = transform
     self.image_size = image_size

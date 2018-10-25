@@ -43,7 +43,6 @@ def get_loader(metadata_path, image_size, batch_size, \
   transform+=[transforms.ToTensor(), transforms.Normalize(mean, std)]  
 
   transform = transforms.Compose(transform)
-  
   dataset_module = getattr(importlib.import_module('datasets.{}'.format(dataset)), dataset)
   dataset = dataset_module(image_size, metadata_path, transform, mode, shuffling=shuffling or mode=='train', **kwargs)
   if not HOROVOD:
