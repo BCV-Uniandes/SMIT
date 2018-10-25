@@ -1,8 +1,8 @@
 def config_GENERATOR(config, update_folder):
   if config.dataset_fake=='CelebA':
     if config.ALL_ATTR==1:
-      update_folder(config, 'ALL_ATTR')
       config.c_dim = 40
+      update_folder(config, 'ALL_ATTR_'+str(config.c_dim)) 
     elif config.ALL_ATTR==2:
       config.c_dim=37
       update_folder(config, 'ALL_ATTR_'+str(config.c_dim))      
@@ -16,6 +16,7 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'ALL_ATTR_'+str(config.c_dim))         
     elif config.ALL_ATTR==0:
       config.c_dim=5
+      update_folder(config, 'ALL_ATTR_'+str(config.c_dim))   
 
   if config.dataset_fake=='AwA2':
     config.save_epoch = 6
@@ -86,7 +87,15 @@ def config_GENERATOR(config, update_folder):
       config.c_dim = 2 
       update_folder(config, 'ALL_ATTR_Shoes') 
     elif config.ALL_ATTR==0:
-      config.c_dim=4         
+      config.c_dim=4        
+
+  if config.dataset_fake=='Yosemite':
+    config.save_epoch = 90
+    if config.ALL_ATTR==1:
+      update_folder(config, 'ALL_ATTR')
+      config.c_dim = 2
+    else:
+      config.c_dim = 2        
 
   if config.dataset_fake=='WIDER':
     config.save_epoch = 30
@@ -162,7 +171,11 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'content_loss_'+str(config.lambda_content))             
 
   if 'Attention' in config.GAN_options: 
-    update_folder(config, 'Attention')  
+    if config.lambda_mask!=1.0:
+      update_folder(config, 'Attention_'+str(config.lambda_mask))
+    else:
+      update_folder(config, 'Attention')    
+
   elif 'Attention2' in config.GAN_options: 
     update_folder(config, 'Attention2')      
   elif 'Attention3' in config.GAN_options: 
@@ -234,10 +247,10 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'rec_style_gan')   
     config.GAN_options.append('rec_style')
 
-  elif 'rec_style' in config.GAN_options: 
-    update_folder(config, 'rec_style')   
-  elif 'ORG_REC' in config.GAN_options: 
+  if 'ORG_REC' in config.GAN_options: 
     update_folder(config, 'ORG_REC')       
+  if 'rec_style' in config.GAN_options: 
+    update_folder(config, 'rec_style')   
 
   if config.LOAD_SMIT: 
     update_folder(config, 'LOAD_SMIT') 
@@ -265,6 +278,9 @@ def config_GENERATOR(config, update_folder):
 
   if 'LayerNorm' in config.GAN_options: 
     update_folder(config, 'LayerNorm') 
+
+  elif 'InstanceNorm' in config.GAN_options: 
+    update_folder(config, 'InstanceNorm')     
 
   if config.dataset_smit: 
     update_folder(config, 'Finetuning_'+config.dataset_smit)         

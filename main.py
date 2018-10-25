@@ -4,7 +4,8 @@ import argparse
 from data_loader import get_loader
 import glob
 import math
-import os, glob, ipdb, imageio, numpy as np, config as cfg, warnings, sys, torch, torch.utils.data.distributed
+import os, glob, ipdb, imageio, numpy as np, config as cfg, warnings, sys
+import torch, torch.utils.data.distributed
 
 from misc.utils import _horovod
 hvd = _horovod()
@@ -34,7 +35,7 @@ def main(config):
 
   data_loader = get_loader(config.metadata_path, config.image_size, config.batch_size, config.dataset, 
                  config.mode, num_workers=config.num_workers, all_attr = config.ALL_ATTR, c_dim=config.c_dim,
-                 HOROVOD=config.HOROVOD, continuous='CLS_L2' in config.GAN_options, 
+                 HOROVOD=config.HOROVOD, continuous='CLS_L2' in config.GAN_options, many_faces=config.many_faces,
                  RafD_FRONTAL=config.RafD_FRONTAL, RafD_EMOTIONS=config.RafD_EMOTIONS)   
   solver = Solver(config, data_loader)
 
@@ -62,9 +63,9 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
 
   # Model hyper-parameters
-  parser.add_argument('--dataset_fake',       type=str, default='EmotionNet', choices=__DATASETS__)
+  parser.add_argument('--dataset_fake',       type=str, default='CelebA', choices=__DATASETS__)
   parser.add_argument('--dataset_real',       type=str, default='', choices=['']+__DATASETS__)  
-  parser.add_argument('--dataset_smit',       type=str, default='', choices=['']+__DATASETS__)  
+  parser.add_argument('--dataset_smit',       type=str, default='')  
   parser.add_argument('--fold',               type=str, default='0')
   parser.add_argument('--mode_data',          type=str, default='normal', choices=['normal', 'faces'])   
   parser.add_argument('--mode_train',         type=str, default='GAN', choices=['GAN', 'CLS'])   
@@ -76,7 +77,8 @@ if __name__ == '__main__':
   parser.add_argument('--num_workers',        type=int, default=4)
   parser.add_argument('--num_epochs',         type=int, default=100)
   parser.add_argument('--num_epochs_decay',   type=int, default=30)
-  parser.add_argument('--save_epoch',         type=int, default=1) #Save models and weights every how many epochs
+  parser.add_argument('--save_epoch',         type=int, default=1) #Save samples how many epochs
+  parser.add_argument('--model_epoch',        type=int, default=5) #Save models and weights every how many epochs
   parser.add_argument('--beta1',              type=float, default=0.5)
   parser.add_argument('--beta2',              type=float, default=0.999)
   parser.add_argument('--pretrained_model',   type=str, default=None)  
@@ -97,8 +99,7 @@ if __name__ == '__main__':
   parser.add_argument('--d_repeat_num',       type=int, default=6)
   parser.add_argument('--g_lr',               type=float, default=0.0001)
   parser.add_argument('--d_lr',               type=float, default=0.0001)
-  parser.add_argument('--lambda_cls',         type=float, default=4.0)  #It was in 1
-  parser.add_argument('--lambda_cls_pose',    type=float, default=4.0)  
+  parser.add_argument('--lambda_cls',         type=float, default=1.0)  
   parser.add_argument('--lambda_rec',         type=float, default=10.0)
   parser.add_argument('--lambda_gp',          type=float, default=10.0)
   parser.add_argument('--lambda_perceptual',  type=float, default=10.0)
@@ -106,12 +107,12 @@ if __name__ == '__main__':
   parser.add_argument('--lambda_l1',          type=float, default=1.0)
   parser.add_argument('--lambda_l1perceptual',type=float, default=0.1)  
   parser.add_argument('--lambda_style',       type=float, default=1.0)
-  parser.add_argument('--lambda_mask',        type=float, default=1.0)
+  parser.add_argument('--lambda_mask',        type=float, default=0.1)
   parser.add_argument('--lambda_mask_smooth', type=float, default=0.00001)
   parser.add_argument('--lambda_kl',          type=float, default=0.001)
   parser.add_argument('--lambda_content',     type=float, default=1.0)
 
-  parser.add_argument('--style_dim',          type=int, default=16, choices=[1, 4, 8, 16, 20])
+  parser.add_argument('--style_dim',          type=int, default=16, choices=[0, 1, 4, 8, 16, 20])
 
   parser.add_argument('--d_train_repeat',     type=int, default=5)
 
@@ -133,6 +134,7 @@ if __name__ == '__main__':
   parser.add_argument('--RafD_EMOTIONS',      action='store_true', default=False)
   parser.add_argument('--HOROVOD',            action='store_true', default=False)
   parser.add_argument('--DISC_DILATE',        action='store_true', default=False)
+  parser.add_argument('--many_faces',         action='store_true', default=False)
   parser.add_argument('--GPU',                type=str, default='0')
   parser.add_argument('--Interpolation',      type=str, default='Linear', choices=['Linear', 'Spherical'])
 
@@ -144,10 +146,10 @@ if __name__ == '__main__':
 
   # Debug options
   parser.add_argument('--iter_test',          type=int, default=1)
-  parser.add_argument('--iter_style',         type=int, default=20)
-  parser.add_argument('--style_debug',        type=int, default=9)
-  parser.add_argument('--style_train_debug',  type=int, default=7)
-  parser.add_argument('--style_label_debug',  type=int, default=6, choices=[0,1,2,3,4,5,6,7])
+  parser.add_argument('--iter_style',         type=int, default=40)
+  parser.add_argument('--style_debug',        type=int, default=5)
+  parser.add_argument('--style_train_debug',  type=int, default=9)
+  parser.add_argument('--style_label_debug',  type=int, default=2, choices=[0,1,2,3,4,5,6,7])
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
@@ -185,22 +187,15 @@ if __name__ == '__main__':
     if not os.path.exists(config.sample_path): os.makedirs(config.sample_path)
 
     org_log = os.path.abspath(os.path.join(config.sample_path, 'log.txt'))
+    config.loss_plot = os.path.abspath(os.path.join(config.sample_path, 'loss.txt'))
     os.system('touch '+org_log)
-    if config.PLACE=='BCV':
-      file_log = 'logs/gpu{}_{}.txt'.format(config.GPU, config.mode_train)
-    else:
-      file_log = 'logs/gpu{}_{}_{}.txt'.format(config.GPU, config.PLACE, config.mode_train)
-
-    if hvd.rank() == 0:
-      if os.path.isfile(file_log): os.remove(file_log)
-      os.symlink(org_log, file_log)
 
   else:
-    file_log = 'logs/dummy.txt'
+    org_log = 'logs/dummy.txt'
 
   if config.mode=='train':
-    of = 'a' if os.path.isfile(file_log) else 'wb'
-    with open(file_log, of) as config.log:
+    of = 'a' if os.path.isfile(org_log) else 'wb'
+    with open(org_log, of) as config.log:
       if hvd.rank() == 0: print >> config.log, ' '.join(sys.argv)
       config.log.flush()
       if hvd.rank() == 0: PRINT(config) 

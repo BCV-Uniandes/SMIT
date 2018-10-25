@@ -26,18 +26,33 @@ class Discriminator(nn.Module):
     self.STYLE_DISC = 'STYLE_DISC' in config.GAN_options
     color_dim = config.color_dim if not self.GRAY_DISC else 1
     SN = 'SpectralNorm' in config.GAN_options
+    self.DILATE = config.DISC_DILATE
     SpectralNorm = get_SN(SN)
     layers.append(SpectralNorm(nn.Conv2d(color_dim, conv_dim, kernel_size=4, stride=2, padding=1)))
     layers.append(nn.LeakyReLU(0.01, inplace=True))
 
     curr_dim = conv_dim
+    _curr_dim = curr_dim
     for i in range(1, repeat_num):
-      layers.append(SpectralNorm(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1)))
+      layers.append(SpectralNorm(nn.Conv2d(_curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1)))
       layers.append(nn.LeakyReLU(0.01, inplace=True))
-      curr_dim = curr_dim * 2     
+      curr_dim = curr_dim * 2 
+      if self.DILATE and i==repeat_num-5:
+        self.main0 = nn.Sequential(*layers)
+        layers = []
+        layers_dilate = []
+        for k in range(3):
+          layers_dilate.append(nn.Conv2d(curr_dim, curr_dim, dilation=2**(k+1), kernel_size=3, padding=2**(k+1), bias=False))
+          layers_dilate.append(nn.InstanceNorm2d(curr_dim, affine=True))
+          layers_dilate.append(nn.LeakyReLU(0.01, inplace=True))    
+        _curr_dim = curr_dim * 2 
+      else: _curr_dim = curr_dim
+
 
     k_size = int(image_size / np.power(2, repeat_num))
     layers_debug = layers
+    if self.DILATE: 
+      self.dilate = nn.Sequential(*layers_dilate)
     self.main = nn.Sequential(*layers)
     self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
     self.conv2 = nn.Conv2d(curr_dim, self.c_dim, kernel_size=k_size, bias=False)
@@ -56,7 +71,13 @@ class Discriminator(nn.Module):
     if debug:
       feed = to_var(torch.ones(1,color_dim,image_size,image_size), volatile=True, no_cuda=True)
       print('-- Discriminator:')
-      features = print_debug(feed, layers_debug)
+      if self.DILATE:
+        # ipdb.set_trace()
+        features0 = print_debug(feed, self.main0)
+        features_dilated = print_debug(features0, self.dilate)
+        # ipdb.set_trace()
+        feed = torch.cat([features0, features_dilated], dim=1)
+      features = print_debug(feed, self.main)
       _ = print_debug(features, [self.conv1])
       _ = print_debug(features, [self.conv2])
       if self.STYLE_DISC: 
@@ -66,16 +87,20 @@ class Discriminator(nn.Module):
 
   def forward(self, x):
     if self.GRAY_DISC: x = x.mean(dim=1).unsqueeze(1)
-    h = to_parallel(self.main, x, self.config.GPU)
-    out_real = to_parallel(self.conv1, h, self.config.GPU).squeeze()
+    if self.DILATE:
+      features0 = to_parallel(self.main0, x, self.config.GPU)
+      features_dilated = to_parallel(self.dilate, features0, self.config.GPU)
+      x = torch.cat([features0, features_dilated], dim=1)  
+    features = to_parallel(self.main, x, self.config.GPU)
+    out_real = to_parallel(self.conv1, features, self.config.GPU).squeeze()
     out_real = out_real.view(x.size(0), out_real.size(-2), out_real.size(-1))
 
-    out_aux = to_parallel(self.conv2, h, self.config.GPU).squeeze()
+    out_aux = to_parallel(self.conv2, features, self.config.GPU).squeeze()
     out_aux = out_aux.view(x.size(0), out_aux.size(-1))
 
     if self.STYLE_DISC: 
       h = h.view(h.size(0), -1)
-      out_style = to_parallel(self.style, h, self.config.GPU).squeeze()
+      out_style = to_parallel(self.style, features, self.config.GPU).squeeze()
       out_style = out_style.view(x.size(0), out_style.size(-1))      
     else:
       out_style = None
@@ -99,23 +124,37 @@ class MultiDiscriminator(nn.Module):
     self.config = config
     SN = 'SpectralNorm' in config.GAN_options
     self.SpectralNorm = get_SN(SN)
-    
+    self.DILATE = config.DISC_DILATE
     self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
-    self.cnns_main = nn.ModuleList() 
+    self.cnns_main = nn.ModuleList()
+    if self.DILATE:
+      self.cnns_main0 = nn.ModuleList()
+      self.cnns_dilate = nn.ModuleList()
     self.cnns_src = nn.ModuleList()
     self.cnns_aux = nn.ModuleList()
     for idx in range(config.MultiDis):
-      self.cnns_main.append(self._make_net(idx)[0])
+      if self.DILATE:
+        self.cnns_main0.append(self._make_net(idx)[0][0])
+        self.cnns_dilate.append(self._make_net(idx)[0][1])  
+      self.cnns_main.append(self._make_net(idx)[0][-1])
       self.cnns_src.append(self._make_net(idx)[1])
       self.cnns_aux.append(self._make_net(idx)[2])
 
     if debug:
       feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True, no_cuda=True)
-      for idx, (model, src, aux) in enumerate(zip(self.cnns_main, self.cnns_src, self.cnns_aux)):
+      if self.DILATE: modelList = zip(self.cnns_main0, self.cnns_dilate, self.cnns_main, self.cnns_src, self.cnns_aux)
+      else: modelList = zip(self.cnns_main, self.cnns_src, self.cnns_aux)
+      for outs in modelList:
         print('-- MultiDiscriminator ({}):'.format(idx))
-        features = print_debug(feed, model)
-        _ = print_debug(features, src)
-        _ = print_debug(features, aux).view(feed.size(0), -1)     
+        if self.DILATE:
+          features0 = print_debug(feed, outs[0])
+          features_dilated = print_debug(features0, outs[1])
+          features = torch.cat([features0, features_dilated], dim=1)     
+          features = print_debug(features, outs[-3])   
+        else:
+          features = print_debug(feed, outs[-3])
+        _ = print_debug(features, outs[-2])
+        _ = print_debug(features, outs[-1]).view(feed.size(0), -1)     
         feed = self.downsample(feed)      
         
   def _make_net(self, idx=0):
@@ -124,13 +163,26 @@ class MultiDiscriminator(nn.Module):
     layers.append(self.SpectralNorm(nn.Conv2d(self.color_dim, self.conv_dim, kernel_size=4, stride=2, padding=1)))
     layers.append(nn.LeakyReLU(0.01, inplace=True))
     curr_dim = self.conv_dim
+    _curr_dim = curr_dim
     for i in range(1, self.repeat_num-1):
-      layers.append(self.SpectralNorm(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1)))
+      layers.append(self.SpectralNorm(nn.Conv2d(_curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1)))
       layers.append(nn.LeakyReLU(0.01, inplace=True))
       curr_dim *= 2     
       conv_size /= 2
-
-    main = nn.Sequential(*layers)
+      if self.DILATE and i==self.repeat_num-5:
+        main0 = [nn.Sequential(*layers)]
+        layers = []
+        layers_dilate = []
+        for k in range(3):
+          layers_dilate.append(nn.Conv2d(curr_dim, curr_dim, dilation=2**(k+1), kernel_size=3, padding=2**(k+1), bias=False))
+          layers_dilate.append(nn.InstanceNorm2d(curr_dim, affine=True))
+          layers_dilate.append(nn.LeakyReLU(0.01, inplace=True))    
+        _curr_dim = curr_dim * 2 
+      else: _curr_dim = curr_dim      
+    main = [nn.Sequential(*layers)]
+    if self.DILATE: 
+      dilate = [nn.Sequential(*layers_dilate)]
+      main = main0+dilate+main
     src = nn.Sequential(*[nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)])
     aux = nn.Sequential(*[nn.Conv2d(curr_dim, self.c_dim, kernel_size=conv_size//2, bias=False)])
 
@@ -138,10 +190,18 @@ class MultiDiscriminator(nn.Module):
 
   def forward(self, x):
     outs_src = []; outs_aux = []
-    for model, src, aux in zip(self.cnns_main, self.cnns_src, self.cnns_aux):
-      main = to_parallel(model, x, self.config.GPU)
-      _src = to_parallel(src, main, self.config.GPU)
-      _aux = to_parallel(aux, main, self.config.GPU).view(main.size(0), -1)
+    if self.DILATE: modelList = zip(self.cnns_main0, self.cnns_dilate, self.cnns_main, self.cnns_src, self.cnns_aux)
+    else: modelList = zip(self.cnns_main, self.cnns_src, self.cnns_aux)
+    for outs in modelList:
+      if self.DILATE:
+        features0 = to_parallel(outs[0], x, self.config.GPU)
+        features_dilated = to_parallel(outs[1], features0, self.config.GPU)
+        features = torch.cat([features0, features_dilated], dim=1)     
+        main = to_parallel(outs[-3], features, self.config.GPU)     
+      else:
+        main = to_parallel(outs[-3], x, self.config.GPU)
+      _src = to_parallel(outs[-2], main, self.config.GPU)
+      _aux = to_parallel(outs[-1], main, self.config.GPU).view(main.size(0), -1)
       outs_src.append(_src)
       outs_aux.append(_aux)
 
@@ -164,6 +224,8 @@ class Generator(nn.Module):
     self.c_dim = config.c_dim    
     self.color_dim = config.color_dim
     self.style_dim = config.style_dim
+    self.LayerNorm = 'LayerNorm' in config.GAN_options    
+    self.InstanceNorm = 'InstanceNorm' in config.GAN_options    
     self.content_loss = 'content_loss' in config.GAN_options
     self.Attention = 'Attention' in config.GAN_options
     self.Attention2 = 'Attention2' in config.GAN_options #Attention before residual
@@ -177,8 +239,10 @@ class Generator(nn.Module):
     self.DRITZ = 'DRITZ' in config.GAN_options and not self.InterStyleLabels
     self.AdaIn = 'AdaIn' in config.GAN_options and not 'DRIT' in config.GAN_options
     self.AdaIn2 = 'AdaIn2' in config.GAN_options and not 'DRIT' in config.GAN_options 
-    if self.AdaIn2: AdaIn_res=True
-    else: AdaIn_res = False
+    self.AdaIn3 = 'AdaIn3' in config.GAN_options
+    if self.AdaIn2: AdaIn_res=1
+    elif self.AdaIn3: AdaIn_res=2
+    else: AdaIn_res = 0
     if self.InterLabels or self.InterStyleConcatLabels: in_dim=self.color_dim
     elif self.DRITZ: in_dim=self.color_dim+self.c_dim+self.style_dim
     else: in_dim=self.color_dim+self.c_dim
@@ -202,56 +266,23 @@ class Generator(nn.Module):
 
     # Bottleneck
     for i in range(repeat_num):
+      # ipdb.set_trace()
       layers.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim, AdaIn=AdaIn_res))
-      if i==int(repeat_num/2)-1 and not self.AdaIn2 and self.AdaIn: AdaIn_res=True
+      # if i==int(repeat_num/2)-1 and not self.AdaIn2 and self.AdaIn: AdaIn_res=1
       if i==int(repeat_num/2)-1 and not self.AdaIn2 and (self.InterLabels or self.DRIT or self.InterStyleLabels):
-        if self.AdaIn: AdaIn_res=True
+        # if self.AdaIn: AdaIn_res=1
         self.content = nn.Sequential(*layers)
         layers = []
         curr_dim = curr_dim+self.c_dim    
         if self.InterLabels and self.DRIT and not self.InterStyleLabels: curr_dim += self.c_dim   
 
-    if self.Attention2: 
-      layers1 = []
-      for i in range(repeat_num):
-        # layers1.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim))
-        layers1.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim, AdaIn=self.InterStyleConcatLabels))
-        # if i==int(repeat_num/2)-1 and not self.AdaIn2 and self.AdaIn: AdaIn_res=True        
-
-    elif self.Attention3:
-      layers1 = []
-      layers0 = []
-
     # Up-Sampling
     for i in range(conv_repeat):
-      if self.Attention2:
-
-        layers.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
-        layers.append(LayerNorm(curr_dim//2))
-        layers.append(nn.ReLU(inplace=True))
-
-        layers1.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
-        if self.InterStyleConcatLabels: layers1.append(LayerNorm(curr_dim//2))
-        else: layers1.append(nn.InstanceNorm2d(curr_dim//2, affine=True))
-        layers1.append(nn.ReLU(inplace=True))  
-
-      elif self.Attention3:
-        layers0.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
-        # if self.AttentionStyle: layers0.append(nn.InstanceNorm2d(curr_dim//2, affine=True)) #GPU 1 experiment
-        layers0.append(LayerNorm(curr_dim//2))
-        layers0.append(nn.ReLU(inplace=True))
-
-        layers1.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
-        # layers1.append(nn.InstanceNorm2d(curr_dim//2, affine=True)) #GPU 1 experiment
-        layers1.append(LayerNorm(curr_dim//2))
-        # if not self.AttentionStyle: layers1.append(nn.InstanceNorm2d(curr_dim//2, affine=True)) #GPU 1 experiment
-        layers1.append(nn.ReLU(inplace=True))                
-      else:
-        layers.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
-        if not self.AdaIn: layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True)) #undesirable to generate images in vastly different styles
-        # else: layers.append(LayerNorm(curr_dim//2))
-        # layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True)) #undesirable to generate images in vastly different styles
-        layers.append(nn.ReLU(inplace=True))        
+      layers.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
+      if not self.AdaIn or self.InstanceNorm: layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True)) #undesirable to generate images in vastly different styles
+      elif self.LayerNorm: layers.append(LayerNorm(curr_dim//2))
+      # layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True)) #undesirable to generate images in vastly different styles
+      layers.append(nn.ReLU(inplace=True))        
 
       curr_dim = curr_dim // 2
 
@@ -440,48 +471,13 @@ class Generator(nn.Module):
 
 #===============================================================================================#
 #===============================================================================================#
-class DRITZGEN(nn.Module):
-  def __init__(self, config, debug=False):
-    super(DRITZGEN, self).__init__()
-
-    self.image_size = config.image_size    
-    self.color_dim = config.color_dim
-    self.style_dim = config.style_dim
-    self.c_dim = config.c_dim
-
-    self.enc_style = StyleEncoder(config, debug=True)
-    self.generator = Generator(config, debug=False)
-    self.debug()
-
-  def debug(self):
-    # feed = to_var(torch.ones(1, self.color_dim+self.c_dim+self.style_dim, self.image_size, self.image_size), volatile=True, no_cuda=True)
-    # style = to_var(self.random_style(feed), volatile=True)
-    self.generator.debug()
-    
-  def forward(self, x, c, stochastic=None, CONTENT=False, JUST_CONTENT=False):
-    if stochastic is None:
-      style = self.get_style(x)
-    else:
-      style = stochastic
-    return self.generator(x, c, stochastic=style, CONTENT=CONTENT, JUST_CONTENT=JUST_CONTENT)
-
-  def random_style(self,x):
-    z = torch.randn(x.size(0), self.style_dim)
-    return z
-
-  def get_style(self, x, volatile=False):
-    style = self.enc_style(x)
-    style = style.view(style.size(0), -1)
-    return style
-
-#===============================================================================================#
-#===============================================================================================#
 class AdaInGEN(nn.Module):
   def __init__(self, config, STYLE_ENC = None, debug=False):
     super(AdaInGEN, self).__init__()
 
     conv_dim = config.g_conv_dim
     mlp_dim = config.mlp_dim
+    self.config = config
     self.color_dim = config.color_dim
     self.image_size = config.image_size
     self.style_dim = config.style_dim    
@@ -490,10 +486,12 @@ class AdaInGEN(nn.Module):
     self.STYLE_DISC = 'STYLE_DISC' in config.GAN_options
     self.InterStyleConcatLabels= 'InterStyleConcatLabels' in config.GAN_options
     self.InterStyleMulLabels= 'InterStyleMulLabels' in config.GAN_options
-    if STYLE_ENC is None: self.enc_style = StyleEncoder(config, debug=debug)
+    if STYLE_ENC is None and self.config.lambda_style!=0: self.enc_style = StyleEncoder(config, debug=debug)
     else: self.enc_style = STYLE_ENC
     self.generator = Generator(config, debug=False)
-    if config.style_dim!=8 and config.style_dim!=20 and config.style_dim!=16:
+    if self.style_dim==0: 
+      in_dim=self.c_dim
+    elif config.style_dim!=8 and config.style_dim!=20 and config.style_dim!=16:
       in_dim = self.style_dim*self.c_dim
       if self.InterStyleConcatLabels: in_dim *=2
     elif self.InterStyleConcatLabels:
@@ -519,21 +517,28 @@ class AdaInGEN(nn.Module):
     self.apply_style(x, style, label=c)
     return self.generator(x, c, stochastic=style, CONTENT=CONTENT, JUST_CONTENT=JUST_CONTENT)
 
-  def random_style(self, x):
+  def random_style(self, x, interp=False):
+    if type(x)==int: number = x
+    else: number = x.size(0)
     if self.style_dim!=8 and self.style_dim!=20 and self.style_dim!=16: 
-      z = torch.randn(x.size(0), self.s_dim, self.style_dim)
+      z = torch.randn(number, self.s_dim, self.style_dim)
+
     else:
-      z = torch.randn(x.size(0), self.style_dim)
+      z = torch.randn(number, self.style_dim)
+
     return z
 
   def get_style(self, x, volatile=False):
+    if self.config.lambda_style==0: return None
     style = self.enc_style(x)
     if self.STYLE_DISC: style = style[-1]
     style = style.view(style.size(0), self.s_dim, -1) if self.s_dim!=1 else style.view(style.size(0), -1)
     return style
 
   def apply_style(self, image, style, label=None):
-    if self.InterStyleConcatLabels:
+    if self.style_dim==0:
+      style = label.view(label.size(0),-1)
+    elif self.InterStyleConcatLabels:
       # ipdb.set_trace()
       if self.style_dim==8 or self.style_dim==20 or self.style_dim==16: 
         label = label.view(label.size(0),-1)

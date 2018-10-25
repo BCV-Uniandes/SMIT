@@ -40,10 +40,21 @@ class AdaptiveInstanceNorm2d(nn.Module):
 #===============================================================================================#
 class ResidualBlock(nn.Module):
   """Residual Block."""
-  def __init__(self, dim_in, dim_out, AdaIn=False):
+  def __init__(self, dim_in, dim_out, AdaIn=0):
     super(ResidualBlock, self).__init__()
-    norm1 = AdaptiveInstanceNorm2d(dim_out) if AdaIn else nn.InstanceNorm2d(dim_out, affine=True)
-    norm2 = AdaptiveInstanceNorm2d(dim_out) if AdaIn else nn.InstanceNorm2d(dim_out, affine=True)
+    if AdaIn==1:
+      norm1 = AdaptiveInstanceNorm2d(dim_out)
+      norm2 = AdaptiveInstanceNorm2d(dim_out)
+
+    elif AdaIn==2:
+      norm1 = nn.InstanceNorm2d(dim_out, affine=True)
+      # norm2 = nn.InstanceNorm2d(dim_out, affine=True)
+      norm2 = AdaptiveInstanceNorm2d(dim_out)
+
+    else:
+      norm1 = nn.InstanceNorm2d(dim_out, affine=True)
+      norm2 = nn.InstanceNorm2d(dim_out, affine=True)
+
     self.main = nn.Sequential(
       nn.Conv2d(dim_in, dim_out, kernel_size=3, stride=1, padding=1, bias=False),
       norm1,
