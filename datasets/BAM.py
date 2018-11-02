@@ -56,6 +56,12 @@ class BAM(Dataset):
 
     if self.all_attr==1:
       self.selected_attrs = attrs # Total: 20
+    elif self.all_attr==2:
+      self.selected_attrs = [
+                        'emotion_gloomy', 'emotion_happy', 'emotion_peaceful', 'emotion_scary', 
+                        'media_3d_graphics', 'media_comic', 'media_graphite', 'media_oilpaint', 
+                        'media_pen_ink', 'media_vectorart', 'media_watercolor'      
+                        ] #ALL OF THEM      
     else:
       self.selected_attrs = [
                         'content_bicycle', 'content_bird', 'content_building', 'content_cars', 
@@ -99,8 +105,14 @@ class BAM(Dataset):
     return self.filenames, self.labels
 
   def __getitem__(self, index):
-    image = Image.open(self.filenames[index]).convert('RGB')
-    label = self.labels[index]
+    try:
+      image = Image.open(self.filenames[index]).convert('RGB')
+      label = self.labels[index]
+    except:
+      os.remove(self.filenames[index])
+      image = Image.open(self.filenames[0]).convert('RGB')
+      label = self.labels[0]
+    
     return self.transform(image), torch.FloatTensor(label), self.filenames[index]
 
   def __len__(self):

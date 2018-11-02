@@ -45,8 +45,6 @@ class Image2Season(Dataset):
     self.histogram()
     if self.all_attr==1:
       self.selected_attrs = [key for key,value in sorted(self.attr2idx.iteritems(), key=lambda (k,v): (v,k))]#self.attr2idx.keys()
-      # ['beksinski', 'boudin', 'burliuk', 'cezanne', 'chagall', 'corot', 
-      #  'earle', 'gauguin', 'hassam', 'levitan', 'monet', 'picasso', 'ukiyoe', 'vangogh']
     else:
       self.selected_attrs = ['autumn', 'spring', 'summer', 'winter']
     self.filenames = []

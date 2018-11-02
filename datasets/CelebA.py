@@ -23,8 +23,10 @@ class CelebA(Dataset):
     self.lines = open(os.path.abspath('data/CelebA/list_attr_celeba.txt')).readlines()
     self.splits = {line.split(',')[0]:int(line.strip().split(',')[1]) for line in  open(os.path.abspath('data/CelebA/train_val_test.txt')).readlines()[1:]}
     self.mode_allowed = [0,1] if mode=='train' else [2]
+    self.all_attr2idx = {}
+    self.all_idx2attr = {}
     self.attr2idx = {}
-    self.idx2attr = {}
+    self.idx2attr = {}    
 
     if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
@@ -53,9 +55,10 @@ class CelebA(Dataset):
     attrs = self.lines[1].split()
     self.histogram()
     # ipdb.set_trace()
+
     for i, attr in enumerate(attrs):
-      self.attr2idx[attr] = i
-      self.idx2attr[i] = attr
+      self.all_attr2idx[attr] = i
+      self.all_idx2attr[i] = attr
 
     if self.all_attr==1:
       self.selected_attrs = [
@@ -98,6 +101,9 @@ class CelebA(Dataset):
 
     elif self.all_attr==0:
       self.selected_attrs = ['Eyeglasses', 'Male', 'Pale_Skin', 'Smiling', 'Young'] 
+    for i, attr in enumerate(self.selected_attrs):
+      self.attr2idx[attr] = i
+      self.idx2attr[i] = attr
     self.filenames = []
     self.labels = []
 
@@ -124,7 +130,7 @@ class CelebA(Dataset):
       #       label.append(0)
 
       for attr in self.selected_attrs:
-        selected_value = values[self.attr2idx[attr]]
+        selected_value = values[self.all_attr2idx[attr]]
         if selected_value == '1':
           label.append(1)
         else:

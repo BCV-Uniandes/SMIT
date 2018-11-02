@@ -23,7 +23,7 @@ class Yosemite(Dataset):
     mode = mode if mode=='train' else 'test'
     self.key_fn = lambda line: line.split('/')[-2].split('_')[1]
 
-    self.lines = sorted(glob.glob('data/{}/{}*/*.jpg'.format(self.name,mode)))
+    self.lines = sorted(glob.glob('data/{}/{}_*/*.jpg'.format(self.name,mode)))
     # ipdb.set_trace()
     self.attr2idx = {self.key_fn(line):idx for idx, line in enumerate(self.lines)}
     self.idx2attr = {idx:self.key_fn(line) for idx, line in enumerate(self.lines)}

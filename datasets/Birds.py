@@ -27,7 +27,6 @@ class Birds(Dataset):
     if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def preprocess(self):
-    self.pose = [0,45,90,135,180]
     self.selected_attrs = ['HasBackPattern_solid', 'HasCrownColor_black', 'HasWingColor_grey', 'HasLegColor_black', 'HasWingShape_rounded-wings']
     # self.selected_attrs = self.birds.selected_attrs #N most frequents
     # ipdb.set_trace()
