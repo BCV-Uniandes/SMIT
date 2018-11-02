@@ -24,6 +24,10 @@ class Solver(object):
     # self.get_aus()
     # ipdb.set_trace()
     # Build tensorboard if use
+
+    if self.config.LPIPS_REAL:
+      return
+
     self.build_model()
     if self.config.use_tensorboard:
       self.build_tensorboard()
@@ -33,7 +37,9 @@ class Solver(object):
       self.load_pretrained_model()
     elif self.config.dataset_smit:
       self.load_pretrained_smit()
-
+    else:
+      if self.config.LPIPS_REAL or self.config.LPIPS_UNIMODAL or self.config.LPIPS_MULTIMODAL or self.config.INCEPTION:
+        raise TypeError("No model trained.")
 
   #=======================================================================================#
   #=======================================================================================#
@@ -131,7 +137,7 @@ class Solver(object):
 
     if self.config.model_epoch!=1 and int(Epoch)%self.config.model_epoch==0:
       for _epoch in range(int(Epoch)-self.config.model_epoch+1, int(Epoch)):
-        name_1 = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(str(_epoch).zfill(3), iter, '{}'))
+        name_1 = os.path.join(self.config.model_save_path, '{}_{}_{}.pth'.format(str(_epoch).zfill(4), iter, '{}'))
         if os.path.isfile(name_1.format('G')): os.remove(name_1.format('G'))
         if os.path.isfile(name_1.format('G_optim')): os.remove(name_1.format('G_optim'))
         if os.path.isfile(name_1.format('D')): os.remove(name_1.format('D'))
@@ -145,19 +151,26 @@ class Solver(object):
     if hvd.rank() != 0: return
     self.PRINT('Resuming model (step: {})...'.format(self.config.pretrained_model))
     name = os.path.join(self.config.model_save_path, '{}_{}.pth'.format(self.config.pretrained_model, '{}'))
-    if self.config.mode=='train': self.PRINT('Model: {}'.format(name))
-    self.G.load_state_dict(torch.load(name.format('G'), map_location=lambda storage, loc: storage))
-    self.D.load_state_dict(torch.load(name.format('D'), map_location=lambda storage, loc: storage))
+    self.PRINT('Model: {}'.format(name))
+    # if self.config.mode=='train': self.PRINT('Model: {}'.format(name))
+    self.G.load_state_dict(torch.load(name.format('G')))#, map_location=lambda storage, loc: storage))
+    self.D.load_state_dict(torch.load(name.format('D')))#, map_location=lambda storage, loc: storage))
+    # self.g_optimizer.load_state_dict(torch.load(name.format('G_optim')))#, map_location=lambda storage, loc: storage))        
+    # self.optim_cuda(self.g_optimizer)
+    # self.d_optimizer.load_state_dict(torch.load(name.format('D_optim')))#, map_location=lambda storage, loc: storage))      
+    # self.optim_cuda(self.d_optimizer)    
+    # ipdb.set_trace()
     try:
-      self.g_optimizer.load_state_dict(torch.load(name.format('G_optim'), map_location=lambda storage, loc: storage))        
+      self.g_optimizer.load_state_dict(torch.load(name.format('G_optim')))#, map_location=lambda storage, loc: storage))        
       self.optim_cuda(self.g_optimizer)
-      self.d_optimizer.load_state_dict(torch.load(name.format('D_optim'), map_location=lambda storage, loc: storage))      
+      self.d_optimizer.load_state_dict(torch.load(name.format('D_optim')))#, map_location=lambda storage, loc: storage))      
       self.optim_cuda(self.d_optimizer)
-      if self.config.lambda_style!=0:
-        self.s_optimizer.load_state_dict(torch.load(name.format('S_optim'), map_location=lambda storage, loc: storage))      
+      if self.config.lambda_style!=0 and 'Stochastic' in self.config.GAN_options:
+        self.s_optimizer.load_state_dict(torch.load(name.format('S_optim')))#, map_location=lambda storage, loc: storage))      
         self.optim_cuda(self.s_optimizer)  
       print("Success!!")
-    except: pass
+    except: 
+      print("Loading Failed!!")
 
   #=======================================================================================#
   #=======================================================================================#    
@@ -260,6 +273,7 @@ class Solver(object):
   #=======================================================================================#
   #=======================================================================================#
   def PRINT_LOG(self, batch_size):
+    from termcolor import colored
     Log = "---> batch size: {}, fold: {}, img: {}, GPU: {}, !{}, [{}]\n-> GAN_options:".format(\
         batch_size, self.config.fold, self.config.image_size, \
         self.config.GPU, self.config.mode_data, self.config.PLACE) 
@@ -269,7 +283,8 @@ class Solver(object):
     if self.config.MultiDis: Log += ' [*MultiDisc={}]'.format(self.config.MultiDis)
     if self.config.lambda_style==0: Log += ' [*NO_StyleLoss]'
     if self.config.style_dim==0: Log += ' [*NO_StyleVector]'
-    Log += ' [*{}]'.format(self.config.dataset_fake)
+    dataset_string = colored(self.config.dataset_fake, 'red')
+    Log += ' [*{}]'.format(dataset_string)
     self.PRINT(Log)    
     return Log
 
@@ -373,6 +388,7 @@ class Solver(object):
   def _GAN_LOSS(self, real_x, fake_x, label, is_fake=False):
     cross_entropy = self.config.dataset_fake in ['painters_14', 'Animals', 'Image2Weather', 'Image2Season', 'Image2Edges', 'Yosemite']
     cross_entropy = cross_entropy or (self.config.dataset_fake=='RafD' and self.config.RafD_FRONTAL)
+    cross_entropy = cross_entropy or (self.config.dataset_fake=='RafD' and self.config.RafD_EMOTIONS)
     if cross_entropy:
       # ipdb.set_trace()
       label = torch.max(label, dim=1)[1]
@@ -454,11 +470,15 @@ class Solver(object):
     # lr cache for decaying
     g_lr = self.config.g_lr
     d_lr = self.config.d_lr
+    # ipdb.set_trace()
+    #self.g_optimizer.param_groups[0]['lr']
+    self.update_lr(g_lr, d_lr)
+    self.PRINT ('Training with learning rate g_lr: {}, d_lr: {}.'.format(self.g_optimizer.param_groups[0]['lr'], self.d_optimizer.param_groups[0]['lr']))  
 
     # Start with trained model if exists
     if self.config.pretrained_model:
       start = int(self.config.pretrained_model.split('_')[0])+1
-      _iter = (start-1)*int(self.config.pretrained_model.split('_')[1])
+      _iter = start*int(self.config.pretrained_model.split('_')[1])
       for e in range(start):
         if e!=0 and e%self.config.num_epochs_decay==0:
         # if e >= self.config.num_epochs_decay:
@@ -479,7 +499,7 @@ class Solver(object):
     fixed_x, fixed_label, fixed_style = self.debug_vars()
     if start==0:
       name = os.path.join(self.config.sample_path, 
-        '{}_{}_fake.jpg'.format(str(0).zfill(3), str(0).zfill(len(str(last_model_step)))))
+        '{}_{}_fake.jpg'.format(str(0).zfill(4), str(0).zfill(len(str(last_model_step)))))
       if 'Stochastic' in GAN_options: self.save_fake_output(fixed_x, name, label=fixed_label, training=True, fixed_style=fixed_style)
       self.save_fake_output(fixed_x, name, label=fixed_label, training=True)
 
@@ -507,16 +527,17 @@ class Solver(object):
     for e in range(start, self.config.num_epochs):
       # disable_tqdm =  e%self.config.save_epoch==0
 
-      E = str(e).zfill(3)
+      E = str(e).zfill(4)
 
       self.D.train()
       self.G.train()
       self.LOSS = {}
       if self.config.HOROVOD: self.data_loader.sampler.set_epoch(e)
-      desc_bar = '[Iter:%d] Epoch: %d/%d'%(_iter, e,self.config.num_epochs)
+      desc_bar = '[Iter: %d] Epoch: %d/%d'%(_iter, e,self.config.num_epochs)
       progress_bar = tqdm(enumerate(self.data_loader), unit_scale=True, 
           total=len(self.data_loader), desc=desc_bar, ncols=5, disable=disable_tqdm)
       for i, (real_x, real_c, files) in progress_bar: 
+        # ipdb.set_trace()
         self.loss = {}
         _iter+=1
         #RaGAN uses different data for Dis and Gen 
@@ -802,7 +823,34 @@ class Solver(object):
             target_c = (out_label-target_c)**2 #Swap labels
             if self.config.dataset_fake == 'CelebA' and self.config.c_dim==10 and k>=3 and k<=6:
               target_c[:,2:5]=0
-              target_c[:,k-1]=1
+              target_c[:,k-1]=1   
+            if self.config.dataset_fake == 'CelebA' and self.config.c_dim==40:
+              all_attr = self.data_loader.dataset.selected_attrs
+              idx2attr = self.data_loader.dataset.idx2attr
+              attr2idx = self.data_loader.dataset.attr2idx
+              color_hair = ['Bald', 'Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Gray_Hair']
+              style_hair = ['Bald', 'Straight_Hair', 'Wavy_Hair']
+              ammount_hair = ['Bald', 'Bangs']
+              if all_attr[k-1] in color_hair:
+                # ipdb.set_trace()
+                color_hair.remove(all_attr[k-1]) 
+                for attr in color_hair: 
+                  if attr in all_attr: target_c[:,attr2idx[attr]]=0
+                target_c[:,k-1]=1 
+              if all_attr[k-1] in style_hair:
+                style_hair.remove(all_attr[k-1])  
+                for attr in style_hair: 
+                  if attr in all_attr: target_c[:,attr2idx[attr]]=0         
+                target_c[:,k-1]=1 
+              if all_attr[k-1] in ammount_hair:
+                ammount_hair.remove(all_attr[k-1])  
+                for attr in ammount_hair: 
+                  if attr in all_attr: target_c[:,attr2idx[attr]]=0                        
+              # target_c[:,k-1]=1
+              # ipdb.set_trace()
+            # if self.config.dataset_fake == 'CelebA' and self.config.c_dim==10 and k>=3 and k<=6:
+            #   target_c[:,2:5]=0
+            #   target_c[:,k-1]=1
           start_time = time.time()
           fake_x = self.G(real_x, target_c, stochastic=style)
           elapsed = time.time() - start_time
@@ -826,7 +874,7 @@ class Solver(object):
           _save_path = save_path.replace('.jpg',_name+'.jpg')
         else:
           _name = '' if fixed_style is not None else '_Random'
-          _save_path = os.path.join(save_path.replace('.jpg', ''), '{}_{}{}.jpg'.format(Style, str(idx).zfill(3), _name))
+          _save_path = os.path.join(save_path.replace('.jpg', ''), '{}_{}{}.jpg'.format(Style, str(idx).zfill(4), _name))
           create_dir(_save_path)
         real_x0 = real_x0.repeat(n_rep,1,1,1)#.unsqueeze(0)
         _real_x0 = real_x0.clone()
@@ -837,7 +885,7 @@ class Solver(object):
         fake_attn_list  = []       
 
         if Attention: 
-          fake_attn_list = [to_var(denorm(real_x0.data), volatile=True)]             
+          fake_attn_list = [single_source(to_var(denorm(real_x0.data), volatile=True))] 
         for n_label, _target_c in enumerate(target_c_list):
           if n_label==0: continue
           _target_c  = _target_c[0].repeat(n_rep,1)
@@ -846,8 +894,30 @@ class Solver(object):
             target_c = (_out_label-_target_c)**2 #Swap labels
             if self.config.dataset_fake == 'CelebA' and self.config.c_dim==10 and n_label>=3 and n_label<=6:
               target_c[:,2:5]=0
-              target_c[:,n_label-1]=1     
-              # ipdb.set_trace()       
+              target_c[:,n_label-1]=1   
+            if self.config.dataset_fake == 'CelebA' and self.config.c_dim==40:
+              all_attr = self.data_loader.dataset.selected_attrs
+              idx2attr = self.data_loader.dataset.idx2attr
+              attr2idx = self.data_loader.dataset.attr2idx
+              color_hair = ['Bald', 'Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Gray_Hair']
+              style_hair = ['Bald', 'Straight_Hair', 'Wavy_Hair']
+              ammount_hair = ['Bald', 'Bangs']
+              if all_attr[n_label-1] in color_hair:
+                color_hair.remove(all_attr[n_label-1])  
+                for attr in color_hair: 
+                  if attr in all_attr: target_c[:,attr2idx[attr]]=0
+                target_c[:,n_label-1]=1 
+              if all_attr[n_label-1] in style_hair:
+                style_hair.remove(all_attr[n_label-1])  
+                for attr in style_hair: 
+                  if attr in all_attr: target_c[:,attr2idx[attr]]=0         
+                target_c[:,n_label-1]=1 
+              if all_attr[n_label-1] in ammount_hair:
+                ammount_hair.remove(all_attr[n_label-1])  
+                for attr in ammount_hair: 
+                  if attr in all_attr: target_c[:,attr2idx[attr]]=0                              
+              # ipdb.set_trace()    
+              # target_c[:,n_label-1]=1   
           else: target_c = _target_c
           
           if Stochastic:
@@ -947,9 +1017,9 @@ class Solver(object):
     create_dir(save_folder)
     if dataset=='': 
       dataset = self.config.dataset_fake
-      data_loader_val = self.data_loader
+      data_loader = self.data_loader
     else:
-      data_loader_val = get_loader(self.config.metadata_path, self.config.image_size, self.config.batch_size, shuffling=True, dataset=dataset, mode='test') 
+      data_loader = get_loader(self.config.metadata_path, self.config.image_size, self.config.batch_size, shuffling=True, dataset=dataset, mode='test') 
 
     if 'Stochastic' in self.config.GAN_options:
       _debug = self.config.style_label_debug+1
@@ -958,7 +1028,7 @@ class Solver(object):
       style_all = None
       _debug = 1
 
-    for i, (real_x, org_c, files) in enumerate(data_loader_val):
+    for i, (real_x, org_c, files) in enumerate(data_loader):
       save_path = os.path.join(save_folder, '{}_{}_{}.jpg'.format(dataset, '{}', i+1))
       string = '{}'
       if self.config.NO_LABELCUM:
@@ -988,7 +1058,12 @@ class Solver(object):
     create_dir(save_folder)
     batch_size = self.config.batch_size if not 'Stochastic' in self.config.GAN_options else 1
     data_loader = get_loader(path, self.config.image_size, batch_size, shuffling = False, dataset='DEMO', mode='test', many_faces=self.config.many_faces)
-
+    label = self.config.DEMO_LABEL 
+    if self.config.DEMO_LABEL!='':
+      label = torch.FloatTensor(map(int, label.split(','))).view(1,-1)
+      # ipdb.set_trace()
+    else:
+      label = None
     if 'Stochastic' in self.config.GAN_options:
       _debug = self.config.style_label_debug+1
       style_all = self.G.random_style(50)
@@ -1003,10 +1078,10 @@ class Solver(object):
         save_path = os.path.join(save_folder, 'DEMO_{}_{}.jpg'.format(name, i+1))
         self.PRINT('Translated test images and saved into "{}"..!'.format(save_path))
         for k in range(_debug):
-          output = self.save_fake_output(real_x, save_path, gif=False, label=None, output=True, Style=k, fixed_style=style_all, TIME=not i)
+          output = self.save_fake_output(real_x, save_path, gif=False, label=label, output=True, Style=k, fixed_style=style_all, TIME=not i)
           if self.config.many_faces: Output.append(output); break
           if 'Stochastic' in self.config.GAN_options: 
-            output = self.save_fake_output(real_x, save_path, gif=False, label=None, output=True, Style=k) #random style
+            output = self.save_fake_output(real_x, save_path, gif=False, label=label, output=True, Style=k) #random style
           # send_mail(body='Images from '+self.config.sample_path, attach=output)
 
     if self.config.many_faces:
@@ -1020,7 +1095,7 @@ class Solver(object):
         # image = Image.open(data_loader.dataset.img_path).convert('RGB').crop(bbox)
         bbox = [max(bbox[0],0), max(bbox[1],0), min(bbox[2], org_img.shape[1]), min(bbox[3],org_img.shape[0])]
         resize = [bbox[3]-bbox[1], bbox[2]-bbox[0]]
-        img = (skimage.transform.resize(face, resize)*255).astype(np.uint8)
+        img = (skimage.transform.resize(face, resize, mode='reflect', anti_aliasing=True)*255).astype(np.uint8)
         try:org_img[bbox[1]:bbox[3], bbox[0]:bbox[2]] = img
         except: ipdb.set_trace()
       plt.subplot(2,1,1)
@@ -1030,3 +1105,275 @@ class Solver(object):
       plt.subplots_adjust(left=None, bottom=None, right=None, top=None,\
                           wspace=0.5, hspace=0.5)
       pyl.savefig('many_faces.pdf', dpi=100)
+
+  #=======================================================================================#
+  #=======================================================================================#
+
+  def LPIPS(self):
+    from misc.utils import compute_lpips   
+    data_loader = self.data_loader  
+    n_images = 100
+    pair_styles = 20      
+    model = None
+    DISTANCE = {0:[], 1:[]}
+    self.G.eval()
+    for i, (real_x, org_c, files) in tqdm(enumerate(data_loader), desc='Calculating LPISP', total=n_images):
+      for _real_x, _org_c in zip(real_x, org_c):
+        _real_x = _real_x.unsqueeze(0)
+        _org_c = _org_c.unsqueeze(0)
+        if len(DISTANCE[_org_c[0,0]])>=i: continue
+        _real_x = to_var(_real_x, volatile=True)
+        target_c = to_var(1-_org_c, volatile=True)
+        for _ in range(pair_styles):
+          style0 = to_var(self.G.random_style(_real_x.size(0)), volatile=True)
+          style1 = to_var(self.G.random_style(_real_x.size(0)), volatile=True)
+          # ipdb.set_trace()
+          fake_x0 = self.G(_real_x, target_c, stochastic=style0)
+          fake_x1 = self.G(_real_x, target_c, stochastic=style1)
+          distance, model = compute_lpips(fake_x0, fake_x1, model=model)
+          DISTANCE[org_c[0,0]].append(distance)
+        if i==len(DISTANCE[0,0])==len(DISTANCE[1]): break
+    print("LPISP a-b: {}".format(np.array(DISTANCE[0]).mean()))
+    print("LPISP b-a: {}".format(np.array(DISTANCE[1]).mean()))
+
+  #=======================================================================================#
+  #=======================================================================================#
+
+  def LPIPS_REAL(self):
+    from misc.utils import compute_lpips   
+    data_loader = self.data_loader    
+    model = None
+    file_name = 'scores/{}_Attr_{}_LPIPS.txt'.format(self.config.dataset_fake, self.config.ALL_ATTR)
+    if os.path.isfile(file_name):
+      print(file_name)
+      for line in open(file_name).readlines(): print(line.strip())
+      return
+
+    DISTANCE = {i:[] for i in range(len(data_loader.dataset.labels[0])+1)}#0:[], 1:[], 2:[]}
+    n_images = {i:0 for i in range(len(data_loader.dataset.labels[0]))}
+    for i, (real_x, org_c, files) in tqdm(enumerate(data_loader), desc='Calculating LPISP - {}'.format(file_name), total=len(data_loader)):
+      org_label = torch.max(org_c,1)[1][0]
+      for label in range(len(data_loader.dataset.labels[0])):
+        for j, (_real_x, _org_c, _files) in enumerate(data_loader):
+          if j<=i: continue
+          _org_label = torch.max(_org_c,1)[1][0]
+          for _label in range(len(data_loader.dataset.labels[0])):
+            if _org_label == _label: continue
+            distance, model = compute_lpips(real_x, _real_x, model=model)
+            DISTANCE[len(data_loader.dataset.labels[0])].append(distance[0])
+            if label==_label: 
+              DISTANCE[_label].append(distance[0])        
+    
+    file_ = open(file_name, 'w')    
+    DISTANCE = {k:np.array(v) for k,v in DISTANCE.items()}
+    for key, values in DISTANCE.items():
+      if key==len(data_loader.dataset.labels[0]): mode = 'All'
+      else: mode = chr(65+key)
+      PRINT(file_, "LPISP {}: {} +/- {}".format(mode, values.mean(), values.std()))
+    # ipdb.set_trace()
+    file_.close()
+
+  #=======================================================================================#
+  #=======================================================================================#
+
+  def LPIPS_UNIMODAL(self):
+    from misc.utils import compute_lpips   
+
+    torch.manual_seed(1)
+    torch.cuda.manual_seed(1)
+
+    data_loader = self.data_loader    
+    model = None
+    style_fixed = True
+    style_str = 'fixed' if style_fixed else 'random'
+    file_name = 'scores/{}_Attr_{}_LPIPS_UNIMODAL_{}.txt'.format(self.config.dataset_fake, self.config.ALL_ATTR, style_str)
+    if os.path.isfile(file_name):
+      print(file_name)
+      for line in open(file_name).readlines(): print(line.strip())
+      return
+
+    # ipdb.set_trace()
+    DISTANCE = {i:[] for i in range(len(data_loader.dataset.labels[0])+1)}#0:[], 1:[], 2:[]}
+    n_images = {i:0 for i in range(len(data_loader.dataset.labels[0]))}
+
+    style0 = to_var(self.G.random_style(1), volatile=True)
+    for i, (real_x, org_c, files) in tqdm(enumerate(data_loader), desc='Calculating LPISP - {}'.format(file_name), total=len(data_loader)):
+      org_label = torch.max(org_c,1)[1][0]
+      real_x = to_var(real_x, volatile=True)
+      for label in range(len(data_loader.dataset.labels[0])):
+        if org_label == label: continue
+        target_c = to_var(org_c*0, volatile=True); target_c[:,label]=1
+        if not style_fixed: style0 = to_var(self.G.random_style(real_x.size(0)), volatile=True)
+        real_x = self.G(real_x, to_var(target_c, volatile=True), stochastic=style0)[0]
+        n_images[label]+=1
+        for j, (_real_x, _org_c, _files) in enumerate(data_loader):
+          if j<=i: continue
+          _org_label = torch.max(_org_c,1)[1][0]
+          _real_x = to_var(_real_x, volatile=True)
+          for _label in range(len(data_loader.dataset.labels[0])):
+            if _org_label == _label: continue
+            _target_c = to_var(_org_c*0, volatile=True); _target_c[:,_label]=1          
+            if not style_fixed: style0 = to_var(self.G.random_style(_real_x.size(0)), volatile=True)
+            _real_x = self.G(_real_x, to_var(_target_c, volatile=True), stochastic=style0)[0]
+            ipdb.set_trace()
+            distance, model = compute_lpips(real_x.data, _real_x.data, model=model)
+            DISTANCE[len(data_loader.dataset.labels[0])].append(distance[0])
+            # if label==0: ipdb.set_trace()
+            if label==_label: 
+              # if label==0: ipdb.set_trace()
+              DISTANCE[_label].append(distance[0])
+
+    # ipdb.set_trace()
+    file_ = open(file_name, 'w')    
+    DISTANCE = {k:np.array(v) for k,v in DISTANCE.items()}
+    for key, values in DISTANCE.items():
+      if key==len(data_loader.dataset.labels[0]): mode = 'All'
+      else: mode = chr(65+key)
+      PRINT(file_, "LPISP {}: {} +/- {}".format(mode, values.mean(), values.std()))
+    # PRINT(file_, "LPISP b-a: {} +/- {}".format(DISTANCE[1].mean(), DISTANCE[1].std()))
+    # PRINT(file_, "LPISP All: {} +/- {}".format(DISTANCE[2].mean(), DISTANCE[2].std()))
+    file_.close()    
+    # ipdb.set_trace()
+
+  #=======================================================================================#
+  #=======================================================================================#
+
+  def LPIPS_MULTIMODAL(self):
+    from misc.utils import compute_lpips   
+
+    torch.manual_seed(1)
+    torch.cuda.manual_seed(1)
+
+    data_loader = self.data_loader    
+    model = None
+    n_images = 20
+    file_name = 'scores/{}_Attr_{}_LPIPS_MULTIMODAL.txt'.format(self.config.dataset_fake, self.config.ALL_ATTR)
+    if os.path.isfile(file_name):
+      print(file_name)
+      for line in open(file_name).readlines(): print(line.strip())
+      return    
+    # DISTANCE = {0:[], 1:[], 2:[]}
+    DISTANCE = {i:[] for i in range(len(data_loader.dataset.labels[0])+1)}#0:[], 1:[], 2:[]}
+    # n_images = {i:0 for i in range(len(data_loader.dataset.labels[0]))}
+    for i, (real_x, org_c, files) in tqdm(enumerate(data_loader), desc='Calculating LPISP - {}'.format(file_name), total=len(data_loader)):
+      org_label = torch.max(org_c,1)[1][0]
+      for label in range(len(data_loader.dataset.labels[0])):
+        if org_label == label: continue
+        target_c = org_c*0; target_c[:,label]=1      
+        # target_c = 1-org_c
+        # label = 1-target_c[0,0]
+        target_c = target_c.repeat(n_images,1)
+        real_x_var = to_var(real_x.repeat(n_images,1,1,1), volatile=True)
+        target_c = to_var(target_c, volatile=True)
+        style = to_var(self.G.random_style(n_images), volatile=True)
+        # ipdb.set_trace()
+        fake_x = self.G(real_x_var, target_c, stochastic=style)[0].data
+        fake_x = [f.unsqueeze(0) for f in fake_x]
+        # ipdb.set_trace()
+        _DISTANCE = []
+        for ii, fake0 in enumerate(fake_x):
+          for jj, fake1 in enumerate(fake_x):
+            if jj<=ii: continue
+            distance, model = compute_lpips(fake0, fake1, model=model)
+            _DISTANCE.append(distance[0])
+        # ipdb.set_trace()
+        DISTANCE[len(data_loader.dataset.labels[0])].append(np.array(_DISTANCE).mean())
+        DISTANCE[label].append(DISTANCE[len(data_loader.dataset.labels[0])][-1])
+
+
+    file_ = open(file_name, 'w')    
+    DISTANCE = {k:np.array(v) for k,v in DISTANCE.items()}
+    for key, values in DISTANCE.items():
+      if key==len(data_loader.dataset.labels[0]): mode = 'All'
+      else: mode = chr(65+key)
+      PRINT(file_, "LPISP {}: {} +/- {}".format(mode, values.mean(), values.std()))
+    # PRINT(file_, "LPISP b-a: {} +/- {}".format(DISTANCE[1].mean(), DISTANCE[1].std()))
+    # PRINT(file_, "LPISP All: {} +/- {}".format(DISTANCE[2].mean(), DISTANCE[2].std()))
+    file_.close()  
+
+    # ipdb.set_trace()
+    # file_ = open(file_name, 'w')    
+    # DISTANCE = {k:np.array(v) for k,v in DISTANCE.items()}
+    # PRINT(file_, "LPISP a-b: {} +/- {}".format(DISTANCE[0].mean(), DISTANCE[0].std()))
+    # PRINT(file_, "LPISP b-a: {} +/- {}".format(DISTANCE[1].mean(), DISTANCE[1].std()))
+    # PRINT(file_, "LPISP All: {} +/- {}".format(DISTANCE[2].mean(), DISTANCE[2].std()))
+    # file_.close()    
+    # ipdb.set_trace()
+
+  def INCEPTION(self):
+    from misc.utils import load_inception
+    from scipy.stats import entropy
+    n_styles = 20
+    net = load_inception()
+    to_cuda(net)
+    net.eval()
+    self.G.eval()
+    inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
+    if 'Stochastic' in self.config.GAN_options:
+      mode = 'SMIT'
+    elif 'Attention' in self.config.GAN_options:
+      mode = 'GANimation'
+    else:
+      mode = 'StarGAN'
+    data_loader = self.data_loader    
+    file_name = 'scores/Inception_{}.txt'.format(mode)
+    # if os.path.isfile(file_name):
+    #   print(file_name)
+    #   for line in open(file_name).readlines(): print(line.strip())
+    #   return
+
+    PRED_IS = {i:[] for i in range(len(data_loader.dataset.labels[0]))}#0:[], 1:[], 2:[]}
+    CIS = {i:[] for i in range(len(data_loader.dataset.labels[0]))}
+    IS = {i:[] for i in range(len(data_loader.dataset.labels[0]))}
+
+    for i, (real_x, org_c, files) in tqdm(enumerate(data_loader), desc='Calculating CIS/IS - {}'.format(file_name), total=len(data_loader)):
+      PRED_CIS = {i:[] for i in range(len(data_loader.dataset.labels[0]))}#0:[], 1:[], 2:[]}
+      org_label = torch.max(org_c,1)[1][0]
+      real_x = real_x.repeat(n_styles,1,1,1)#.unsqueeze(0)
+      real_x = to_var(real_x, volatile=True)
+
+      target_c = (org_c*0).repeat(n_styles,1)  
+      target_c = to_var(target_c, volatile=True)
+      for label in range(len(data_loader.dataset.labels[0])):
+        if org_label == label: continue
+        target_c *= 0
+        target_c[:,label]=1   
+        style = to_var(self.G.random_style(n_styles), volatile=True) if mode=='SMIT' else None
+
+        fake = (self.G(real_x, target_c, style)[0]+1)/2
+        # ipdb.set_trace()
+        # save_image(denorm(real_x.data), 'dummy.jpg')
+        # save_image(fake.data, 'dummy.jpg')
+        pred = to_data(F.softmax(net(inception_up(fake)), dim=1), cpu=True).numpy()
+        PRED_CIS[label].append(pred)
+        PRED_IS[label].append(pred)
+
+        # CIS for each image
+        PRED_CIS[label] = np.concatenate(PRED_CIS[label], 0)
+        py = np.sum(PRED_CIS[label], axis=0)  # prior is computed from outputs given a specific input
+        for j in range(PRED_CIS[label].shape[0]):
+          pyx = PRED_CIS[label][j, :]
+          CIS[label].append(entropy(pyx, py))
+      # ipdb.set_trace()
+
+    for label in range(len(data_loader.dataset.labels[0])):
+      PRED_IS[label] = np.concatenate(PRED_IS[label], 0)
+      py = np.sum(PRED_IS[label], axis=0)  # prior is computed from all outputs
+      for j in range(PRED_IS[label].shape[0]):
+        pyx = PRED_IS[label][j, :]
+        IS[label].append(entropy(pyx, py))      
+
+    total_cis = []; total_is = []
+    file_ = open(file_name, 'w')
+    for label in range(len(data_loader.dataset.labels[0])):
+      cis = np.exp(np.mean(CIS[label]))
+      total_cis.append(cis)
+      _is = np.exp(np.mean(IS[label]))
+      total_is.append(_is)
+      PRINT(file_, "Label {}".format(label))
+      PRINT(file_, "Inception Score: {:.4f}".format(_is))
+      PRINT(file_, "conditional Inception Score: {:.4f}".format(cis))
+    PRINT(file_, "")
+    PRINT(file_, "[TOTAL] Inception Score: {:.4f} +/- {:.4f}".format(np.array(total_is).mean(), np.array(total_is).std()))
+    PRINT(file_, "[TOTAL] conditional Inception Score: {:.4f} +/- {:.4f}".format(np.array(total_cis).mean(), np.array(total_cis).std()))
+    file_.close()  

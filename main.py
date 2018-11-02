@@ -44,6 +44,22 @@ def main(config):
     solver.display_net(name='generator')
     return
 
+  if config.LPIPS_REAL: 
+    solver.LPIPS_REAL()
+    return        
+
+  if config.LPIPS_UNIMODAL: 
+    solver.LPIPS_UNIMODAL()
+    return    
+
+  if config.LPIPS_MULTIMODAL: 
+    solver.LPIPS_MULTIMODAL()
+    return  
+
+  if config.INCEPTION: 
+    solver.INCEPTION()
+    return                     
+
   if config.mode == 'train':
     solver.train()
     solver.test(dataset=config.dataset_real, load=True)
@@ -89,6 +105,7 @@ if __name__ == '__main__':
   parser.add_argument('--model_save_path',    type=str, default='./snapshot/models')
   parser.add_argument('--sample_path',        type=str, default='./snapshot/samples')
   parser.add_argument('--DEMO_PATH',          type=str, default='')
+  parser.add_argument('--DEMO_LABEL',         type=str, default='')
 
   # Generative 
   parser.add_argument('--MultiDis',           type=int, default=0)
@@ -124,6 +141,10 @@ if __name__ == '__main__':
   parser.add_argument('--DISPLAY_NET',        action='store_true', default=False) 
   parser.add_argument('--DELETE',             action='store_true', default=False)
   parser.add_argument('--FOLDER',             action='store_true', default=False)
+  parser.add_argument('--LPIPS_REAL',         action='store_true', default=False)
+  parser.add_argument('--LPIPS_UNIMODAL',     action='store_true', default=False)
+  parser.add_argument('--LPIPS_MULTIMODAL',   action='store_true', default=False)
+  parser.add_argument('--INCEPTION',          action='store_true', default=False)
   parser.add_argument('--ALL_ATTR',           type=int, default=0)
   # parser.add_argument('--GRAY_DISC',          action='store_true', default=False)
   # parser.add_argument('--GRAY_STYLE',         action='store_true', default=False)

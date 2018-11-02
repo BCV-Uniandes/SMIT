@@ -22,6 +22,19 @@ def circle_frame(tensor, thick=5, color='green', first=False):
 
 #=======================================================================================#
 #=======================================================================================#
+def compute_lpips(img0, img1, model=None):
+  # RGB image from [-1,1]
+  if model is None:
+    from lpips_model import DistModel
+    model = DistModel()
+    version = '0.0'# if get_torch_version()==0.3 else '0.1'
+    model.initialize(model='net-lin',net='alex',use_gpu=True, version=version)
+    # model.eval()
+  dist = model.forward(img0,img1)
+  return dist, model  
+
+#=======================================================================================#
+#=======================================================================================#
 def color_frame(tensor, thick=5, color='green', first=False):
   import ipdb
   _color_ = {'green': (-1,1,-1), 'red': (1,-1,-1), 'blue': (-1,-1,1)}
@@ -133,8 +146,24 @@ def imgShow(img):
 
 #=======================================================================================#
 #=======================================================================================#
-def make_gif(imgs, path, im_size=256):
-  import imageio, numpy as np, ipdb
+def load_inception(path='data/RafD/normal/inception_v3.pth'):
+  from torchvision.models import inception_v3
+  import torch, torch.nn as nn
+  state_dict = torch.load(path)
+  net = inception_v3(pretrained=False, transform_input=True)
+  print("Loading inception_v3 from "+path)
+  net.aux_logits = False 
+  num_ftrs = net.fc.in_features
+  net.fc = nn.Linear(num_ftrs, state_dict['fc.weight'].size(0))  
+  net.load_state_dict(state_dict)   
+  for param in net.parameters():
+    param.requires_grad = False
+  return net  
+
+#=======================================================================================#
+#=======================================================================================#
+def make_gif(imgs, path, im_size=256, total_styles=5):
+  import imageio, numpy as np, ipdb, math
   if 'jpg' in path: path = path.replace('jpg', 'gif')
   imgs = (imgs.cpu().numpy().transpose(0,2,3,1)*255).astype(np.uint8)
   # ipdb.set_trace()
@@ -142,6 +171,7 @@ def make_gif(imgs, path, im_size=256):
   img_list = []
   for x in range(imgs.shape[2]//im_size):
     for bs in range(imgs.shape[0]):
+      # ipdb.set_trace()
       if x==0 and bs>1: continue #Only save one image of the originals
       if x==1: continue #Do not save any of the 'off' label
       img_short = imgs[bs,:,im_size*x:im_size*(x+1)]
@@ -251,7 +281,7 @@ def send_mail(body="bcv002", attach=[], subject='Message from bcv002', to='rv.an
 def single_source(tensor):
   import torch, math
   source = torch.ones_like(tensor)
-  middle = int(math.ceil(tensor.size(0)/2.))-1
+  middle = 0#int(math.ceil(tensor.size(0)/2.))-1
   source[middle] = tensor[0]
   return source
 
@@ -289,12 +319,12 @@ def target_debug_list(size, dim, config=None):
     else:
       if config.dataset_fake=='RafD' and j==0: target_c[:,0] = 1
 
-    if config.dataset_fake=='BAM' and j<=10: 
-      target_c[:,10] = 1; target_c[:,13] = 1
-    elif config.dataset_fake=='BAM' and j<=14: 
-      target_c[:,0] = 1; target_c[:,13] = 1
-    elif config.dataset_fake=='BAM' and j<=20: 
-      target_c[:,0] = 1; target_c[:,10] = 1
+    # if config.dataset_fake=='BAM' and j<=10: 
+    #   target_c[:,10] = 1; target_c[:,13] = 1
+    if config.dataset_fake=='BAM' and j<=5: 
+      target_c[:,4] = 1
+    elif config.dataset_fake=='BAM': 
+      target_c[:,1] = 1
     # ipdb.set_trace()     
 # 9, 4, 7
 # 'content_bicycle', 'content_bird', 'content_building', 'content_cars', 'content_cat', 'content_dog', 'content_flower', 'content_people', 'content_tree', 

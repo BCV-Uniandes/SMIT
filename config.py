@@ -7,11 +7,11 @@ def config_GENERATOR(config, update_folder):
       config.c_dim=37
       update_folder(config, 'ALL_ATTR_'+str(config.c_dim))      
     elif config.ALL_ATTR==3:
-      config.num_epochs_decay = 30
+      # config.num_epochs_decay = 30
       config.c_dim=25
       update_folder(config, 'ALL_ATTR_'+str(config.c_dim))
     elif config.ALL_ATTR==4:
-      config.num_epochs_decay = 30
+      # config.num_epochs_decay = 30
       config.c_dim=10
       update_folder(config, 'ALL_ATTR_'+str(config.c_dim))         
     elif config.ALL_ATTR==0:
@@ -36,6 +36,8 @@ def config_GENERATOR(config, update_folder):
 
   if config.dataset_fake=='Birds':
     config.c_dim=5
+    config.save_epoch = 20
+    update_folder(config, 'ALL_ATTR_'+str(config.c_dim)) 
 
   if config.dataset_fake=='painters_14':
     config.save_epoch = 20
@@ -111,11 +113,14 @@ def config_GENERATOR(config, update_folder):
       config.c_dim = 20
     elif config.ALL_ATTR==0:
       config.c_dim=20   
+    elif config.ALL_ATTR==2:
+      config.c_dim=11         
+      update_folder(config, 'ALL_ATTR_'+str(config.c_dim)) 
 
   if config.dataset_fake=='EmotionNet':
     config.c_dim=12            
-    config.num_epochs = 20 #The same iterations as celebA given the high number of images in the dataset
-    config.num_epochs_decay = 6
+    config.num_epochs = 30 #The same iterations as celebA given the high number of images in the dataset
+    config.num_epochs_decay = 20
 
   config.num_epochs *= config.save_epoch#500
   config.num_epochs_decay *= config.save_epoch#200    
@@ -191,7 +196,7 @@ def config_GENERATOR(config, update_folder):
       config.GAN_options.append('AdaIn')    
     update_folder(config, 'Stochastic') 
     update_folder(config, 'style_{}_dim_{}'.format(config.lambda_style, config.style_dim))   
-    if config.style_dim==8 and not 'FC' in config.GAN_options: config.GAN_options.append('FC')
+    # if config.style_dim==8 and not 'FC' in config.GAN_options: config.GAN_options.append('FC')
 
 
     if 'AdaIn2' in config.GAN_options:
@@ -287,6 +292,10 @@ def config_GENERATOR(config, update_folder):
 
   if 'RaGAN' in config.GAN_options:
     config.batch_size *= 2
+
+  if config.LPIPS_MULTIMODAL or config.LPIPS_REAL or config.LPIPS_UNIMODAL or config.INCEPTION:
+    config.batch_size=1
+    config.mode='test'
 
   import torch
   if int(torch.__version__.split('.')[1])>3:
