@@ -6,7 +6,7 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob 
-from misc.utils import _horovod
+from misc.utils import _horovod, PRINT
 hvd = _horovod()   
  
 ######################################################################################################
@@ -29,20 +29,19 @@ class BAM(Dataset):
     if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def histogram(self):
-    values = np.array(map(int, self.lines[2].split()[1:]))*0
+    values = np.array([int(i) for i in self.lines[2].split()[1:]])*0
     for line in self.lines[2:]:
-      value = np.array(map(int, line.split()[1:])).clip(min=0)
+      value = np.array([int(i) for i in line.split()[1:]]).clip(min=0)
       values += value
     self.hist = {}
     for key, value in zip(self.lines[1].split(), values):
       self.hist[key] = value
     total = 0
     with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
-      for key,value in sorted(self.hist.iteritems(), key=lambda (k,v): (v,k), reverse=True):
-        print(key, value)
+      for key,value in sorted(self.hist.iteritems(), key = lambda kv: (kv[1],kv[0]), reverse=True):
         total+=value
-        print>>f, '{}\t{}'.format(key,value)
-      print>>f, 'TOTAL\t{}'.format(total)
+        PRINT(f, '{} {}'.format(key,value))
+      PRINT(f, 'TOTAL {}'.format(total))
 
 
 
@@ -177,7 +176,7 @@ if __name__ == '__main__':
       if not os.path.isfile(txt_file):
         # continue
         labels = get_labels(all_attr, df, i)
-        string = '{}\n'.format('\t'.join(map(str, labels)))
+        string = '{}\n'.format('\t'.join([str(i) for i in labels]))
         with open(txt_file, 'w') as f: f.writelines(string)
       # else:
       #   labels = open(txt_file).readline().strip().split()

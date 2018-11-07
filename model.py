@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from models.utils import get_SN, print_debug
+from models.utils import get_SN
+from models.utils import print_debug as _print_debug
 from models.spectral import SpectralNorm as SpectralNormalization
 import ipdb
 import math
@@ -27,6 +28,9 @@ class Discriminator(nn.Module):
     color_dim = config.color_dim if not self.GRAY_DISC else 1
     SN = 'SpectralNorm' in config.GAN_options
     self.DILATE = config.DISC_DILATE
+
+    print_debug = lambda x,v: _print_debug(x, v, file=config.log)
+
     SpectralNorm = get_SN(SN)
     layers.append(SpectralNorm(nn.Conv2d(color_dim, conv_dim, kernel_size=4, stride=2, padding=1)))
     layers.append(nn.LeakyReLU(0.01, inplace=True))
@@ -125,7 +129,11 @@ class MultiDiscriminator(nn.Module):
     SN = 'SpectralNorm' in config.GAN_options
     self.SpectralNorm = get_SN(SN)
     self.DILATE = config.DISC_DILATE
-    self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
+
+    print_debug = lambda x,v: _print_debug(x, v, file=config.log)
+
+    # self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
+    self.downsample = lambda input: F.interpolate(input, size=input.size(2)//2, mode='bilinear', align_corners=True)
     self.cnns_main = nn.ModuleList()
     if self.DILATE:
       self.cnns_main0 = nn.ModuleList()
@@ -246,6 +254,7 @@ class Generator(nn.Module):
     if self.InterLabels or self.InterStyleConcatLabels: in_dim=self.color_dim
     elif self.DRITZ: in_dim=self.color_dim+self.c_dim+self.style_dim
     else: in_dim=self.color_dim+self.c_dim
+
     layers.append(nn.Conv2d(in_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
     layers.append(nn.InstanceNorm2d(conv_dim, affine=True))
     layers.append(nn.ReLU(inplace=True))     
@@ -346,6 +355,9 @@ class Generator(nn.Module):
       self.debug()
 
   def debug(self):
+
+      print_debug = lambda x,v: _print_debug(x, v, file=self.config.log)
+
       print('-- Generator:')
       if self.InterLabels and self.DRIT: 
         c_dim = self.c_dim*2
@@ -488,6 +500,9 @@ class AdaInGEN(nn.Module):
     self.InterStyleMulLabels= 'InterStyleMulLabels' in config.GAN_options
     if STYLE_ENC is None and self.config.lambda_style!=0: self.enc_style = StyleEncoder(config, debug=debug)
     else: self.enc_style = STYLE_ENC
+
+    print_debug = lambda x,v: _print_debug(x, v, file=config.log)
+
     self.generator = Generator(config, debug=False)
     if self.style_dim==0: 
       in_dim=self.c_dim
@@ -594,6 +609,9 @@ class StyleEncoder(nn.Module):
     self.s_dim = style_dim if style_dim==8 or style_dim==20 or style_dim==16  or self.DRITZ else config.c_dim*style_dim
     self.FC = 'FC' in config.GAN_options
     self.config = config
+
+    print_debug = lambda x,v: _print_debug(x, v, file=config.log)
+
     layers = []
     norm = 'none'
     activ = 'relu'
@@ -668,6 +686,8 @@ class MLP(nn.Module):
       self._model += [LinearBlock(dim, dim, norm=norm, activation=activ)]
     self._model += [LinearBlock(dim, output_dim, norm='none', activation='none')] # no output activations
     self.model = nn.Sequential(*self._model)
+
+    print_debug = lambda x,v: _print_debug(x, v, file=config.log)
 
     if debug:
       feed = to_var(torch.ones(1,input_dim), volatile=True, no_cuda=True)

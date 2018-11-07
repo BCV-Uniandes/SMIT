@@ -37,11 +37,10 @@ class WIDER(Dataset):
     values = {i:v for i,v in zip(self.selected_attrs, values)}
     total=0
     with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
-      for key,value in sorted(values.iteritems(), key=lambda (k,v): (v,k), reverse=True):
-        print(key, value)
-        print>>f, '{}\t{}'.format(key,value)
+      for key,value in sorted(values.items(), key = lambda kv: (kv[1],kv[0]), reverse=True):
         total+=value
-      print>>f, 'TOTAL\t{}'.format(total)
+        PRINT(f, '{} {}'.format(key,value))
+      PRINT(f, 'TOTAL {}'.format(total))
 
   def preprocess(self):
     self.all_filenames = []
@@ -57,7 +56,7 @@ class WIDER(Dataset):
         self.all_bbox.append(bbox)
 
     if self.all_attr==1:
-      self.selected_attrs = [key for key,value in sorted(self.attr2idx.iteritems(), key=lambda (k,v): (v,k))]#self.attr2idx.keys()
+      self.selected_attrs = [key for key,value in sorted(self.attr2idx.items(),  key = lambda kv: (kv[1],kv[0]))]#self.attr2idx.keys()
       # ['Male', 'longHair', 'sunglass', 'Hat', 'Tshiirt', 'longSleeve', 'formal', 'shorts',
       #  'jeans', 'longPants', 'skirt', 'faceMask', 'logo', 'stripe']
     else:

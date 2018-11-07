@@ -337,11 +337,11 @@ def update_config(config):
   update_folder(config, os.path.join(config.mode_data, str(config.image_size), 'fold_'+config.fold))
   config.metadata_path = os.path.join(config.metadata_path, '{}', config.mode_data, 'fold_'+config.fold, )
   config.g_repeat_num = 6 #if config.image_size <256  or ('Attention2' in config.GAN_options and 'InterStyleConcatLabels' in config.GAN_options) else 9 
-  config.g_conv_dim = config.g_conv_dim if config.image_size<256 else config.g_conv_dim/2
-  config.d_conv_dim = config.d_conv_dim if config.image_size<256 else config.d_conv_dim/2
+  config.g_conv_dim = config.g_conv_dim if config.image_size<256 else config.g_conv_dim//2
+  config.d_conv_dim = config.d_conv_dim if config.image_size<256 else config.d_conv_dim//2
 
-  config.g_conv_dim = config.g_conv_dim if config.image_size<512 else config.g_conv_dim/2
-  config.d_conv_dim = config.d_conv_dim if config.image_size<512 else config.d_conv_dim/2
+  config.g_conv_dim = config.g_conv_dim if config.image_size<512 else config.g_conv_dim//2
+  config.d_conv_dim = config.d_conv_dim if config.image_size<512 else config.d_conv_dim//2
 
   config.d_repeat_num = int(math.log(config.image_size,2)-1)
 

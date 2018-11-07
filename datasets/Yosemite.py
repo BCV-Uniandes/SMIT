@@ -39,16 +39,15 @@ class Yosemite(Dataset):
       self.hist[key] += 1
     total=0
     with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
-      for key,value in sorted(self.hist.iteritems(), key=lambda (k,v): (v,k), reverse=True):
-        print(key, value)
-        print>>f, '{}\t{}'.format(key,value)
+      for key,value in sorted(self.hist.items(), key =lambda kv: (kv[1],kv[0]), reverse=True):
         total+=value
-      print>>f, 'TOTAL\t{}'.format(total)
+        PRINT(f, '{} {}'.format(key,value))
+      PRINT(f, 'TOTAL {}'.format(total))
 
   def preprocess(self):
     self.histogram()
     if self.all_attr==0 or self.all_attr==1: #all_attr==0 means ALL BALANCED
-      self.selected_attrs = [key for key,value in sorted(self.attr2idx.iteritems(), key=lambda (k,v): (v,k))]#self.attr2idx.keys()
+      self.selected_attrs = [key for key,value in sorted(self.attr2idx.items(),  key =lambda kv: (kv[1],kv[0]))]#self.attr2idx.keys()
     elif self.all_attr==2:
       self.selected_attrs =['Summer', 'Winter']
     self.filenames = []

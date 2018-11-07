@@ -1,28 +1,26 @@
 #!/usr/bin/ipython
+from __future__ import print_function
 import os
 import argparse
 from data_loader import get_loader
 import glob
 import math
 import os, glob, ipdb, imageio, numpy as np, config as cfg, warnings, sys
-from misc.utils import _horovod
+from misc.utils import _horovod, PRINT
 hvd = _horovod()
 hvd.init()
 # warnings.filterwarnings('ignore')
 
 __DATASETS__ = [os.path.basename(line).split('.py')[0] for line in glob.glob('datasets/*.py')]
 
-def PRINT(config):
+def _PRINT(config):
   string ='------------ Options -------------'
-  print(string)
-  print >> config.log, string
+  PRINT(config.log, string)
   for k, v in sorted(vars(config).items()):
     string = '%s: %s' % (str(k), str(v))
-    print(string)
-    print >> config.log, string
+    PRINT(config.log, string)
   string='-------------- End ----------------'
-  print(string)     
-  print >> config.log, string
+  PRINT(config.log, string)
 
 def main(config):
   from torch.backends import cudnn
@@ -186,7 +184,7 @@ if __name__ == '__main__':
   else:
     # torch.cuda.set_device(config.GPU[0])
     os.environ['CUDA_VISIBLE_DEVICES'] = config.GPU
-    config.GPU = map(int, config.GPU.split(','))
+    config.GPU = [int(i) for i in config.GPU.split(',')]
 
   import torch
   if not torch.cuda.is_available():
@@ -216,10 +214,8 @@ if __name__ == '__main__':
   if config.mode=='train':
     of = 'a' if os.path.isfile(org_log) else 'wb'
     with open(org_log, of) as config.log:
-      if hvd.rank() == 0: print >> config.log, ' '.join(sys.argv)
-      config.log.flush()
-      if hvd.rank() == 0: PRINT(config) 
-      # print(config)
+      if hvd.rank() == 0: PRINT(config.log, ' '.join(sys.argv))
+      if hvd.rank() == 0: PRINT(config.log, config) 
       main(config)
     # last_sample = sorted(glob.glob(config.sample_path+'/*.jpg'))[-1]
     # os.system('echo {0} | mail -s "Training done - GPU {1} free" -A "{0}" rv.andres10@uniandes.edu.co'.format(msj, config.GPU))

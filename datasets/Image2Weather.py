@@ -6,7 +6,7 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob  
-from misc.utils import _horovod
+from misc.utils import _horovod, PRINT
 hvd = _horovod()   
 
 ######################################################################################################
@@ -39,18 +39,17 @@ class Image2Weather(Dataset):
       _cls = self.cls2idx[line.split('/')[-2]]
       values[_cls] += 1
     # ipdb.set_trace()
-    keys_sorted = [key for key,value in sorted(self.cls2idx.iteritems(), key=lambda (k,v): (v,k))]
+    keys_sorted = [key for key,value in sorted(self.cls2idx.items(), key = lambda kv: (kv[1],kv[0]))]
     self.hist={}
     for key, value in zip(keys_sorted, values):
       self.hist[key] = value      
     total = 0
     print('All attributes: '+str(keys_sorted))
     with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
-      for key,value in sorted(self.hist.iteritems(), key=lambda (k,v): (v,k), reverse=True):
-        print(key, value)
-        print>>f, '{}\t{}'.format(key,value)
+      for key,value in sorted(self.hist.items(), key = lambda kv: (kv[1],kv[0]), reverse=True):
         total+=value
-      print>>f, 'TOTAL\t{}'.format(total)
+        PRINT(f, '{} {}'.format(key,value))
+      PRINT(f, 'TOTAL {}'.format(total))
 
     self.hist = {key:0 for key in self.selected_attrs}
     for line in self.lines:

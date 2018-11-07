@@ -6,7 +6,7 @@ from torchvision.utils import save_image
 import config as cfg
 from tqdm import tqdm
 from termcolor import colored
-from misc.utils import circle_frame, color_frame, create_circle, create_dir, denorm, get_aus, get_loss_value, make_gif, PRINT, send_mail, single_source, slerp, target_debug_list, TimeNow, TimeNow_str, to_cpu, to_cuda, to_data, to_var
+from misc.utils import circle_frame, color_frame, create_circle, create_dir, denorm, get_aus, get_loss_value, get_torch_version, make_gif, PRINT, send_mail, single_source, slerp, target_debug_list, TimeNow, TimeNow_str, to_cpu, to_cuda, to_data, to_var
 from misc.losses import _compute_kl, _compute_loss_smooth, _compute_vgg_loss, _GAN_LOSS, _get_gradient_penalty
 import torch.utils.data.distributed
 from misc.utils import _horovod
@@ -150,23 +150,24 @@ class Solver(object):
   def load_pretrained_model(self):
     if hvd.rank() != 0: return
     self.PRINT('Resuming model (step: {})...'.format(self.config.pretrained_model))
-    name = os.path.join(self.config.model_save_path, '{}_{}.pth'.format(self.config.pretrained_model, '{}'))
-    self.PRINT('Model: {}'.format(name))
+    self.name = os.path.join(self.config.model_save_path, '{}_{}.pth'.format(self.config.pretrained_model, '{}'))
+    self.PRINT('Model: {}'.format(self.name))
     # if self.config.mode=='train': self.PRINT('Model: {}'.format(name))
-    self.G.load_state_dict(torch.load(name.format('G')))#, map_location=lambda storage, loc: storage))
-    self.D.load_state_dict(torch.load(name.format('D')))#, map_location=lambda storage, loc: storage))
-    # self.g_optimizer.load_state_dict(torch.load(name.format('G_optim')))#, map_location=lambda storage, loc: storage))        
-    # self.optim_cuda(self.g_optimizer)
-    # self.d_optimizer.load_state_dict(torch.load(name.format('D_optim')))#, map_location=lambda storage, loc: storage))      
-    # self.optim_cuda(self.d_optimizer)    
-    # ipdb.set_trace()
+    # self.G.load_state_dict(torch.load(self.name.format('G')))
+    # self.D.load_state_dict(torch.load(self.name.format('D')))
+    self.G.load_state_dict(torch.load(self.name.format('G'), map_location=lambda storage, loc: storage))
+    self.D.load_state_dict(torch.load(self.name.format('D'), map_location=lambda storage, loc: storage))
+
     try:
-      self.g_optimizer.load_state_dict(torch.load(name.format('G_optim')))#, map_location=lambda storage, loc: storage))        
+      # self.g_optimizer.load_state_dict(torch.load(self.name.format('G_optim')))
+      self.g_optimizer.load_state_dict(torch.load(self.name.format('G_optim'), map_location=lambda storage, loc: storage))
       self.optim_cuda(self.g_optimizer)
-      self.d_optimizer.load_state_dict(torch.load(name.format('D_optim')))#, map_location=lambda storage, loc: storage))      
+      # self.d_optimizer.load_state_dict(torch.load(self.name.format('D_optim')))
+      self.d_optimizer.load_state_dict(torch.load(self.name.format('D_optim'), map_location=lambda storage, loc: storage))
       self.optim_cuda(self.d_optimizer)
       if self.config.lambda_style!=0 and 'Stochastic' in self.config.GAN_options:
-        self.s_optimizer.load_state_dict(torch.load(name.format('S_optim')))#, map_location=lambda storage, loc: storage))      
+        # self.s_optimizer.load_state_dict(torch.load(self.name.format('S_optim')))
+        self.s_optimizer.load_state_dict(torch.load(self.name.format('S_optim'), map_location=lambda storage, loc: storage))
         self.optim_cuda(self.s_optimizer)  
       print("Success!!")
     except: 
@@ -321,7 +322,7 @@ class Solver(object):
     LOSS = {key:np.array(value).mean() for key, value in self.LOSS.items()}
     if not os.path.isfile(self.config.loss_plot):
       with open(self.config.loss_plot, 'w') as f: f.writelines('{}\n'.format('\t'.join(['Epoch']+LOSS.keys())))
-    with open(self.config.loss_plot, 'a') as f: f.writelines('{}\n'.format('\t'.join([str(Epoch)]+map(str, LOSS.values()))))
+    with open(self.config.loss_plot, 'a') as f: f.writelines('{}\n'.format('\t'.join([str(Epoch)]+[str(i) for i in LOSS.values()])))
     plot_txt(self.config.loss_plot)
 
   #=======================================================================================#
@@ -357,7 +358,7 @@ class Solver(object):
     if self.config.mode!='train': 
       circle = 1-torch.FloatTensor(create_circle(self.config.image_size))
       circle = circle.expand(fake_images.size(0),fake_images.size(1), self.config.image_size, self.config.image_size)
-      circle = circle.repeat(1,1,1,fake_images.size(-1)/self.config.image_size)
+      circle = circle.repeat(1,1,1,fake_images.size(-1)//self.config.image_size)
       fake_images += circle
     if fake_images.size(0)>1:
       fake_images = torch.cat((self.get_aus(), fake_images), dim=0)
@@ -472,7 +473,7 @@ class Solver(object):
     d_lr = self.config.d_lr
     # ipdb.set_trace()
     #self.g_optimizer.param_groups[0]['lr']
-    self.update_lr(g_lr, d_lr)
+    # self.update_lr(g_lr, d_lr)
     self.PRINT ('Training with learning rate g_lr: {}, d_lr: {}.'.format(self.g_optimizer.param_groups[0]['lr'], self.d_optimizer.param_groups[0]['lr']))  
 
     # Start with trained model if exists
@@ -784,7 +785,7 @@ class Solver(object):
     Stochastic = 'Stochastic' in self.config.GAN_options
     n_rep = self.config.style_debug
     Output = []
-    opt = torch.no_grad() if int(torch.__version__.split('.')[1])>3 else open('_null.txt', 'w')
+    opt = torch.no_grad() if get_torch_version()>0.3 else open('_null.txt', 'w')
     flag_time = True
     with opt:
       real_x = to_var(real_x, volatile=True)
@@ -1060,7 +1061,7 @@ class Solver(object):
     data_loader = get_loader(path, self.config.image_size, batch_size, shuffling = False, dataset='DEMO', mode='test', many_faces=self.config.many_faces)
     label = self.config.DEMO_LABEL 
     if self.config.DEMO_LABEL!='':
-      label = torch.FloatTensor(map(int, label.split(','))).view(1,-1)
+      label = torch.FloatTensor([int(i) for i in label.split(',')]).view(1,-1)
       # ipdb.set_trace()
     else:
       label = None
@@ -1178,7 +1179,7 @@ class Solver(object):
 
   def LPIPS_UNIMODAL(self):
     from misc.utils import compute_lpips   
-
+    from shutil import copyfile
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
 
@@ -1186,7 +1187,8 @@ class Solver(object):
     model = None
     style_fixed = True
     style_str = 'fixed' if style_fixed else 'random'
-    file_name = 'scores/{}_Attr_{}_LPIPS_UNIMODAL_{}.txt'.format(self.config.dataset_fake, self.config.ALL_ATTR, style_str)
+    file_name = os.path.join(self.name.replace('{}.pth', 'LPIPS_UNIMODAL_{}.txt'.format(style_str)))
+    copy_name = 'scores/{}_Attr_{}_LPIPS_UNIMODAL_{}.txt'.format(self.config.dataset_fake, self.config.ALL_ATTR, style_str)
     if os.path.isfile(file_name):
       print(file_name)
       for line in open(file_name).readlines(): print(line.strip())
@@ -1196,8 +1198,9 @@ class Solver(object):
     DISTANCE = {i:[] for i in range(len(data_loader.dataset.labels[0])+1)}#0:[], 1:[], 2:[]}
     n_images = {i:0 for i in range(len(data_loader.dataset.labels[0]))}
 
-    style0 = to_var(self.G.random_style(1), volatile=True)
-    for i, (real_x, org_c, files) in tqdm(enumerate(data_loader), desc='Calculating LPISP - {}'.format(file_name), total=len(data_loader)):
+    style0 = to_var(self.G.random_style(1), volatile=True) if 'Stochastic' in self.config.GAN_options else None
+    print(file_name)
+    for i, (real_x, org_c, files) in tqdm(enumerate(data_loader), desc='Calculating LPISP ', total=len(data_loader)):
       org_label = torch.max(org_c,1)[1][0]
       real_x = to_var(real_x, volatile=True)
       for label in range(len(data_loader.dataset.labels[0])):
@@ -1215,7 +1218,7 @@ class Solver(object):
             _target_c = to_var(_org_c*0, volatile=True); _target_c[:,_label]=1          
             if not style_fixed: style0 = to_var(self.G.random_style(_real_x.size(0)), volatile=True)
             _real_x = self.G(_real_x, to_var(_target_c, volatile=True), stochastic=style0)[0]
-            ipdb.set_trace()
+            # ipdb.set_trace()
             distance, model = compute_lpips(real_x.data, _real_x.data, model=model)
             DISTANCE[len(data_loader.dataset.labels[0])].append(distance[0])
             # if label==0: ipdb.set_trace()
@@ -1233,6 +1236,7 @@ class Solver(object):
     # PRINT(file_, "LPISP b-a: {} +/- {}".format(DISTANCE[1].mean(), DISTANCE[1].std()))
     # PRINT(file_, "LPISP All: {} +/- {}".format(DISTANCE[2].mean(), DISTANCE[2].std()))
     file_.close()    
+    copyfile(file_name, copy_name)
     # ipdb.set_trace()
 
   #=======================================================================================#
@@ -1300,6 +1304,9 @@ class Solver(object):
     # file_.close()    
     # ipdb.set_trace()
 
+  #=======================================================================================#
+  #=======================================================================================#
+
   def INCEPTION(self):
     from misc.utils import load_inception
     from scipy.stats import entropy
@@ -1344,6 +1351,7 @@ class Solver(object):
         # ipdb.set_trace()
         # save_image(denorm(real_x.data), 'dummy.jpg')
         # save_image(fake.data, 'dummy.jpg')
+        # target_c *= 0; target_c[:,label]=1 ; fake = (self.G(real_x, target_c, style)[0]+1)/2; save_image(fake.data, 'dummy.jpg')
         pred = to_data(F.softmax(net(inception_up(fake)), dim=1), cpu=True).numpy()
         PRED_CIS[label].append(pred)
         PRED_IS[label].append(pred)

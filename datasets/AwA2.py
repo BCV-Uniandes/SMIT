@@ -6,7 +6,7 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob  
-from misc.utils import _horovod
+from misc.utils import _horovod, PRINT
 hvd = _horovod()   
 
 ######################################################################################################
@@ -23,8 +23,8 @@ class AwA2(Dataset):
     data_root = os.path.join('data','AwA2', 'Animals_with_Attributes2')
     self.lines = sorted(glob.glob(os.path.abspath(os.path.join(data_root,'JPEGImages','*', '*.jpg'))))
     _replace = lambda line: line.strip().replace('   ',' ').replace('  ',' ').split(' ')
-    if continuous: self.cls2attr = np.array([map(float, _replace(line)) for line in open(os.path.join(data_root, 'predicate-matrix-continuous.txt')).readlines()])
-    else: self.cls2attr = np.array([map(int, _replace(line)) for line in open(os.path.join(data_root, 'predicate-matrix-binary.txt')).readlines()])
+    if continuous: self.cls2attr = np.array([[float (i) for i in _replace(line)] for line in open(os.path.join(data_root, 'predicate-matrix-continuous.txt')).readlines()])
+    else: self.cls2attr = np.array([[int(i) for i in _replace(line)] for line in open(os.path.join(data_root, 'predicate-matrix-binary.txt')).readlines()])
     key = lambda line: (int(line.strip().split('\t')[0])-1, line.strip().split('\t')[1])
     self.idx2cls = {key(line)[0]: key(line)[1] for line in open(os.path.join(data_root, 'classes.txt')).readlines()}
     self.cls2idx = {key(line)[1]: key(line)[0] for line in open(os.path.join(data_root, 'classes.txt')).readlines()}
@@ -44,17 +44,16 @@ class AwA2(Dataset):
       attr = self.cls2attr[_cls]
       values += attr
     # ipdb.set_trace()
-    keys_sorted = [key for key,value in sorted(self.attr2idx.iteritems(), key=lambda (k,v): (v,k))]
+    keys_sorted = [key for key,value in sorted(self.attr2idx.items(), key= lambda kv: (kv[1],kv[0]))]
     dict_={}
     for key, value in zip(keys_sorted, values):
       dict_[key] = value      
     total = 0
     with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
-      for key,value in sorted(dict_.iteritems(), key=lambda (k,v): (v,k), reverse=True):
-        print(key, value)
-        print>>f, '{}\t{}'.format(key,value)
+      for key,value in sorted(dict_.iteritems(), key = lambda kv: (kv[1],kv[0]), reverse=True):
         total+=value
-      print>>f, 'TOTAL\t{}'.format(total)
+        PRINT(f, '{} {}'.format(key,value))
+      PRINT(f, 'TOTAL {}'.format(total))
 
   def preprocess(self):
     self.histogram()

@@ -6,7 +6,7 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob 
-from misc.utils import _horovod
+from misc.utils import _horovod, PRINT
 hvd = _horovod()   
  
 ######################################################################################################
@@ -34,27 +34,25 @@ class CelebA(Dataset):
     if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def histogram(self):
-    values = np.array(map(int, self.lines[2].split()[1:]))*0
+    values = np.array([int(i) for i in self.lines[2].split()[1:]])*0
     for line in self.lines[2:]:
-      value = np.array(map(int, line.split()[1:])).clip(min=0)
+      value = np.array([int(i) for i in line.split()[1:]]).clip(min=0)
       values += value
     dict_ = {}
     for key, value in zip(self.lines[1].split(), values):
       dict_[key] = value
     total = 0
     with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
-      for key,value in sorted(dict_.iteritems(), key=lambda (k,v): (v,k), reverse=True):
-        print(key, value)
+      for key,value in sorted(dict_.items(), key = lambda kv: (kv[1],kv[0]), reverse=True):
         total+=value
-        print>>f, '{}\t{}'.format(key,value)
-      print>>f, 'TOTAL\t{}'.format(total)
+        PRINT(f, '{} {}'.format(key,value))
+      PRINT(f, 'TOTAL {}'.format(total))
 
 
 
   def preprocess(self):
     attrs = self.lines[1].split()
     self.histogram()
-    # ipdb.set_trace()
 
     for i, attr in enumerate(attrs):
       self.all_attr2idx[attr] = i
