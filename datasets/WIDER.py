@@ -6,7 +6,7 @@ from PIL import Image
 import ipdb, json
 import numpy as np
 import glob 
-from misc.utils import _horovod
+from misc.utils import _horovod, PRINT
 hvd = _horovod()   
  
 ######################################################################################################
