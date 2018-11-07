@@ -5,8 +5,6 @@ from data_loader import get_loader
 import glob
 import math
 import os, glob, ipdb, imageio, numpy as np, config as cfg, warnings, sys
-import torch, torch.utils.data.distributed
-
 from misc.utils import _horovod
 hvd = _horovod()
 hvd.init()
@@ -175,23 +173,24 @@ if __name__ == '__main__':
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
   
-  if not torch.cuda.is_available():
-    config.GPU='no_cuda'
-  elif config.HOROVOD:
+  
+  if config.HOROVOD:
     # mpirun -np -N_GPU ./main.py ...
     _GPU = config.GPU.split(',')
     config.GPU = [_GPU]
     print(hvd.local_rank(), hvd.size())
     config.g_lr = config.g_lr/hvd.size()
     config.d_lr = config.d_lr/hvd.size()    
-    # torch.manual_seed(0)
-    torch.cuda.set_device(int(_GPU[hvd.local_rank()]))
-    # torch.cuda.manual_seed(0)    
+    # torch.cuda.set_device(int(_GPU[hvd.local_rank()]))
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(_GPU[hvd.local_rank()])
   else:
+    # torch.cuda.set_device(config.GPU[0])
+    os.environ['CUDA_VISIBLE_DEVICES'] = config.GPU
     config.GPU = map(int, config.GPU.split(','))
-    torch.cuda.set_device(config.GPU[0])
 
-    # os.environ['CUDA_VISIBLE_DEVICES'] = config.GPU
+  import torch
+  if not torch.cuda.is_available():
+    config.GPU='no_cuda'
 
   config = cfg.update_config(config)
 

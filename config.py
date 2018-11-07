@@ -86,6 +86,7 @@ def config_GENERATOR(config, update_folder):
       config.c_dim = 2
       update_folder(config, 'ALL_ATTR_Handbags') 
     elif config.ALL_ATTR==3:
+      config.save_epoch = 3
       config.c_dim = 2 
       update_folder(config, 'ALL_ATTR_Shoes') 
     elif config.ALL_ATTR==0:
@@ -298,8 +299,8 @@ def config_GENERATOR(config, update_folder):
     config.mode='test'
 
   import torch
-  if int(torch.__version__.split('.')[1])>3:
-    update_folder(config, 'Pytorch_'+str(torch.__version__))
+  if float('.'.join(torch.__version__.split('.')[:2]))>0.3:
+    update_folder(config, 'Pytorch_'+str(float('.'.join(torch.__version__.split('.')[:2]))))
 
 def update_folder(config, folder):
   import os
