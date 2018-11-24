@@ -34,11 +34,11 @@ class DEMO(Dataset):
 
   def __getitem__(self, index):
     if not self.many_faces:
-      image, success = self.face.get_face_from_file(self.lines[index], margin=5.)
+      # image, success = self.face.get_face_from_file(self.lines[index], margin=5.)
       # ipdb.set_trace()
-      # success = False
+      success = False
       if not success: image = Image.open(self.lines[index]).convert('RGB')
-      else: image = Image.fromarray(image) 
+      else: image = Image.fromarray(image).convert('RGB')
     
     else: 
       import imageio, skimage.transform

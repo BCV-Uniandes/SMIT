@@ -1,36 +1,45 @@
 from __future__ import print_function
 #=======================================================================================#
 #=======================================================================================#
-def circle_frame(tensor, thick=5, color='green', first=False):
+def circle_frame(tensor, thick=5, color='green', row_color=None):
   import ipdb
   import numpy as np, torch
-  _color_ = {'green': (-1,1,-1), 'red': (1,-1,-1), 'blue': (-1,-1,1)}
+  # import matplotlib.pyplot as plt
+  from scipy import ndimage
+  # _color_ = {'green': (-1,1,-1), 'red': (1,-1,-1), 'blue': (-1,-1,1)}
+  # _color_ = {'green': (-1,-1,-1), 'red': (-1,-1,-1), 'blue': (-1,-1,-1)}
+  # _color_ = {'green': (1,-1,1), 'red': (1,-1,1), 'blue': (1,-1,1)}
+  _color_ = {'green': (-1,-1,1), 'red': (-1,-1,1), 'blue': (-1,-1,1)}
   _tensor = tensor.clone()
   size = tensor.size(2)
-  thick=((size/2)**2)/10
+  thick=((size/2)**2)/7.5
   xx, yy = np.mgrid[:size, :size]
   circle = (xx - size/2) ** 2 + (yy - size/2) ** 2  
-  donut = np.expand_dims(np.logical_and(circle < ((size/2)**2+ thick), circle > ((size/2)**2 - thick)), 0)*1.
+  donut = np.logical_and(circle < ((size/2)**2+ thick), circle > ((size/2)**2 - thick))
+  if color=='blue':
+    donut = ndimage.binary_erosion(donut, structure=np.ones((15,1))).astype(donut.dtype)
+  elif color=='red':
+    donut = ndimage.binary_erosion(donut, structure=np.ones((1,15))).astype(donut.dtype)
+  donut = np.expand_dims(donut, 0)*1.
   donut = donut.repeat(tensor.size(1), axis=0)
   for i in range(donut.shape[0]):
     donut[i] = donut[i]*_color_[color][i]
-  # ipdb.set_trace()
   donut = to_var(torch.FloatTensor(donut), volatile=True)
-  for nn in [0,-1]: #First and last frame
+  if row_color is None: row_color = [0,-1]
+  else: row_color = [row_color]
+  for nn in row_color: #First and last frame
     _tensor[nn] = tensor[nn] + donut
-
   return _tensor  
 
 #=======================================================================================#
 #=======================================================================================#
 def compute_lpips(img0, img1, model=None):
-  # RGB image from [-1,1]
+  # RGB image from must be [-1,1]
   if model is None:
     from lpips_model import DistModel
     model = DistModel()
-    version = '0.0'# if get_torch_version()==0.3 else '0.1'
+    version = '0.0' # Totally different values with 0.1
     model.initialize(model='net-lin',net='alex',use_gpu=True, version=version)
-    # model.eval()
   dist = model.forward(img0,img1)
   return dist, model  
 
@@ -40,15 +49,69 @@ def color_frame(tensor, thick=5, color='green', first=False):
   import ipdb
   _color_ = {'green': (-1,1,-1), 'red': (1,-1,-1), 'blue': (-1,-1,1)}
   # tensor = to_data(tensor)
-  # ipdb.set_trace()
   for i in range(thick):
     for k in range(tensor.size(1)):
-      for nn in [0,-1]: #First and last frame
+      # for nn in [0,-1]: #First and last frame
+      for nn in [0]: #First
         tensor[nn,k,i,:] = _color_[color][k]
         if first: tensor[nn,k,:,i] = _color_[color][k]
         tensor[nn,k,tensor.size(2)-i-1,:] = _color_[color][k]
         tensor[nn,k,:,tensor.size(2)-i-1] = _color_[color][k]
   return tensor
+
+#=======================================================================================#
+#=======================================================================================#
+def create_arrow(img_path, style, image_size=256, horizontal=False):
+
+  if style==0:
+    text = 'Multimodality'
+  elif style==1:
+    text = 'Multimodal Interp.'    
+  elif style==2:
+    text = 'Multi-label Interp.'        
+  else:
+    return
+
+  import cv2 as cv, numpy as np, ipdb
+  from PIL import Image, ImageFont, ImageDraw
+  img = cv.imread(img_path)  
+
+  #Draw arrow
+  size = image_size
+  if horizontal: n_start = 1
+  else: n_start = 2
+  pointY = [(n_start*size)+size//2, img.shape[0]-size//2]
+  pointX = [size//2, size//2]
+  cv.arrowedLine(img, (pointX[0], pointY[0]), (pointX[1], pointY[1]), (0,0,0), int(size//4), tipLength=0.08)
+  cv.arrowedLine(img, (pointX[1], pointY[1]), (pointX[0], pointY[0]), (0,0,0), int(size//4), tipLength=0.08) 
+
+  if horizontal:
+    ones = np.ones((size, img.shape[1], img.shape[2])).astype(np.uint8)*255
+    img = np.concatenate((img, ones),axis=0)  
+    pointY_h = [img.shape[0]-size//2, img.shape[0]-size//2]
+    pointX_h = [size+size//2, img.shape[1]-size//2]
+    cv.arrowedLine(img, (pointX_h[0], pointY_h[0]), (pointX_h[1], pointY_h[1]), (0,0,0), int(size//4), tipLength=0.08)
+    cv.arrowedLine(img, (pointX_h[1], pointY_h[1]), (pointX_h[0], pointY_h[0]), (0,0,0), int(size//4), tipLength=0.08) 
+
+  cv.imwrite(img_path, img)
+  # ipdb.set_trace()
+  #Write text
+  font = ImageFont.truetype("data/Times-Roman.otf", int(size//2.5)//2)  
+  textsize = font.getsize(text)
+  textX = size//2 + (pointY[1] - pointY[0] - textsize[0])//2
+  if horizontal: textX += size
+  textY = size//2 - textsize[1]//2
+  img = Image.open(img_path).convert('RGB').rotate(-90, expand=1)
+  draw = ImageDraw.Draw(img)  
+  draw.text((textX, textY ), text, font=font)
+  img = img.rotate(90,expand=1)
+  img.save(img_path)
+  if horizontal:
+    textX = size + size//2 + (pointX_h[1] - pointX_h[0] - textsize[0])//2
+    textY = img.size[1] - size//2 - textsize[1]//2
+    draw = ImageDraw.Draw(img)  
+    draw.text((textX, textY ), text, font=font)
+    img.save(img_path)    
 
 #=======================================================================================#
 #=======================================================================================#
@@ -77,7 +140,7 @@ def denorm(x):
 
 #=======================================================================================#
 #=======================================================================================#
-def get_aus(image_size, dataset, attr=None):
+def get_labels(image_size, dataset, attr=None):
   import imageio, glob, torch
   import skimage.transform  
   import numpy as np

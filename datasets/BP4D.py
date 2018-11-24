@@ -20,7 +20,8 @@ class BP4D(Dataset):
     self.image_size = image_size
     self.metadata_path = metadata_path
     self.name = 'BP4D'
-    file_txt = os.path.abspath(os.path.join(metadata_path.format('BP4D'), mode+'.txt'))
+    # file_txt = os.path.abspath(os.path.join(metadata_path.format('BP4D'), mode+'.txt'))
+    file_txt = os.path.abspath(os.path.join(metadata_path.format('BP4D'), 'train.txt'))
     if mode!='val' and hvd.rank() == 0: print("Data from: "+file_txt)
     self.lines = open(file_txt, 'r').readlines()
     if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
@@ -33,7 +34,8 @@ class BP4D(Dataset):
     self.filenames = []
     self.labels = []
     lines = [i.strip() for i in self.lines]
-    if self.mode=='train' or self.shuffling: random.shuffle(lines)   # random shuffling
+    # if self.mode=='train' or self.shuffling: random.shuffle(lines)   # random shuffling
+    random.shuffle(lines)
     for i, line in enumerate(lines):
       splits = line.split()
       filename = splits[0]
@@ -45,6 +47,7 @@ class BP4D(Dataset):
       label = []
       for value in values:
         label.append(int(value))
+      # if self.mode=='test' and 1 in label: continue ###REMOVE BEFORE RELEASE
       self.filenames.append(filename)
       self.labels.append(label)
 

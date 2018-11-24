@@ -19,6 +19,10 @@ def config_GENERATOR(config, update_folder):
       update_folder(config, 'ALL_ATTR_'+str(config.c_dim))   
 
   if config.dataset_fake=='AwA2':
+    config.save_epoch = 2
+    config.c_dim=12
+
+  if config.dataset_fake=='AwA2':
     config.save_epoch = 6
     if config.ALL_ATTR==1:
       update_folder(config, 'ALL_ATTR')
@@ -33,6 +37,11 @@ def config_GENERATOR(config, update_folder):
     if config.RafD_FRONTAL: config.save_epoch = 120
     if config.RafD_FRONTAL or config.RafD_EMOTIONS: config.c_dim=8
     else: config.c_dim=13
+
+  if config.dataset_fake=='BP4D':
+    config.c_dim=12
+    config.save_epoch = 2
+
 
   if config.dataset_fake=='Birds':
     config.c_dim=5
@@ -86,7 +95,7 @@ def config_GENERATOR(config, update_folder):
       config.c_dim = 2
       update_folder(config, 'ALL_ATTR_Handbags') 
     elif config.ALL_ATTR==3:
-      config.save_epoch = 3
+      config.save_epoch = 2
       config.c_dim = 2 
       update_folder(config, 'ALL_ATTR_Shoes') 
     elif config.ALL_ATTR==0:
@@ -127,7 +136,8 @@ def config_GENERATOR(config, update_folder):
   config.num_epochs_decay *= config.save_epoch#200    
 
   if config.MultiDis>0:
-    update_folder(config, 'MultiDis_scale'+str(config.MultiDis))
+    # update_folder(config, 'MultiDis_scale'+str(config.MultiDis))
+    update_folder(config, 'MultiDis_'+str(config.MultiDis))
 
   # if config.PerceptualLoss:
   if 'Perceptual' in config.GAN_options:
@@ -289,7 +299,16 @@ def config_GENERATOR(config, update_folder):
     update_folder(config, 'InstanceNorm')     
 
   if config.dataset_smit: 
-    update_folder(config, 'Finetuning_'+config.dataset_smit)         
+    update_folder(config, 'Finetuning_'+config.dataset_smit)      
+
+  if config.FIXED_G_CONV: 
+    update_folder(config, 'FIXED_G_CONV')  
+
+  if config.FIXED_D_CONV: 
+    update_folder(config, 'FIXED_D_CONV')  
+
+  if config.g_repeat_num!=6: 
+    update_folder(config, 'g_repeat_num_'+str(config.g_repeat_num))                 
 
   if 'RaGAN' in config.GAN_options:
     config.batch_size *= 2
@@ -336,14 +355,15 @@ def update_config(config):
 
   update_folder(config, os.path.join(config.mode_data, str(config.image_size), 'fold_'+config.fold))
   config.metadata_path = os.path.join(config.metadata_path, '{}', config.mode_data, 'fold_'+config.fold, )
-  config.g_repeat_num = 6 #if config.image_size <256  or ('Attention2' in config.GAN_options and 'InterStyleConcatLabels' in config.GAN_options) else 9 
-  config.g_conv_dim = config.g_conv_dim if config.image_size<256 else config.g_conv_dim//2
-  config.d_conv_dim = config.d_conv_dim if config.image_size<256 else config.d_conv_dim//2
+  # config.g_repeat_num = 6 #if config.image_size <256  or ('Attention2' in config.GAN_options and 'InterStyleConcatLabels' in config.GAN_options) else 9 
+  if not config.FIXED_G_CONV:
+    config.g_conv_dim = config.g_conv_dim if config.image_size<256 else config.g_conv_dim//2
+    config.g_conv_dim = config.g_conv_dim if config.image_size<512 else config.g_conv_dim//2
 
-  config.g_conv_dim = config.g_conv_dim if config.image_size<512 else config.g_conv_dim//2
-  config.d_conv_dim = config.d_conv_dim if config.image_size<512 else config.d_conv_dim//2
-
-  config.d_repeat_num = int(math.log(config.image_size,2)-1)
+  # config.d_conv_dim = config.d_conv_dim if config.image_size<256 else config.d_conv_dim//2
+  # config.d_conv_dim = config.d_conv_dim if config.image_size<512 else config.d_conv_dim//2
+  if not config.FIXED_D_CONV:
+    config.d_repeat_num = int(math.log(config.image_size,2)-1)
 
   config_GENERATOR(config, update_folder)
 

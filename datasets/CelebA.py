@@ -17,6 +17,7 @@ class CelebA(Dataset):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
+    self.mode = mode
     self.name = 'CelebA'
     self.all_attr = all_attr
     self.metadata_path = metadata_path
@@ -45,8 +46,8 @@ class CelebA(Dataset):
     with open('datasets/{}_histogram_attributes.txt'.format(self.name), 'w') as f:
       for key,value in sorted(dict_.items(), key = lambda kv: (kv[1],kv[0]), reverse=True):
         total+=value
-        PRINT(f, '{} {}'.format(key,value))
-      PRINT(f, 'TOTAL {}'.format(total))
+        if self.mode=='train': PRINT(f, '{} {}'.format(key,value))
+      if self.mode=='train': PRINT(f, 'TOTAL {}'.format(total))
 
 
 

@@ -33,43 +33,52 @@ def main(config):
                  config.mode, num_workers=config.num_workers, all_attr = config.ALL_ATTR, c_dim=config.c_dim,
                  HOROVOD=config.HOROVOD, continuous='CLS_L2' in config.GAN_options, many_faces=config.many_faces,
                  RafD_FRONTAL=config.RafD_FRONTAL, RafD_EMOTIONS=config.RafD_EMOTIONS)   
-  solver = Solver(config, data_loader)
+  # solver = Solver(config, data_loader)
 
   if config.DISPLAY_NET and config.mode_train=='GAN': 
+    solver = Solver(config, data_loader)
     solver.display_net(name='discriminator')
     solver.display_net(name='generator')
     return
 
   if config.LPIPS_REAL: 
-    solver.LPIPS_REAL()
+    from scores import Scores
+    scores = Scores(config, data_loader)
+    scores.LPIPS_REAL()
     return        
 
   if config.LPIPS_UNIMODAL: 
-    solver.LPIPS_UNIMODAL()
+    from scores import Scores
+    scores = Scores(config, data_loader)    
+    scores.LPIPS_UNIMODAL()
     return    
 
   if config.LPIPS_MULTIMODAL: 
-    solver.LPIPS_MULTIMODAL()
+    from scores import Scores
+    scores = Scores(config, data_loader)    
+    scores.LPIPS_MULTIMODAL()
     return  
 
   if config.INCEPTION: 
-    solver.INCEPTION()
+    from scores import Scores
+    scores = Scores(config, data_loader)    
+    scores.INCEPTION()
     return                     
 
   if config.mode == 'train':
-    solver.train()
-    solver.test(dataset=config.dataset_real, load=True)
-    # solver.test_cls()
-  elif config.mode == 'val':
-    solver.val(load=True)
-  elif config.mode == 'test':
-    if config.DEMO_PATH:
-      solver.DEMO(config.DEMO_PATH)    
-    else:
-      solver.test(dataset=config.dataset_real)
+    from train import Train
+    Train(config, data_loader)
+    from test import Test
+    test = Test(config, data_loader) 
+    test(dataset=config.dataset_real)
 
-    # solver.val_cls(load=True)
-    # solver.test_cls()
+  elif config.mode == 'test':
+    from test import Test
+    test = Test(config, data_loader)       
+    if config.DEMO_PATH:   
+      test.DEMO(config.DEMO_PATH)    
+    else:
+      test(dataset=config.dataset_real)
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
@@ -88,9 +97,9 @@ if __name__ == '__main__':
   parser.add_argument('--batch_size',         type=int, default=64)
   parser.add_argument('--num_workers',        type=int, default=4)
   parser.add_argument('--num_epochs',         type=int, default=100)
-  parser.add_argument('--num_epochs_decay',   type=int, default=30)
+  parser.add_argument('--num_epochs_decay',   type=int, default=80)
   parser.add_argument('--save_epoch',         type=int, default=1) #Save samples how many epochs
-  parser.add_argument('--model_epoch',        type=int, default=5) #Save models and weights every how many epochs
+  parser.add_argument('--model_epoch',        type=int, default=2) #Save models and weights every how many epochs
   parser.add_argument('--beta1',              type=float, default=0.5)
   parser.add_argument('--beta2',              type=float, default=0.999)
   parser.add_argument('--pretrained_model',   type=str, default=None)  
@@ -151,10 +160,11 @@ if __name__ == '__main__':
   parser.add_argument('--RafD_EMOTIONS',      action='store_true', default=False)
   parser.add_argument('--HOROVOD',            action='store_true', default=False)
   parser.add_argument('--DISC_DILATE',        action='store_true', default=False)
+  parser.add_argument('--FIXED_G_CONV',       action='store_true', default=False)
+  parser.add_argument('--FIXED_D_CONV',       action='store_true', default=False)
   parser.add_argument('--many_faces',         action='store_true', default=False)
   parser.add_argument('--GPU',                type=str, default='0')
   parser.add_argument('--Interpolation',      type=str, default='Linear', choices=['Linear', 'Spherical'])
-
 
   # Step size
   parser.add_argument('--log_step',           type=int, default=10)
@@ -164,9 +174,10 @@ if __name__ == '__main__':
   # Debug options
   parser.add_argument('--iter_test',          type=int, default=1)
   parser.add_argument('--iter_style',         type=int, default=40)
-  parser.add_argument('--style_debug',        type=int, default=5)
+  parser.add_argument('--style_debug',        type=int, default=4)
   parser.add_argument('--style_train_debug',  type=int, default=9)
-  parser.add_argument('--style_label_debug',  type=int, default=2, choices=[0,1,2,3,4,5,6,7])
+  parser.add_argument('--style_label_debug',  type=int, default=3, choices=[0,1,2,3,4,5,6,7])
+  # parser.add_argument('--style_label_debug',  type=int, default=0, choices=[0,1,2,3,4,5,6,7])
 
   config = parser.parse_args()
   config.GAN_options = config.GAN_options.split(',')
@@ -215,7 +226,7 @@ if __name__ == '__main__':
     of = 'a' if os.path.isfile(org_log) else 'wb'
     with open(org_log, of) as config.log:
       if hvd.rank() == 0: PRINT(config.log, ' '.join(sys.argv))
-      if hvd.rank() == 0: PRINT(config.log, config) 
+      if hvd.rank() == 0: _PRINT(config) 
       main(config)
     # last_sample = sorted(glob.glob(config.sample_path+'/*.jpg'))[-1]
     # os.system('echo {0} | mail -s "Training done - GPU {1} free" -A "{0}" rv.andres10@uniandes.edu.co'.format(msj, config.GPU))

@@ -20,6 +20,7 @@ class Image2Edges(Dataset):
     self.name = 'Image2Edges'
     self.all_attr = all_attr
     self.metadata_path = metadata_path
+    self.mode = mode
     mode = mode if mode=='train' else 'val'
     self.key_fn = lambda line: line.split('/')[-1].split('__')[1].split('.')[0]
 
@@ -59,6 +60,7 @@ class Image2Edges(Dataset):
     balanced = {key:0 for key in self.selected_attrs}
     for i, line in enumerate(self.lines):
       filename = os.path.abspath(line)
+      if self.mode=='test' and 'Image_' in filename: continue #Only test for edges->images
       key = self.key_fn(line)
       if key not in self.selected_attrs: continue
       if self.all_attr==0 and balanced[key]>=min(self.hist.values()): continue #Balancing all classes to the minimum
@@ -69,6 +71,7 @@ class Image2Edges(Dataset):
           label.append(1)
         else:
           label.append(0)
+
       self.filenames.append(filename)
       self.labels.append(label)
 

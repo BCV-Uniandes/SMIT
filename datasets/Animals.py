@@ -18,6 +18,7 @@ class Animals(Dataset):
     self.image_size = image_size
     self.shuffling = shuffling
     self.name = 'Animals'
+    self.mode = mode
     self.all_attr = all_attr
     self.metadata_path = metadata_path
     data_root = os.path.join('data','Animals', 'Animals_with_Attributes2')
@@ -79,7 +80,7 @@ class Animals(Dataset):
     self.labels = []
 
     lines = self.lines
-    if self.shuffling: random.shuffle(lines) 
+    if self.shuffling or self.mode=='test': random.shuffle(lines) 
     for i, line in enumerate(lines):
       _class = os.path.basename(line).split('_')[0]
       if _class not in self.selected_attrs: continue

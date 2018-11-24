@@ -7,7 +7,7 @@ from models.utils import print_debug as _print_debug
 from models.spectral import SpectralNorm as SpectralNormalization
 import ipdb
 import math
-from misc.utils import to_cuda, to_var,to_parallel
+from misc.utils import PRINT, to_cuda, to_var,to_parallel
 from misc.blocks import AdaptiveInstanceNorm2d, ResidualBlock, LinearBlock, Conv2dBlock, LayerNorm
 
 #===============================================================================================#
@@ -19,7 +19,11 @@ class Discriminator(nn.Module):
     layers = []
     image_size = config.image_size
     conv_dim = config.d_conv_dim
-    repeat_num = config.d_repeat_num    
+    if not config.FIXED_D_CONV:
+      conv_dim = conv_dim if image_size<256 else conv_dim//2
+      conv_dim = conv_dim if image_size<512 else conv_dim//2      
+
+    repeat_num = config.d_repeat_num      
     self.c_dim = config.c_dim
     self.config = config
     self.RafD = self.config.dataset_fake=='RafD'
@@ -74,7 +78,7 @@ class Discriminator(nn.Module):
 
     if debug:
       feed = to_var(torch.ones(1,color_dim,image_size,image_size), volatile=True, no_cuda=True)
-      print('-- Discriminator:')
+      PRINT(config.log, '-- Discriminator:')
       if self.DILATE:
         # ipdb.set_trace()
         features0 = print_debug(feed, self.main0)
@@ -132,8 +136,7 @@ class MultiDiscriminator(nn.Module):
 
     print_debug = lambda x,v: _print_debug(x, v, file=config.log)
 
-    # self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
-    self.downsample = lambda input: F.interpolate(input, size=input.size(2)//2, mode='bilinear', align_corners=True)
+    self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
     self.cnns_main = nn.ModuleList()
     if self.DILATE:
       self.cnns_main0 = nn.ModuleList()
@@ -142,18 +145,21 @@ class MultiDiscriminator(nn.Module):
     self.cnns_aux = nn.ModuleList()
     for idx in range(config.MultiDis):
       if self.DILATE:
-        self.cnns_main0.append(self._make_net(idx)[0][0])
-        self.cnns_dilate.append(self._make_net(idx)[0][1])  
-      self.cnns_main.append(self._make_net(idx)[0][-1])
-      self.cnns_src.append(self._make_net(idx)[1])
-      self.cnns_aux.append(self._make_net(idx)[2])
+        cnns_main0, cnns_dilate, cnns_main, cnns_src, cnns_aux = self._make_net(idx)
+        self.cnns_main0.append(cnns_main0)
+        self.cnns_dilate.append(cnns_dilate)  
+      else:
+        cnns_main, cnns_src, cnns_aux = self._make_net(idx) 
+      self.cnns_main.append(cnns_main[-1])
+      self.cnns_src.append(cnns_src)
+      self.cnns_aux.append(cnns_aux)
 
     if debug:
       feed = to_var(torch.ones(1, self.color_dim, self.image_size, self.image_size), volatile=True, no_cuda=True)
       if self.DILATE: modelList = zip(self.cnns_main0, self.cnns_dilate, self.cnns_main, self.cnns_src, self.cnns_aux)
       else: modelList = zip(self.cnns_main, self.cnns_src, self.cnns_aux)
-      for outs in modelList:
-        print('-- MultiDiscriminator ({}):'.format(idx))
+      for idx, outs in enumerate(modelList):
+        PRINT(config.log, '-- MultiDiscriminator ({}):'.format(idx))
         if self.DILATE:
           features0 = print_debug(feed, outs[0])
           features_dilated = print_debug(features0, outs[1])
@@ -161,22 +167,30 @@ class MultiDiscriminator(nn.Module):
           features = print_debug(features, outs[-3])   
         else:
           features = print_debug(feed, outs[-3])
+        # ipdb.set_trace()
         _ = print_debug(features, outs[-2])
         _ = print_debug(features, outs[-1]).view(feed.size(0), -1)     
         feed = self.downsample(feed)      
         
   def _make_net(self, idx=0):
-    conv_size = self.image_size/(2**(idx))   
+    image_size = self.image_size/(2**(idx))   
+    if self.config.FIXED_D_CONV:
+      self.repeat_num = 6
+    else:
+      self.repeat_num = int(math.log(image_size,2)-1)
+    self.conv_dim = self.conv_dim if image_size<256 else self.conv_dim//2
+    self.conv_dim = self.conv_dim if image_size<512 else self.conv_dim//2    
+    k_size = int(image_size / np.power(2, self.repeat_num))
     layers = [] 
     layers.append(self.SpectralNorm(nn.Conv2d(self.color_dim, self.conv_dim, kernel_size=4, stride=2, padding=1)))
     layers.append(nn.LeakyReLU(0.01, inplace=True))
     curr_dim = self.conv_dim
     _curr_dim = curr_dim
-    for i in range(1, self.repeat_num-1):
+    for i in range(1, self.repeat_num):
       layers.append(self.SpectralNorm(nn.Conv2d(_curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1)))
       layers.append(nn.LeakyReLU(0.01, inplace=True))
       curr_dim *= 2     
-      conv_size /= 2
+      # conv_size /= 2
       if self.DILATE and i==self.repeat_num-5:
         main0 = [nn.Sequential(*layers)]
         layers = []
@@ -192,7 +206,8 @@ class MultiDiscriminator(nn.Module):
       dilate = [nn.Sequential(*layers_dilate)]
       main = main0+dilate+main
     src = nn.Sequential(*[nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)])
-    aux = nn.Sequential(*[nn.Conv2d(curr_dim, self.c_dim, kernel_size=conv_size//2, bias=False)])
+    aux = nn.Sequential(*[nn.Conv2d(curr_dim, self.c_dim, kernel_size=k_size, bias=False)])
+    # ipdb.set_trace()
 
     return main, src, aux
 
@@ -260,7 +275,10 @@ class Generator(nn.Module):
     layers.append(nn.ReLU(inplace=True))     
 
     # Down-Sampling
-    conv_repeat = int(math.log(self.image_size, 2))-5 if self.image_size>64 else 2
+    if self.config.FIXED_G_CONV:
+      conv_repeat = 2  
+    else:
+      conv_repeat = int(math.log(self.image_size, 2))-5 if self.image_size>64 else 2
     curr_dim = conv_dim
     for i in range(conv_repeat):
       layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
@@ -358,7 +376,7 @@ class Generator(nn.Module):
 
       print_debug = lambda x,v: _print_debug(x, v, file=self.config.log)
 
-      print('-- Generator:')
+      PRINT(self.config.log, '-- Generator:')
       if self.InterLabels and self.DRIT: 
         c_dim = self.c_dim*2
         in_dim = self.color_dim
@@ -656,7 +674,7 @@ class StyleEncoder(nn.Module):
 
     if debug:
       feed = to_var(torch.ones(1,color_dim,image_size,image_size), volatile=True, no_cuda=True)
-      print('-- StyleEncoder:')
+      PRINT(config.log, '-- StyleEncoder:')
       features = print_debug(feed, layers)
       if self.FC:
         fc_in = features.view(features.size(0), -1)
@@ -691,7 +709,7 @@ class MLP(nn.Module):
 
     if debug:
       feed = to_var(torch.ones(1,input_dim), volatile=True, no_cuda=True)
-      print('-- MLP:')
+      PRINT(config.log, '-- MLP:')
       _ = print_debug(feed, self._model)    
 
   def forward(self, x):

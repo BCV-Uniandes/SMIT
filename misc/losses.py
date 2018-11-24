@@ -98,7 +98,8 @@ def _GAN_LOSS(Disc, real_x, fake_x, label, opts, is_fake=False, cross_entropy=Fa
     elif 'CLS_L1' in opts:
       loss_cls += _CLS_L1(cls_real[i], label)  
     else:
-      loss_cls += _CLS_LOSS(cls_real[i], label, cross_entropy=cross_entropy)      
+      # ipdb.set_trace()
+      loss_cls += _CLS_LOSS(cls_real[i], label, cross_entropy=cross_entropy)  
 
   return loss_src, loss_cls, [style_real, style_fake]
 

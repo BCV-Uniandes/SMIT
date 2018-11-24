@@ -11,7 +11,10 @@ def get_SN(bool):
     return lambda x:x
 
 def print_debug(feed, layers, file=None):
-  print(feed.size())
+  if file is not None:
+    PRINT(file, feed.size())
+  else:
+    print(feed.size())  
   for layer in layers:
     try:feed = layer(feed)
     except: ipdb.set_trace()
