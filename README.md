@@ -12,7 +12,7 @@
 SMIT default options are: 
 - Stochastic
 - AdaIn2 (uses all residuals layers as AdaIN)
-- Split_Optim (fixed weights)
+- Split_Optim (fixed weights in the Domain Controller)
 - InterStyleConcatLabels (introduces both label and style through AdaIN)
 - LayerNorm (normalization layer for upsampling. 
 
