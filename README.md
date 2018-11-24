@@ -11,7 +11,6 @@
 ### GAN_options
 SMIT default options are: Stochastic, AdaIn2 (uses all resduals as AdaIN), Split_Optim (fixed weights), InterStyleConcatLabels (introduces both label and style through AdaIN), LayerNorm (normalization layer for upsampling. 
 Other options improves SMIT: RaGAN (technique), HINGE (loss), SpectralNorm (normalization layer for discriminator), Attention (attention loss)
-./main.py -- --GPU=0 --dataset_fake=BP4D --GAN_options=RaGAN,Stochastic,AdaIn2,Split_Optim,InterStyleConcatLabels,HINGE,SpectralNorm,Attention,LayerNorm --mode_data=normal --image_size=256 --batch_size=16 --style_dim=20 --d_train_repeat=1 --lambda_cls=1 --ALL_ATTR=1 --lambda_style=0 --lambda_mask=0.1 --MultiDis=1
 
 ### mode_data
 It uses both, *faces* and *normal*. *faces* does not crop and just resize, *normal* randomly crop and resizes instead.
