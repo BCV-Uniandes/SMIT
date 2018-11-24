@@ -8,24 +8,34 @@
 # ./main.py -- --GPU... the double line in between is because IPython. Remove for python execution. 
 ```
 
-### GAN_options
-SMIT default options are: Stochastic, AdaIn2 (uses all resduals as AdaIN), Split_Optim (fixed weights), InterStyleConcatLabels (introduces both label and style through AdaIN), LayerNorm (normalization layer for upsampling. 
-Other options improves SMIT: RaGAN (technique), HINGE (loss), SpectralNorm (normalization layer for discriminator), Attention (attention loss)
+#### GAN_options
+SMIT default options are: 
+- Stochastic
+- AdaIn2 (uses all residuals layers as AdaIN)
+- Split_Optim (fixed weights)
+- InterStyleConcatLabels (introduces both label and style through AdaIN)
+- LayerNorm (normalization layer for upsampling. 
 
-### mode_data
+Other options improves SMIT: 
+- RaGAN (stabilization technique)
+- HINGE (loss) 
+- SpectralNorm (normalization layer for the discriminator)
+- Attention (attention loss)
+
+#### mode_data
 It uses both, *faces* and *normal*. *faces* does not crop and just resize, *normal* randomly crop and resizes instead.
 
-### style_dim
+#### style_dim
 All experiments were with stye_dim=20
 
-### lambda_style
+#### lambda_style
 This is probably one of the most important. It **must** be zero (0). Otherwise, SMIT will deploy a style encoder. 
 
-### MultiDis
+#### MultiDis
 Uses MultiDiscriminator by means of downsampling the input N times. It is the same whether this set to zero or one. 
 
-### lambda_mask
+#### lambda_mask
 Experiments that involves small changes (facial expressions and facial analsis) it is set to 0.1. Otherwise, 1.0.
 
-### ALL_ATTR
+#### ALL_ATTR
 This flag is optional. It only modifies the data loader. 
