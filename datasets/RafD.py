@@ -6,40 +6,29 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob  
-from misc.utils import _horovod
-hvd = _horovod()   
 
 ######################################################################################################
 ###                                              RafD                                              ###
 ######################################################################################################
 class RafD(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, RafD_EMOTIONS=False, RafD_FRONTAL=False, **kwargs):
+  def __init__(self, image_size, mode_data, transform, mode, shuffling=False, **kwargs):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
     self.name = 'RafD'
-    self.FRONTAL = RafD_FRONTAL
-    self.EMOTIONS = RafD_EMOTIONS
     data_root = os.path.join('data', 'RafD', '{}')
-    data_root = data_root.format('faces') if 'faces' in metadata_path else data_root.format('data')
+    data_root = data_root.format('faces') if mode_data=='faces' else data_root.format('data')
     self.lines = sorted(glob.glob(os.path.abspath(os.path.join(data_root,'*.jpg'))))
     self.mode = 'train' if mode=='train' else 'test'
     self.lines = self.get_subjects(self.lines, mode)
-    if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
     self.preprocess()
-    if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def preprocess(self):
-    self.pose = [0,45,90,135,180]
-
-    if self.FRONTAL or self.EMOTIONS: 
-      self.selected_attrs = ['neutral', 'angry', 'contemptuous', 'disgusted', 'fearful', 'happy', 'sad', 'surprised']
-      index = 0
-    else:
-      self.selected_attrs = ['pose_0', 'pose_45', 'pose_90', 'pose_135', 'pose_180',
-                    'neutral', 'angry', 'contemptuous', 'disgusted', 'fearful', 'happy', 'sad', 'surprised']
-      index = 5
+    self.selected_attrs = ['neutral', 'angry', 'contemptuous', 'disgusted', 'fearful', 'happy', 'sad', 'surprised']
+      
     self.idx2cls = {idx:key for idx, key in enumerate(self.selected_attrs)}
     self.cls2idx = {key:idx for idx, key in enumerate(self.selected_attrs)}    
     self.filenames = []
@@ -50,16 +39,8 @@ class RafD(Dataset):
     for i, line in enumerate(lines):
       _class = os.path.basename(line).split('_')[-2]
       pose = int(os.path.basename(line).split('_')[0].replace('Rafd',''))
-      if self.FRONTAL and pose!=90 and not self.EMOTIONS: continue
-      if (self.EMOTIONS and pose==0) or (self.EMOTIONS and pose==180): continue
-      # label = [pose, self.cls2idx[_class]]
+      if pose==0 pose==180: continue
       label = []
-      if not self.FRONTAL and not self.EMOTIONS:
-        for _pose in self.pose:
-          if _pose == pose:
-            label.append(1)
-          else:
-            label.append(0)
 
       for value in self.selected_attrs[index:]:
         if _class == value:
@@ -104,7 +85,7 @@ class RafD(Dataset):
 
 
 def train_inception(batch_size, \
-        shuffling = False, num_workers=4, HOROVOD=False, **kwargs):
+        shuffling = False, num_workers=4, **kwargs):
 
   from torchvision.models import inception_v3
   from misc.utils import to_var, to_cuda, to_data
@@ -112,12 +93,8 @@ def train_inception(batch_size, \
   from torch.utils.data import DataLoader
   import torch.nn.functional as F
   import torch, torch.nn as nn, tqdm, ipdb
-  from misc.utils import _horovod
-  hvd = _horovod()  
-  hvd.init()
 
   metadata_path = os.path.join('data', 'RafD', 'normal')
-  kwargs['RafD_EMOTIONS'] = True
   # inception Norm
 
   image_size = 299
@@ -132,14 +109,9 @@ def train_inception(batch_size, \
 
   dataset_train = RafD(image_size, metadata_path, transform, 'train', shuffling=True, **kwargs)
   dataset_test = RafD(image_size, metadata_path, transform, 'test', shuffling=False, **kwargs)
-  if not HOROVOD:
-    train_loader = DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader = DataLoader(dataset=dataset_test, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-  else:
-    data_sampler = torch.utils.data.distributed.DistributedSampler(dataset_train, num_replicas=hvd.size(), rank=hvd.rank())    
-    train_loader = DataLoader(dataset_train, batch_size=batch_size, sampler=data_sampler, shuffle=False, num_workers=num_workers)
-    data_sampler = torch.utils.data.distributed.DistributedSampler(dataset_test, num_replicas=hvd.size(), rank=hvd.rank())    
-    test_loader = DataLoader(dataset_test, batch_size=batch_size, sampler=data_sampler, shuffle=False, num_workers=num_workers)    
+
+  train_loader = DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+  test_loader = DataLoader(dataset=dataset_test, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
   num_labels = len(train_loader.dataset.labels[0])
   n_epochs = 100

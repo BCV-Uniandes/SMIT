@@ -6,9 +6,7 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob  
-from misc.utils import _horovod
 from generate_data import Face
-hvd = _horovod()   
 
 ######################################################################################################
 ###                                              DEMO                                              ###

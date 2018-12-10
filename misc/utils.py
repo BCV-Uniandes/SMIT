@@ -45,6 +45,26 @@ def compute_lpips(img0, img1, model=None):
 
 #=======================================================================================#
 #=======================================================================================#
+def config_yaml(config, yaml_file):
+
+  def dict_dataset(dict):
+    import os
+    if 'dataset' in dict.keys():
+      config.dataset_fake = os.path.join(config.dataset_fake, dict['dataset'])
+
+  import yaml
+  with open(yaml_file, 'r') as stream:
+    config_yaml = yaml.load(stream)  
+  dict_dataset(config_yaml)
+  for key, value in config_yaml.items():
+    if 'ALL_ATTR' in key and config.ALL_ATTR>0:
+      config.c_dim = config_yaml['ALL_ATTR_{}'.format(config.ALL_ATTR)]['c_dim']
+      dict_dataset(config_yaml['ALL_ATTR_{}'.format(config.ALL_ATTR)])
+    else:
+      setattr(config, key, value)  
+
+#=======================================================================================#
+#=======================================================================================#
 def color_frame(tensor, thick=5, color='green', first=False):
   import ipdb
   _color_ = {'green': (-1,1,-1), 'red': (1,-1,-1), 'blue': (-1,-1,1)}
@@ -184,22 +204,6 @@ def get_loss_value(x):
 def get_torch_version():
   import torch
   return float('.'.join(torch.__version__.split('.')[:2]))
-
-#=======================================================================================#
-#=======================================================================================#
-def _horovod():
-  try:
-    import horovod.torch as hvd
-  except:
-    class hvd():
-      def init(self):
-        pass
-      def size(self):
-        return 1
-      def rank(self):
-        return 0
-    hvd = hvd()    
-  return hvd 
 
 #=======================================================================================#
 #=======================================================================================#
@@ -376,25 +380,6 @@ def target_debug_list(size, dim, config=None):
     # if config.dataset_fake in ['RafD', 'painters_14', 'Animals', 'Image2Weather', 'Image2Season'] and j==0: continue
     # if j==0: continue
     if j>0: target_c[:,j-1]=1 
-    if not config.RafD_FRONTAL and not config.RafD_EMOTIONS:
-      if config.dataset_fake=='RafD' and j==0: target_c[:,2] = 1
-      if config.dataset_fake=='RafD' and j<=5: target_c[:,10] = 1
-      if config.dataset_fake=='RafD' and j>=6: target_c[:,2] = 1
-    else:
-      if config.dataset_fake=='RafD' and j==0: target_c[:,0] = 1
-
-    # if config.dataset_fake=='BAM' and j<=10: 
-    #   target_c[:,10] = 1; target_c[:,13] = 1
-    if config.dataset_fake=='BAM' and j<=5: 
-      target_c[:,4] = 1
-    elif config.dataset_fake=='BAM': 
-      target_c[:,1] = 1
-    # ipdb.set_trace()     
-# 9, 4, 7
-# 'content_bicycle', 'content_bird', 'content_building', 'content_cars', 'content_cat', 'content_dog', 'content_flower', 'content_people', 'content_tree', 
-# 'emotion_gloomy', 'emotion_happy', 'emotion_peaceful', 'emotion_scary', 
-# 'media_3d_graphics', 'media_comic', 'media_graphite', 'media_oilpaint', 'media_pen_ink', 'media_vectorart', 'media_watercolor'      
-
     # ipdb.set_trace()
     target_c_list.append(to_var(target_c, volatile=True))        
   return target_c_list
@@ -453,13 +438,8 @@ def to_data(x, cpu=False):
 def to_parallel(main, input, list_gpu):
   import torch
   import torch.nn as nn
-  import ipdb
   if len(list_gpu)>1 and input.is_cuda:
-    if get_torch_version()>0.3:
-      return nn.parallel.data_parallel(main, input,  device_ids = list_gpu)
-    else:  
-      return nn.parallel.data_parallel(main, input,  device_ids = list_gpu)
-      # ipdb.set_trace()
+    return nn.parallel.data_parallel(main, input,  device_ids = list_gpu)
   else:
     return main(input)
 
@@ -478,40 +458,3 @@ def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
     from torch.autograd import Variable      
     if isinstance(x, Variable): return x
     return Variable(x, volatile=volatile, requires_grad=requires_grad)  
-
-#=======================================================================================#
-#=======================================================================================#
-def vgg_preprocess(batch, meta):
-  import torch, ipdb
-  if batch.size(-1)==128:
-    batch = batch.repeat(1,1,2,2)
-
-  if batch.size(-1)>=256:
-    center = batch.size(-1)/2
-    vgg_size = meta['imSize']
-    batch = batch[:,:,center-vgg_size[0]/2:center+vgg_size[0]/2,center-vgg_size[1]/2:center+vgg_size[1]/2]
-
-  tensortype = type(batch.data)
-  if meta['name']=='ImageNet' or meta['name']=='EmoNet':
-    batch = (batch + 1) * 0.5 # [-1, 1] -> [0, 1]
-
-  elif meta['name']=='DeepFace' or meta['name']=='Style':
-    (r, g, b) = torch.chunk(batch, 3, dim = 1)
-    batch = torch.cat((b, g, r), dim = 1) # convert RGB to BGR
-    batch = (batch + 1) * 255 * 0.5 # [-1, 1] -> [0, 255]
-  else:
-    raise TypeError('You must preprocess data.')
-
-  mean = tensortype(batch.data.size())
-  mean[:, 0, :, :] = meta['mean'][0] #103.939
-  mean[:, 1, :, :] = meta['mean'][1] #116.779
-  mean[:, 2, :, :] = meta['mean'][2] #123.680
-
-  std = tensortype(batch.data.size())
-  std[:, 0, :, :] = meta['std'][0] 
-  std[:, 1, :, :] = meta['std'][1] 
-  std[:, 2, :, :] = meta['std'][2] 
-
-  batch = batch.sub(to_var(mean)) # subtract mean
-  batch = batch.div(to_var(std))  # divide std
-  return batch    

@@ -6,21 +6,20 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob 
-from misc.utils import _horovod, PRINT
-hvd = _horovod()   
+from misc.utils import PRINT
  
 ######################################################################################################
 ###                                              CelebA                                            ###
 ######################################################################################################
 class CelebA(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, all_attr=0, **kwargs):
+  def __init__(self, image_size, mode_data, transform, mode, shuffling=False, all_attr=0, **kwargs):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
     self.mode = mode
     self.name = 'CelebA'
     self.all_attr = all_attr
-    self.metadata_path = metadata_path
+    self.mode_data = mode_data
     self.lines = open(os.path.abspath('data/CelebA/list_attr_celeba.txt')).readlines()
     self.splits = {line.split(',')[0]:int(line.strip().split(',')[1]) for line in  open(os.path.abspath('data/CelebA/train_val_test.txt')).readlines()[1:]}
     self.mode_allowed = [0,1] if mode=='train' else [2]
@@ -29,10 +28,10 @@ class CelebA(Dataset):
     self.attr2idx = {}
     self.idx2attr = {}    
 
-    if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
     self.preprocess()
-    if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def histogram(self):
     values = np.array([int(i) for i in self.lines[2].split()[1:]])*0
@@ -68,38 +67,11 @@ class CelebA(Dataset):
         'Sideburns', 'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings', 'Wearing_Hat', 'Wearing_Lipstick',
         'Wearing_Necklace', 'Wearing_Necktie', 'Young'
       ] # Total: 40
-    elif self.all_attr==2:
-      self.selected_attrs = [
-        '5_o_Clock_Shadow', 'Arched_Eyebrows', 'Attractive', 'Bags_Under_Eyes', 'Bald', 'Bangs', 'Big_Lips', 'Big_Nose',
-        'Black_Hair', 'Blond_Hair', 'Blurry', 'Brown_Hair', 'Bushy_Eyebrows', 'Chubby', 'Double_Chin', 'Eyeglasses',
-        'Goatee', 'Gray_Hair', 'Heavy_Makeup', 'High_Cheekbones', 'Male', 'Mouth_Slightly_Open', 'Mustache',
-        'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Receding_Hairline', 'Rosy_Cheeks',
-        'Sideburns', 'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings', 'Wearing_Lipstick',
-        'Young'
-      ] #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie'. Total: 37
-    elif self.all_attr==3:
-      self.selected_attrs = [
-        'Arched_Eyebrows', 'Bushy_Eyebrows', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair', 
-        'Brown_Hair', 'Gray_Hair', 'Straight_Hair', 'Wavy_Hair',
-        'Chubby', 'Eyeglasses', 'Heavy_Makeup', 'Male', 'Mouth_Slightly_Open', 'Mustache',
-        'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Rosy_Cheeks',
-        'Smiling', 'Young'
-      ] 
 
-      #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie', 'Sideburns',
-      # '5_o_Clock_Shadow', 'Attractive', Bags_Under_Eyes', 'Bald', 'Blurry', 'Double_Chin', 'Goatee'
-      # 'High_Cheekbones', 'Receding_Hairline', 'Wearing_Earrings', 'Wearing_Lipstick'. Total: 25
-
-    elif self.all_attr==4:
+    else:
       self.selected_attrs = ['Eyeglasses', 'Bangs', 'Black_Hair', 'Blond_Hair', 
         'Brown_Hair', 'Gray_Hair', 'Male', 'Pale_Skin', 'Smiling', 'Young'] 
 
-      #Missing: 'Wearing_Hat', 'Wearing_Necklace', 'Wearing_Necktie', 'Sideburns',
-      # '5_o_Clock_Shadow', 'Attractive', Bags_Under_Eyes', 'Bald', 'Blurry', 'Double_Chin', 'Goatee'
-      # 'High_Cheekbones', 'Receding_Hairline', 'Wearing_Earrings', 'Wearing_Lipstick'. Total: 25      
-
-    elif self.all_attr==0:
-      self.selected_attrs = ['Eyeglasses', 'Male', 'Pale_Skin', 'Smiling', 'Young'] 
     for i, attr in enumerate(self.selected_attrs):
       self.attr2idx[attr] = i
       self.idx2attr[i] = attr
@@ -112,7 +84,7 @@ class CelebA(Dataset):
       splits = line.split()
       if self.splits[splits[0]] not in self.mode_allowed: continue
       img_size = '_'+str(self.image_size) if self.image_size==128 else '' 
-      if 'faces' in self.metadata_path:
+      if self.mode_data=='faces':
         filename = os.path.abspath('data/CelebA/Faces/{}'.format(splits[0]))
       else:
         filename = os.path.abspath('data/CelebA/data_align/{}'.format(splits[0]))

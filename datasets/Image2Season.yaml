@@ -1,0 +1,12 @@
+# Copyright (C) 2017 NVIDIA Corporation.  All rights reserved.
+# Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
+
+# logger options
+mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 
+Identity: False         # With identity loss
+Deterministic: False    # Deterministic approach
+Slim_Generator: True    # Fast SMIT
+save_epoch: 30          # 30 epochs of this dataset represents ~6000 iterations
+c_dim: 4                # Number of domains
+  
+lambda_mask: 1.0        # Lambda for attention loss

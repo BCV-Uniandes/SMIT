@@ -4,8 +4,6 @@ import torch.nn.functional as F
 import numpy as np
 from misc.utils import color_frame, create_dir, get_torch_version, slerp, single_source, TimeNow, TimeNow_str, to_data, to_var
 import torch.utils.data.distributed
-from misc.utils import _horovod
-hvd = _horovod()
 
 warnings.filterwarnings('ignore')
 

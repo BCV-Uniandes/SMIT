@@ -6,27 +6,26 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob 
-from misc.utils import _horovod, PRINT
-hvd = _horovod()   
+from misc.utils import PRINT    
  
 ######################################################################################################
 ###                                              CelebA                                            ###
 ######################################################################################################
 class painters_14(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, all_attr=-1, **kwargs):
+  def __init__(self, image_size, mode_data, transform, mode, shuffling=False, all_attr=-1, **kwargs):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
     self.name = 'painters_14'
     self.all_attr = all_attr
-    self.metadata_path = metadata_path
+    self.mode_data = mode_data
     self.lines = sorted(glob.glob('data/painters_14/{}*/*.jpg'.format(mode)))
     self.attr2idx = {line.split('/')[-1].split('_')[1]:idx for idx, line in enumerate(sorted(glob.glob('data/painters_14/{}*'.format(mode))))}
     self.idx2attr = {idx:line.split('/')[-1].split('_')[1] for idx, line in enumerate(sorted(glob.glob('data/painters_14/{}*'.format(mode))))}
-    if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
     self.preprocess()
-    if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def histogram(self):
     values = {key:0 for key in self.attr2idx.keys()}
@@ -42,12 +41,9 @@ class painters_14(Dataset):
 
   def preprocess(self):
     self.histogram()
-    if self.all_attr==1:
-      self.selected_attrs = [key for key,value in sorted(self.attr2idx.items(), key= lambda kv: (kv[1],kv[0]))]#self.attr2idx.keys()
+    self.selected_attrs = [key for key,value in sorted(self.attr2idx.items(), key= lambda kv: (kv[1],kv[0]))]#self.attr2idx.keys()
       # ['beksinski', 'boudin', 'burliuk', 'cezanne', 'chagall', 'corot', 
       #  'earle', 'gauguin', 'hassam', 'levitan', 'monet', 'picasso', 'ukiyoe', 'vangogh']
-    else:
-      self.selected_attrs = ['cezanne', 'monet', 'picasso', 'ukiyoe', 'vangogh']
     self.filenames = []
     self.labels = []
 

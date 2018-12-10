@@ -6,21 +6,20 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob  
-from misc.utils import _horovod, PRINT
-hvd = _horovod()   
+from misc.utils import PRINT
 
 ######################################################################################################
 ###                                              AwA2                                              ###
 ######################################################################################################
 class Animals(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, all_attr=-1, continuous=True, **kwargs):
+  def __init__(self, image_size, mode_data, transform, mode, shuffling=False, all_attr=-1, continuous=True, **kwargs):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
     self.name = 'Animals'
     self.mode = mode
     self.all_attr = all_attr
-    self.metadata_path = metadata_path
+    self.mode_data = mode_data
     data_root = os.path.join('data','Animals', 'Animals_with_Attributes2')
     self.lines = sorted(glob.glob(os.path.abspath(os.path.join(data_root,'JPEGImages','*', '*.jpg'))))
     _replace = lambda line: line.strip().replace('   ',' ').replace('  ',' ').split(' ')
@@ -28,10 +27,10 @@ class Animals(Dataset):
     self.idx2cls = {key(line)[0]: key(line)[1] for line in open(os.path.join(data_root, 'classes.txt')).readlines()}
     self.cls2idx = {key(line)[1]: key(line)[0] for line in open(os.path.join(data_root, 'classes.txt')).readlines()}
 
-    if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
     self.preprocess()
-    if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def histogram(self):
     # ipdb.set_trace()
@@ -64,17 +63,13 @@ class Animals(Dataset):
               'bobcat', 'pig', 'lion', 'mouse', 'polar+bear', 'collie', 'walrus', 'raccoon', 'cow', 'dolphin'
               ]
 
-    elif self.all_attr==2:
+    else:
       self.selected_attrs = [
                             'dalmatian', 'german+shepherd', 'collie', 'wolf',
                             'grizzly+bear', 'gorilla', 'giant+panda', 'polar+bear',
                             'antelope', 'horse', 'ox', 'buffalo', 'zebra', 'cow',
                             'tiger', 'leopard', 'lion', 
                             ] # 17
-
-    elif self.all_attr==0:
-      self.selected_attrs = ['dalmatian', 'german+shepherd', 'chihuahua', 'persian+cat', 'collie',
-                            'siamese+cat', 'leopard', 'lion'] 
 
     self.filenames = []
     self.labels = []

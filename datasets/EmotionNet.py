@@ -5,38 +5,32 @@ from torch.utils.data import Dataset
 from PIL import Image
 import ipdb
 import numpy as np
-import glob  
-from misc.utils import _horovod
-hvd = _horovod()   
+import glob    
 
 ######################################################################################################
 ###                                            EmotionNet                                          ###
 ######################################################################################################
 class EmotionNet(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling = False, **kwargs):
+  def __init__(self, image_size, mode_data, transform, mode, shuffling = False, **kwargs):
     self.transform = transform
     self.mode = mode
     self.shuffling = shuffling
     self.name = 'EmotionNet'
     self.image_size = image_size if image_size>=128 else 130
-    if os.path.isdir('/home/afromero/ssd2/EmotionNet2018'):
-      if 'faces' in metadata_path:
-        self.ssd = '/home/afromero/ssd2/EmotionNet2018/faces/{}'.format(mode)
-      else:
-        self.ssd = '/home/afromero/ssd2/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
+    if mode_data=='faces':
+      self.ssd = '/home/afromero/ssd2/EmotionNet2018/faces/{}'.format(mode)
     else:
-      self.ssd = '/scratch_net/pengyou/Felipe/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
-
-    file_txt = os.path.abspath(os.path.join(metadata_path.format('EmotionNet'), mode+'.txt'))
-    if mode!='val' and hvd.rank() == 0: print("Data from: "+file_txt)
+      self.ssd = '/home/afromero/ssd2/EmotionNet2018/data_{}/{}'.format(self.image_size, mode)
+      file_txt = os.path.abspath(os.path.join('data', 'EmotionNet', mode_data, mode+'.txt'))
+    if mode!='val': print("Data from: "+file_txt)
     self.lines = open(file_txt, 'r').readlines()
 
-    if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1)
     # random.seed(1234)
     self.preprocess()
     self.num_data = len(self.filenames)
-    if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def preprocess(self):
     self.filenames = []

@@ -6,29 +6,27 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob  
-from misc.utils import _horovod
-hvd = _horovod()   
+from misc.utils import PRINT  
 
 ######################################################################################################
 ###                                                BP4D                                            ###
 ######################################################################################################
 class BP4D(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling = False, **kwargs):
+  def __init__(self, image_size, mode_data, transform, mode, shuffling = False, **kwargs):
     self.transform = transform
     self.mode = mode
     self.shuffling = shuffling
     self.image_size = image_size
-    self.metadata_path = metadata_path
+    self.mode_data = mode_data
     self.name = 'BP4D'
-    # file_txt = os.path.abspath(os.path.join(metadata_path.format('BP4D'), mode+'.txt'))
-    file_txt = os.path.abspath(os.path.join(metadata_path.format('BP4D'), 'train.txt'))
-    if mode!='val' and hvd.rank() == 0: print("Data from: "+file_txt)
+    file_txt = os.path.abspath(os.path.join('data', 'BP4D', mode_data, mode+'.txt'))
+    if mode!='val': print("Data from: "+file_txt)
     self.lines = open(file_txt, 'r').readlines()
-    if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
     self.preprocess()
     self.num_data = len(self.filenames)
-    if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def preprocess(self):
     self.filenames = []
@@ -39,7 +37,7 @@ class BP4D(Dataset):
     for i, line in enumerate(lines):
       splits = line.split()
       filename = splits[0]
-      if not 'faces' in self.metadata_path:
+      if self.mode_data!='faces':
         filename = filename.replace('Faces', 'Sequences_400')
       if not os.path.isfile(filename) or os.stat(filename).st_size==0: 
         continue#ipdb.set_trace()

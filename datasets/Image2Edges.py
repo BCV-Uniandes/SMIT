@@ -6,20 +6,19 @@ from PIL import Image
 import ipdb
 import numpy as np
 import glob 
-from misc.utils import _horovod, PRINT
-hvd = _horovod()   
+from misc.utils import PRINT    
  
 ######################################################################################################
 ###                                              CelebA                                            ###
 ######################################################################################################
 class Image2Edges(Dataset):
-  def __init__(self, image_size, metadata_path, transform, mode, shuffling=False, all_attr=-1, **kwargs):
+  def __init__(self, image_size, mode_data, transform, mode, shuffling=False, all_attr=-1, **kwargs):
     self.transform = transform
     self.image_size = image_size
     self.shuffling = shuffling
     self.name = 'Image2Edges'
     self.all_attr = all_attr
-    self.metadata_path = metadata_path
+    self.mode_data = mode_data
     self.mode = mode
     mode = mode if mode=='train' else 'val'
     self.key_fn = lambda line: line.split('/')[-1].split('__')[1].split('.')[0]
@@ -28,10 +27,10 @@ class Image2Edges(Dataset):
     # ipdb.set_trace()
     self.attr2idx = {self.key_fn(line):idx for idx, line in enumerate(self.lines)}
     self.idx2attr = {idx:self.key_fn(line) for idx, line in enumerate(self.lines)}
-    if mode!='val' and hvd.rank() == 0: print ('Start preprocessing %s: %s!'%(self.name, mode))
+    if mode!='val': print ('Start preprocessing %s: %s!'%(self.name, mode))
     random.seed(1234)
     self.preprocess()
-    if mode!='val' and hvd.rank() == 0: print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
+    if mode!='val': print ('Finished preprocessing %s: %s (%d)!'%(self.name, mode, self.num_data))
 
   def histogram(self):
     self.hist = {key:0 for key in self.attr2idx.keys()}
@@ -47,11 +46,11 @@ class Image2Edges(Dataset):
 
   def preprocess(self):
     self.histogram()
-    if self.all_attr==0 or self.all_attr==1: #all_attr==0 means ALL BALANCED
+    if self.all_attr==2: #all_attr==0 means ALL BALANCED
       self.selected_attrs = [key for key,value in sorted(self.attr2idx.items(), key = lambda kv: (kv[1],kv[0]))]#self.attr2idx.keys()
-    elif self.all_attr==2:
+    elif self.all_attr==1:
       self.selected_attrs =['Edges_Handbags', 'Image_Handbags']
-    elif self.all_attr==3:
+    else:
       self.selected_attrs =['Edges_Shoes', 'Image_Shoes']
     self.filenames = []
     self.labels = []
