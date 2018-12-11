@@ -1,38 +1,43 @@
-
 def update_folder(config, folder):
-  import os
-  config.log_path = os.path.join(config.log_path, folder)
-  config.sample_path = os.path.join(config.sample_path, folder)
-  config.model_save_path =os.path.join(config.model_save_path, folder)
+    import os
+    config.log_path = os.path.join(config.log_path, folder)
+    config.sample_path = os.path.join(config.sample_path, folder)
+    config.model_save_path = os.path.join(config.model_save_path, folder)
+
 
 def remove_folder(config):
-  import os
-  samples = os.path.join(config.sample_path, '*.jpg')
-  samples_txt = os.path.join(config.sample_path, '*.txt')
-  models = os.path.join(config.model_save_path, '*.pth')
-  print("YOU ARE ABOUT TO REMOVE EVERYTHING IN:\n{}\n{}\n{}".format(samples, samples_txt, models))
-  raw_input("ARE YOU SURE?")
-  os.system("rm {} {} {}".format(samples, samples_txt, models))
+    import os
+    samples = os.path.join(config.sample_path, '*.jpg')
+    samples_txt = os.path.join(config.sample_path, '*.txt')
+    models = os.path.join(config.model_save_path, '*.pth')
+    print("YOU ARE ABOUT TO REMOVE EVERYTHING IN:\n{}\n{}\n{}".format(
+        samples, samples_txt, models))
+    raw_input("ARE YOU SURE?")
+    os.system("rm {} {} {}".format(samples, samples_txt, models))
+
 
 def update_config(config):
-  import os, glob, math, imageio
+    import os, glob, math, imageio
 
-  update_folder(config, config.dataset_fake)
-  if '/' in config.dataset_fake: config.dataset_fake = config.dataset_fake.split('/')[0]
-  config.batch_size *= 2 #RaGAN
-  config.num_epochs *= config.save_epoch#500
-  config.num_epochs_decay *= config.save_epoch#200    
+    update_folder(config, config.dataset_fake)
+    if '/' in config.dataset_fake:
+        config.dataset_fake = config.dataset_fake.split('/')[0]
+    config.batch_size *= 2  #RaGAN
+    config.num_epochs *= config.save_epoch  #500
+    config.num_epochs_decay *= config.save_epoch  #200
 
-  # config_GENERATOR(config, update_folder)
+    # config_GENERATOR(config, update_folder)
 
-  if config.DELETE:
-    remove_folder(config)
+    if config.DELETE:
+        remove_folder(config)
 
-  if config.pretrained_model is None:  
-    try:
-      config.pretrained_model = sorted(glob.glob(os.path.join(config.model_save_path, '*_G.pth')))[-1]
-      config.pretrained_model = '_'.join(os.path.basename(config.pretrained_model).split('_')[:-1])
-    except:
-      pass
+    if config.pretrained_model is None:
+        try:
+            config.pretrained_model = sorted(
+                glob.glob(os.path.join(config.model_save_path, '*_G.pth')))[-1]
+            config.pretrained_model = '_'.join(
+                os.path.basename(config.pretrained_model).split('_')[:-1])
+        except:
+            pass
 
-  return config
+    return config
