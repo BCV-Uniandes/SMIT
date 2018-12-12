@@ -164,7 +164,7 @@ class Test(Solver):
             data_loader = self.data_loader
         else:
             data_loader = get_loader(
-                self.config.metadata_path,
+                self.config.mode_data,
                 self.config.image_size,
                 self.config.batch_size,
                 shuffling=True,
@@ -172,7 +172,7 @@ class Test(Solver):
                 mode='test')
 
         if not self.config.Deterministic:
-            _debug = range(self.config.style_label_debug + 1)
+            _debug = range(1, self.config.style_label_debug + 1)
             style_all = self.G.random_style(self.config.batch_size)
         else:
             style_all = None
@@ -197,13 +197,19 @@ class Test(Solver):
                 self.save_multimodal_output(real_x, 1 - org_c, name)
 
             self.generate_SMIT(
-                real_x,
-                name,
-                label=label,
-                output=True,
-                fixed_style=style_all,
-                TIME=not i)
+                real_x, name, label=label, fixed_style=style_all, TIME=not i)
 
             if not self.config.Deterministic:
                 for k in _debug:
-                    self.generate_SMIT(real_x, name, label=label, Multimodal=k)
+                    self.generate_SMIT(
+                        real_x,
+                        name,
+                        label=label,
+                        Multimodal=k,
+                        TIME=not i and k == 1)
+                    self.generate_SMIT(
+                        real_x,
+                        name,
+                        label=label,
+                        Multimodal=k,
+                        fixed_style=style_all)

@@ -283,23 +283,24 @@ class Solver(object):
             ]
             style_hair = ['Bald', 'Straight_Hair', 'Wavy_Hair']
             ammount_hair = ['Bald', 'Bangs']
-            if all_attr[index - 1] in color_hair:
-                color_hair.remove(all_attr[index - 1])
+            if all_attr[index] in color_hair:
+                color_hair.remove(all_attr[index])
                 for attr in color_hair:
                     if attr in all_attr:
                         target[:, attr2idx[attr]] = 0
-                target[:, index - 1] = 1
-            if all_attr[index - 1] in style_hair:
-                style_hair.remove(all_attr[index - 1])
+                target[:, index] = 1
+            if all_attr[index] in style_hair:
+                style_hair.remove(all_attr[index])
                 for attr in style_hair:
                     if attr in all_attr:
                         target[:, attr2idx[attr]] = 0
-                target[:, index - 1] = 1
-            if all_attr[index - 1] in ammount_hair:
-                ammount_hair.remove(all_attr[index - 1])
+                target[:, index] = 1
+            if all_attr[index] in ammount_hair:
+                ammount_hair.remove(all_attr[index])
                 for attr in ammount_hair:
                     if attr in all_attr:
                         target[:, attr2idx[attr]] = 0
+        return target
 
     # ==================================================================#
     # ==================================================================#
@@ -384,14 +385,12 @@ class Solver(object):
                         target = (out_label - target)**2  # Swap labels
                         target = self.target_multiAttr(target, k)
                     start_time = time.time()
-                    # import ipdb; ipdb.set_trace()
                     target, style = Modality(target, style, Multimodal)
                     fake_x = self.G(real_x, target, style)
                     elapsed = time.time() - start_time
                     elapsed = str(datetime.timedelta(seconds=elapsed))
                     if TIME and flag_time:
-                        print("[{}] Time/batch for one single \
-                                    forward (bs:{}): {}".format(
+                        print("[{}] Time/batch single forward (bs:{}): {}".format(
                             modal, real_x.size(0), elapsed))
                         flag_time = False
 
