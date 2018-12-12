@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-##################################################################################
+# ==================================================================#
 # Normalization layers
-##################################################################################
+# ==================================================================#
 class AdaptiveInstanceNorm2d(nn.Module):
     def __init__(self, num_features, eps=1e-5, momentum=0.1):
         super(AdaptiveInstanceNorm2d, self).__init__()
@@ -20,7 +20,8 @@ class AdaptiveInstanceNorm2d(nn.Module):
         self.register_buffer('running_var', torch.ones(num_features))
 
     def forward(self, x):
-        assert self.weight is not None and self.bias is not None, "Please assign weight and bias before calling AdaIN!"
+        assert self.weight is not None and self.bias is not None, \
+            "Please assign weight and bias before calling AdaIN!"
         b, c = x.size(0), x.size(1)
         running_mean = self.running_mean.repeat(b)
         running_var = self.running_var.repeat(b)
@@ -36,8 +37,8 @@ class AdaptiveInstanceNorm2d(nn.Module):
         return self.__class__.__name__ + '(' + str(self.num_features) + ')'
 
 
-#===============================================================================================#
-#===============================================================================================#
+# ==================================================================#
+# ==================================================================#
 class ResidualBlock(nn.Module):
     """Residual Block."""
 
@@ -76,8 +77,8 @@ class ResidualBlock(nn.Module):
         return x + self.main(x)
 
 
-#===============================================================================================#
-#===============================================================================================#
+# ==================================================================#
+# ==================================================================#
 class LayerNorm(nn.Module):
     def __init__(self, num_features, eps=1e-5, affine=True):
         super(LayerNorm, self).__init__()
@@ -101,8 +102,8 @@ class LayerNorm(nn.Module):
         return x
 
 
-#===============================================================================================#
-#===============================================================================================#
+# ==================================================================#
+# ==================================================================#
 class LinearBlock(nn.Module):
     def __init__(self, input_dim, output_dim, norm='none', activation='relu'):
         super(LinearBlock, self).__init__()
@@ -148,8 +149,8 @@ class LinearBlock(nn.Module):
         return out
 
 
-#===============================================================================================#
-#===============================================================================================#
+# ==================================================================#
+# ==================================================================#
 class Conv2dBlock(nn.Module):
     def __init__(self,
                  input_dim,

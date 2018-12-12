@@ -1,16 +1,12 @@
 from __future__ import print_function
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def circle_frame(tensor, thick=5, color='green', row_color=None):
-    import ipdb
-    import numpy as np, torch
-    # import matplotlib.pyplot as plt
+    import numpy as np
+    import torch
     from scipy import ndimage
-    # _color_ = {'green': (-1,1,-1), 'red': (1,-1,-1), 'blue': (-1,-1,1)}
-    # _color_ = {'green': (-1,-1,-1), 'red': (-1,-1,-1), 'blue': (-1,-1,-1)}
-    # _color_ = {'green': (1,-1,1), 'red': (1,-1,1), 'blue': (1,-1,1)}
     _color_ = {'green': (-1, -1, 1), 'red': (-1, -1, 1), 'blue': (-1, -1, 1)}
     _tensor = tensor.clone()
     size = tensor.size(2)
@@ -30,15 +26,17 @@ def circle_frame(tensor, thick=5, color='green', row_color=None):
     for i in range(donut.shape[0]):
         donut[i] = donut[i] * _color_[color][i]
     donut = to_var(torch.FloatTensor(donut), volatile=True)
-    if row_color is None: row_color = [0, -1]
-    else: row_color = [row_color]
-    for nn in row_color:  #First and last frame
+    if row_color is None:
+        row_color = [0, -1]
+    else:
+        row_color = [row_color]
+    for nn in row_color:  # First and last frame
         _tensor[nn] = tensor[nn] + donut
     return _tensor
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def compute_lpips(img0, img1, model=None):
     # RGB image from must be [-1,1]
     if model is None:
@@ -51,8 +49,8 @@ def compute_lpips(img0, img1, model=None):
     return dist, model
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def config_yaml(config, yaml_file):
     def dict_dataset(dict):
         import os
@@ -73,25 +71,25 @@ def config_yaml(config, yaml_file):
             setattr(config, key, value)
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def color_frame(tensor, thick=5, color='green', first=False):
-    import ipdb
     _color_ = {'green': (-1, 1, -1), 'red': (1, -1, -1), 'blue': (-1, -1, 1)}
     # tensor = to_data(tensor)
     for i in range(thick):
         for k in range(tensor.size(1)):
             # for nn in [0,-1]: #First and last frame
-            for nn in [0]:  #First
+            for nn in [0]:  # First
                 tensor[nn, k, i, :] = _color_[color][k]
-                if first: tensor[nn, k, :, i] = _color_[color][k]
+                if first:
+                    tensor[nn, k, :, i] = _color_[color][k]
                 tensor[nn, k, tensor.size(2) - i - 1, :] = _color_[color][k]
                 tensor[nn, k, :, tensor.size(2) - i - 1] = _color_[color][k]
     return tensor
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def create_arrow(img_path, style, image_size=256, horizontal=False):
 
     if style == 0:
@@ -103,14 +101,17 @@ def create_arrow(img_path, style, image_size=256, horizontal=False):
     else:
         return
 
-    import cv2 as cv, numpy as np, ipdb
+    import cv2 as cv
+    import numpy as np
     from PIL import Image, ImageFont, ImageDraw
     img = cv.imread(img_path)
 
-    #Draw arrow
+    # Draw arrow
     size = image_size
-    if horizontal: n_start = 1
-    else: n_start = 2
+    if horizontal:
+        n_start = 1
+    else:
+        n_start = 2
     pointY = [(n_start * size) + size // 2, img.shape[0] - size // 2]
     pointX = [size // 2, size // 2]
     cv.arrowedLine(
@@ -140,12 +141,12 @@ def create_arrow(img_path, style, image_size=256, horizontal=False):
             tipLength=0.08)
 
     cv.imwrite(img_path, img)
-    # ipdb.set_trace()
-    #Write text
+    # Write text
     font = ImageFont.truetype("data/Times-Roman.otf", int(size // 2.5) // 2)
     textsize = font.getsize(text)
     textX = size // 2 + (pointY[1] - pointY[0] - textsize[0]) // 2
-    if horizontal: textX += size
+    if horizontal:
+        textX += size
     textY = size // 2 - textsize[1] // 2
     img = Image.open(img_path).convert('RGB').rotate(-90, expand=1)
     draw = ImageDraw.Draw(img)
@@ -161,8 +162,8 @@ def create_arrow(img_path, style, image_size=256, horizontal=False):
         img.save(img_path)
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def create_circle(size=256):
     import numpy as np
     xx, yy = np.mgrid[:size, :size]
@@ -173,41 +174,52 @@ def create_circle(size=256):
     return bin_circle
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def create_dir(dir):
     import os
     if '.' in os.path.basename(dir):
         dir = os.path.dirname(dir)
-    if not os.path.isdir(dir): os.makedirs(dir)
+    if not os.path.isdir(dir):
+        os.makedirs(dir)
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def denorm(x):
     out = (x + 1) / 2
     return out.clamp_(0, 1)
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def get_labels(image_size, dataset, attr=None):
-    import imageio, glob, torch
+    import imageio
+    import glob
+    import torch
     import skimage.transform
     import numpy as np
-    import ipdb
 
-    imread = lambda x: imageio.imread(x)
-    resize = lambda x: skimage.transform.resize(x, (image_size, image_size))
+    def imread(x):
+        return imageio.imread(x)
+
+    def resize(x):
+        return skimage.transform.resize(x, (image_size, image_size))
+
     if dataset not in ['EmotionNet', 'BP4D']:
         from data.attr2img import external2img
         selected_attrs = []
         for attr in attr.selected_attrs:
-            if attr == 'Male': attr = 'Male/_Female'
-            elif attr == 'Young': attr = 'Young/_Old'
-            elif 'Hair' in attr: pass
-            elif dataset == 'CelebA': attr += '_Swap'
-            else: pass
+            if attr == 'Male':
+                attr = 'Male/_Female'
+            elif attr == 'Young':
+                attr = 'Young/_Old'
+            elif 'Hair' in attr:
+                pass
+            elif dataset == 'CelebA':
+                attr += '_Swap'
+            else:
+                pass
             selected_attrs.append(attr)
 
         labels = ['Source'] + selected_attrs
@@ -215,46 +227,45 @@ def get_labels(image_size, dataset, attr=None):
         imgs = [resize(np.array(img)).transpose(2, 0, 1) for img in imgs]
     else:
         imgs_file = sorted(glob.glob('data/{}/aus_flat/*g'.format(dataset)))
-        imgs_file.pop(1)  #Removing 'off'
+        imgs_file.pop(1)  # Removing 'off'
         imgs = [resize(imread(line)).transpose(2, 0, 1) for line in imgs_file]
     imgs = torch.from_numpy(np.concatenate(imgs, axis=2).astype(
         np.float32)).unsqueeze(0)
-    # from torchvision.utils import save_image; save_image(imgs, 'meh.jpg', nrow=1, padding=0)
     return imgs
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def get_loss_value(x):
-    import torch
     if get_torch_version() > 0.3:
         return x.item()
     else:
         return x.data[0]
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def get_torch_version():
     import torch
     return float('.'.join(torch.__version__.split('.')[:2]))
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def imgShow(img):
     from torchvision.utils import save_image
     try:
         save_image(denorm(img).cpu(), 'dummy.jpg')
-    except:
+    except BaseException:
         save_image(denorm(img.data).cpu(), 'dummy.jpg')
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def load_inception(path='data/RafD/normal/inception_v3.pth'):
     from torchvision.models import inception_v3
-    import torch, torch.nn as nn
+    import torch
+    import torch.nn as nn
     state_dict = torch.load(path)
     net = inception_v3(pretrained=False, transform_input=True)
     print("Loading inception_v3 from " + path)
@@ -267,21 +278,22 @@ def load_inception(path='data/RafD/normal/inception_v3.pth'):
     return net
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def make_gif(imgs, path, im_size=256, total_styles=5):
-    import imageio, numpy as np, ipdb, math
-    if 'jpg' in path: path = path.replace('jpg', 'gif')
+    import imageio
+    import numpy as np
+    if 'jpg' in path:
+        path = path.replace('jpg', 'gif')
     imgs = (imgs.cpu().numpy().transpose(0, 2, 3, 1) * 255).astype(np.uint8)
-    # ipdb.set_trace()
     target_size = (im_size, im_size, imgs.shape[-1])
     img_list = []
     for x in range(imgs.shape[2] // im_size):
         for bs in range(imgs.shape[0]):
-            # ipdb.set_trace()
             if x == 0 and bs > 1:
-                continue  #Only save one image of the originals
-            if x == 1: continue  #Do not save any of the 'off' label
+                continue  # Only save one image of the originals
+            if x == 1:
+                continue  # Do not save any of the 'off' label
             img_short = imgs[bs, :, im_size * x:im_size * (x + 1)]
             assert img_short.shape == target_size
             img_list.append(img_short)
@@ -293,8 +305,39 @@ def make_gif(imgs, path, im_size=256, total_styles=5):
     writer.close()
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
+def Modality(target, style, Multimodality):
+    import numpy as np
+    import torch
+
+    # Style interpolation | Fixed Labels
+    if Multimodality == 2:
+        z0 = to_data(style[0], cpu=True).numpy()
+        z1 = to_data(style[1], cpu=True).numpy()
+        z_interp = style.clone()
+        z_interp[:] = torch.FloatTensor(
+            np.array([
+                slerp(sz, z0, z1) for sz in np.linspace(0, 1, style.size(0))
+            ]))
+        style = z_interp
+
+    # Style constant | Progressive swap label
+    elif Multimodality == 3:
+        label_space = np.linspace(0, 1, target.size(0))
+        for j, i in enumerate(range(target.size(0))):
+            style[i] = style[0].clone()
+            target[i].data.fill_(
+                (target[i] * label_space[j] +
+                 (1 - target[i]) * (1 - label_space[j])).data[0])
+
+    return target, style
+
+
+# ==================================================================#
+# ==================================================================#
+
+
 def one_hot(labels, dim):
     """Convert label indices to one-hot vector"""
     import torch
@@ -305,21 +348,21 @@ def one_hot(labels, dim):
     return out
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def PRINT(file, str):
     print(str, file=file)
     file.flush()
     print(str)
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def plot_txt(txt_file):
     import matplotlib.pyplot as plt
     lines = [line.strip().split() for line in open(txt_file).readlines()]
     legends = {idx: line
-               for idx, line in enumerate(lines[0][1:])}  #0 is epochs
+               for idx, line in enumerate(lines[0][1:])}  # 0 is epochs
     lines = lines[1:]
     epochs = []
     losses = {loss: [] for loss in legends.values()}
@@ -328,9 +371,6 @@ def plot_txt(txt_file):
         for idx, loss in enumerate(line[1:]):
             losses[legends[idx]].append(float(loss))
 
-    # import matplotlib as mpl
-    # mpl.use('Agg')
-    import matplotlib.pyplot as plt
     import pylab as pyl
     plot_file = txt_file.replace('.txt', '.pdf')
     _min = 4 if len(losses.keys()) > 9 else 3
@@ -346,20 +386,18 @@ def plot_txt(txt_file):
         plt.xlabel('Epoch', fontsize=16)
         ax1.tick_params(labelsize=8)
         plt.hold(False)
-        # plt.legend(['Training', 'Validation'], loc=1,prop={'size':10})
-        # ax1.text(ax1.get_xlim()[1]*1.08, ax1.get_ylim()[1]*0.88, params, style='italic', size=7,
-        #         bbox={'facecolor':'green', 'alpha':0.5, 'pad':3})
         plt.grid()
-    plt.subplots_adjust(left=None, bottom=None, right=None, top=None,\
-                        wspace=0.5, hspace=0.5)
+    plt.subplots_adjust(
+        left=None, bottom=None, right=None, top=None, wspace=0.5, hspace=0.5)
     pyl.savefig(plot_file, dpi=100)
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def pdf2png(filename):
     from wand.image import Image
     from wand.color import Color
+    import os
     with Image(filename="{}.pdf".format(filename), resolution=500) as img:
         with Image(
                 width=img.width, height=img.height,
@@ -369,26 +407,26 @@ def pdf2png(filename):
     os.remove('{}.pdf'.format(filename))
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def replace_weights(target, source, list):
     for l in list:
         target[l] = source[l]
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def send_mail(body="bcv002",
               attach=[],
               subject='Message from bcv002',
               to='rv.andres10@uniandes.edu.co'):
-    import os, ipdb, time
+    import os
     content_type = {
         'jpg': 'image/jpeg',
         'gif': 'image/gif',
         'mp4': 'video/mp4'
     }
-    if len(attach):  #Must be a list with the files
+    if len(attach):  # Must be a list with the files
         enclosed = []
         for line in attach:
             format = line.split('.')[-1]
@@ -402,18 +440,18 @@ def send_mail(body="bcv002",
     os.system(mail)
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def single_source(tensor):
-    import torch, math
+    import torch
     source = torch.ones_like(tensor)
-    middle = 0  #int(math.ceil(tensor.size(0)/2.))-1
+    middle = 0  # int(math.ceil(tensor.size(0)/2.))-1
     source[middle] = tensor[0]
     return source
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def slerp(val, low, high):
     """
   original: Animating Rotation with Quaternion Curves, Ken Shoemake
@@ -430,45 +468,43 @@ def slerp(val, low, high):
         (1.0 - val) * omega) / so * low + np.sin(val * omega) / so * high
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def target_debug_list(size, dim, config=None):
-    import torch, ipdb
+    import torch
     target_c = torch.zeros(size, dim)
     target_c_list = []
-    for j in range(dim + 1):
+    for j in range(dim):
         target_c[:] = 0
-        # if config.dataset_fake in ['RafD', 'painters_14', 'Animals', 'Image2Weather', 'Image2Season'] and j==0: continue
-        # if j==0: continue
-        if j > 0: target_c[:, j - 1] = 1
-        # ipdb.set_trace()
+        target_c[:, j] = 1
         target_c_list.append(to_var(target_c, volatile=True))
     return target_c_list
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def TimeNow():
-    import datetime, pytz
+    import datetime
+    import pytz
     return str(datetime.datetime.now(
         pytz.timezone('Europe/Amsterdam'))).split('.')[0]
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def TimeNow_str():
     import re
-    return re.sub('\D', '_', TimeNow())
+    return re.sub(r'\D', '_', TimeNow())
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def to_cpu(x):
     return x.cpu() if x.is_cuda else x
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def to_cuda(x):
     import torch
     import torch.nn as nn
@@ -488,23 +524,23 @@ def to_cuda(x):
             return x
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def to_data(x, cpu=False):
-    import torch
     if get_torch_version() > 0.3:
         x = x.data
     else:
         from torch.autograd import Variable
-        if isinstance(x, Variable): x = x.data
-    if cpu: x = to_cpu(x)
+        if isinstance(x, Variable):
+            x = x.data
+    if cpu:
+        x = to_cpu(x)
     return x
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def to_parallel(main, input, list_gpu):
-    import torch
     import torch.nn as nn
     if len(list_gpu) > 1 and input.is_cuda:
         return nn.parallel.data_parallel(main, input, device_ids=list_gpu)
@@ -512,11 +548,11 @@ def to_parallel(main, input, list_gpu):
         return main(input)
 
 
-#=======================================================================================#
-#=======================================================================================#
+# ==================================================================#
+# ==================================================================#
 def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
-    import torch
-    if not no_cuda: x = to_cuda(x)
+    if not no_cuda:
+        x = to_cuda(x)
     if get_torch_version() > 0.3:
         if requires_grad:
             return x.requires_grad_(True)
@@ -525,5 +561,6 @@ def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
 
     else:
         from torch.autograd import Variable
-        if isinstance(x, Variable): return x
+        if isinstance(x, Variable):
+            return x
         return Variable(x, volatile=volatile, requires_grad=requires_grad)

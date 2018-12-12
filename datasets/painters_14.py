@@ -3,15 +3,14 @@ import os
 import random
 from torch.utils.data import Dataset
 from PIL import Image
-import ipdb
-import numpy as np
 import glob
 from misc.utils import PRINT
 
+# ==================================================================#
+# == Painters_14
+# ==================================================================#
 
-######################################################################################################
-###                                              CelebA                                            ###
-######################################################################################################
+
 class painters_14(Dataset):
     def __init__(self,
                  image_size,
@@ -67,17 +66,20 @@ class painters_14(Dataset):
         self.selected_attrs = [
             key for key, value in sorted(
                 self.attr2idx.items(), key=lambda kv: (kv[1], kv[0]))
-        ]  #self.attr2idx.keys()
+        ]  # self.attr2idx.keys()
         # ['beksinski', 'boudin', 'burliuk', 'cezanne', 'chagall', 'corot',
-        #  'earle', 'gauguin', 'hassam', 'levitan', 'monet', 'picasso', 'ukiyoe', 'vangogh']
+        #  'earle', 'gauguin', 'hassam', 'levitan', 'monet', 'picasso',
+        # 'ukiyoe', 'vangogh']
         self.filenames = []
         self.labels = []
 
-        if self.shuffling: random.shuffle(self.lines)
+        if self.shuffling:
+            random.shuffle(self.lines)
         for i, line in enumerate(self.lines):
             filename = os.path.abspath(line)
             key = line.split('/')[-2].split('_')[1]
-            if key not in self.selected_attrs: continue
+            if key not in self.selected_attrs:
+                continue
             label = []
             for attr in self.selected_attrs:
                 if attr == key:

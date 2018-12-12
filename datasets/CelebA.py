@@ -3,15 +3,15 @@ import os
 import random
 from torch.utils.data import Dataset
 from PIL import Image
-import ipdb
 import numpy as np
 import glob
 from misc.utils import PRINT
 
+# ==================================================================#
+# == CelebA
+# ==================================================================#
 
-######################################################################################################
-###                                              CelebA                                            ###
-######################################################################################################
+
 class CelebA(Dataset):
     def __init__(self,
                  image_size,

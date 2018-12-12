@@ -1,14 +1,21 @@
 from torch.utils.data import DataLoader
-from torchvision import transforms, datasets
+from torchvision import transforms
 from PIL import Image
 import importlib
 
 
-######################################################################################################
-###                                              LOADER                                            ###
-######################################################################################################
-def get_loader(mode_data, image_size, batch_size, \
-        dataset='BP4D', mode='train', shuffling = False, num_workers=0, HOROVOD=False, **kwargs):
+# ==================================================================#
+# ==                           LOADER                             ==#
+# ==================================================================#
+def get_loader(mode_data,
+               image_size,
+               batch_size,
+               dataset='BP4D',
+               mode='train',
+               shuffling=False,
+               num_workers=0,
+               HOROVOD=False,
+               **kwargs):
 
     mean = (0.5, 0.5, 0.5)
     std = (0.5, 0.5, 0.5)
@@ -25,7 +32,6 @@ def get_loader(mode_data, image_size, batch_size, \
             transforms.Resize((image_size + window, image_size + window),
                               interpolation=Image.ANTIALIAS)
         ]
-        # transform+=[transforms.CenterCrop((image_size, image_size))]
         transform += [
             transforms.RandomResizedCrop(
                 image_size, scale=(0.7, 1.0), ratio=(0.8, 1.2))
@@ -36,8 +42,6 @@ def get_loader(mode_data, image_size, batch_size, \
             transforms.Resize((image_size + window, image_size + window),
                               interpolation=Image.ANTIALIAS)
         ]
-        # transform+=[transforms.CenterCrop((image_size, image_size))]
-        # transform+=[transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0), ratio=(0.9, 1.2))]
         transform += [
             transforms.RandomResizedCrop(
                 image_size, scale=(0.7, 1.0), ratio=(0.8, 1.2))
@@ -63,7 +67,3 @@ def get_loader(mode_data, image_size, batch_size, \
         shuffle=False,
         num_workers=num_workers)
     return data_loader
-
-
-######################################################################################################
-######################################################################################################

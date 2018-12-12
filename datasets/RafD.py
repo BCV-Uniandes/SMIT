@@ -3,14 +3,14 @@ import os
 import random
 from torch.utils.data import Dataset
 from PIL import Image
-import ipdb
 import numpy as np
 import glob
 
+# ==================================================================#
+# == RafD
+# ==================================================================#
 
-######################################################################################################
-###                                              RafD                                              ###
-######################################################################################################
+
 class RafD(Dataset):
     def __init__(self,
                  image_size,
@@ -56,15 +56,17 @@ class RafD(Dataset):
         self.labels = []
 
         lines = self.lines
-        if self.shuffling: random.shuffle(lines)
+        if self.shuffling:
+            random.shuffle(lines)
         for i, line in enumerate(lines):
             _class = os.path.basename(line).split('_')[-2]
             pose = int(
                 os.path.basename(line).split('_')[0].replace('Rafd', ''))
-            if pose == 0 or pose == 180: continue
+            if pose == 0 or pose == 180:
+                continue
             label = []
 
-            for value in self.selected_attrs[index:]:
+            for value in self.selected_attrs:
                 if _class == value:
                     label.append(1)
                 else:
@@ -97,7 +99,7 @@ class RafD(Dataset):
         subjects = sorted(
             list(
                 set([os.path.basename(line).split('_')[1] for line in lines])))
-        split = 10  #90-10
+        split = 10  # 90-10
         new_lines = []
         if mode == 'train':
             mode_subjects = subjects[:9 * len(subjects) / split]
@@ -105,19 +107,21 @@ class RafD(Dataset):
             mode_subjects = subjects[9 * len(subjects) / split:]
         for line in lines:
             subject = os.path.basename(line).split('_')[1]
-            if subject in mode_subjects: new_lines.append(line)
+            if subject in mode_subjects:
+                new_lines.append(line)
         return new_lines
 
 
-def train_inception(batch_size, \
-        shuffling = False, num_workers=4, **kwargs):
+def train_inception(batch_size, shuffling=False, num_workers=4, **kwargs):
 
     from torchvision.models import inception_v3
     from misc.utils import to_var, to_cuda, to_data
-    from torchvision import transforms, datasets
+    from torchvision import transforms
     from torch.utils.data import DataLoader
     import torch.nn.functional as F
-    import torch, torch.nn as nn, tqdm, ipdb
+    import torch
+    import torch.nn as nn
+    import tqdm
 
     metadata_path = os.path.join('data', 'RafD', 'normal')
     # inception Norm

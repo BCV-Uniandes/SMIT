@@ -4,8 +4,9 @@ import os
 import argparse
 from data_loader import get_loader
 import glob
-import math
-import os, glob, ipdb, imageio, numpy as np, config as cfg, warnings, sys
+import config as cfg
+import warnings
+import sys
 from misc.utils import PRINT, config_yaml
 warnings.filterwarnings('ignore')
 
@@ -27,8 +28,6 @@ def _PRINT(config):
 
 def main(config):
     from torch.backends import cudnn
-    import torch
-    from solver import Solver
     # For fast training
     cudnn.benchmark = True
 
@@ -75,10 +74,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=100)
     parser.add_argument('--num_epochs_decay', type=int, default=80)
     parser.add_argument(
-        '--save_epoch', type=int, default=1)  #Save samples how many epochs
+        '--save_epoch', type=int, default=1)  # Save samples how many epochs
     parser.add_argument(
         '--model_epoch', type=int,
-        default=2)  #Save models and weights every how many epochs
+        default=2)  # Save models and weights every how many epochs
     parser.add_argument('--beta1', type=float, default=0.5)
     parser.add_argument('--beta2', type=float, default=0.999)
     parser.add_argument('--pretrained_model', type=str, default=None)
@@ -131,8 +130,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '--style_label_debug',
         type=int,
-        default=3,
-        choices=[0, 1, 2, 3, 4, 5, 6, 7])
+        default=2,
+        choices=[0, 1, 2])
 
     config = parser.parse_args()
 
@@ -148,7 +147,8 @@ if __name__ == '__main__':
 
     if config.mode == 'train':
         # Create directories if not exist
-        if not os.path.exists(config.log_path): os.makedirs(config.log_path)
+        if not os.path.exists(config.log_path):
+            os.makedirs(config.log_path)
         if not os.path.exists(config.model_save_path):
             os.makedirs(config.model_save_path)
         if not os.path.exists(config.sample_path):
