@@ -1,3 +1,4 @@
+[![Build Status](http://marr.uniandes.edu.co/api/badges/BCV-Uniandes/SMIT/status.svg)](http://marr.uniandes.edu.co/BCV-Uniandes/SMIT)
 
 # **SMIT**: Stochastic Multi-Label Image-to-image Translation 
 
