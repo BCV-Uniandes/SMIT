@@ -93,12 +93,8 @@ class Train(Solver):
     def _GAN_LOSS(self, real_x, fake_x, label, is_fake=False):
         cross_entropy = self.config.dataset_fake in [
             'painters_14', 'Animals', 'Image2Weather', 'Image2Season',
-            'Image2Edges', 'Yosemite'
+            'Image2Edges', 'Yosemite', 'RafD,'
         ]
-        cross_entropy = cross_entropy or (self.config.dataset_fake == 'RafD'
-                                          and self.config.RafD_FRONTAL)
-        cross_entropy = cross_entropy or (self.config.dataset_fake == 'RafD'
-                                          and self.config.RafD_EMOTIONS)
         if cross_entropy:
             label = torch.max(label, dim=1)[1]
         return _GAN_LOSS(
