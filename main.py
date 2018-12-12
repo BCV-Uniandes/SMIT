@@ -128,10 +128,7 @@ if __name__ == '__main__':
     parser.add_argument('--style_debug', type=int, default=4)
     parser.add_argument('--style_train_debug', type=int, default=9)
     parser.add_argument(
-        '--style_label_debug',
-        type=int,
-        default=2,
-        choices=[0, 1, 2])
+        '--style_label_debug', type=int, default=2, choices=[0, 1, 2])
 
     config = parser.parse_args()
 
