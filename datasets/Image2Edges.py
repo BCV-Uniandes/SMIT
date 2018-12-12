@@ -3,15 +3,14 @@ import os
 import random
 from torch.utils.data import Dataset
 from PIL import Image
-import ipdb
-import numpy as np
 import glob
 from misc.utils import PRINT
 
+# ==================================================================#
+# == Image2Edges
+# ==================================================================#
 
-######################################################################################################
-###                                              CelebA                                            ###
-######################################################################################################
+
 class Image2Edges(Dataset):
     def __init__(self,
                  image_size,
@@ -29,11 +28,9 @@ class Image2Edges(Dataset):
         self.mode_data = mode_data
         self.mode = mode
         mode = mode if mode == 'train' else 'val'
-        self.key_fn = lambda line: line.split('/')[-1].split('__')[1].split('.')[0]
 
         self.lines = sorted(
             glob.glob('data/{}/edges2*/{}/*__*.jpg'.format(self.name, mode)))
-        # ipdb.set_trace()
         self.attr2idx = {
             self.key_fn(line): idx
             for idx, line in enumerate(self.lines)
@@ -49,6 +46,9 @@ class Image2Edges(Dataset):
         if mode != 'val':
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
                                                            self.num_data))
+
+    def key_fn(self, line):
+        return line.split('/')[-1].split('__')[1].split('.')[0]
 
     def histogram(self):
         self.hist = {key: 0 for key in self.attr2idx.keys()}
@@ -67,11 +67,11 @@ class Image2Edges(Dataset):
 
     def preprocess(self):
         self.histogram()
-        if self.all_attr == 2:  #all_attr==0 means ALL BALANCED
+        if self.all_attr == 2:  # all_attr==0 means ALL BALANCED
             self.selected_attrs = [
                 key for key, value in sorted(
                     self.attr2idx.items(), key=lambda kv: (kv[1], kv[0]))
-            ]  #self.attr2idx.keys()
+            ]  # self.attr2idx.keys()
         elif self.all_attr == 1:
             self.selected_attrs = ['Edges_Handbags', 'Image_Handbags']
         else:
@@ -79,16 +79,18 @@ class Image2Edges(Dataset):
         self.filenames = []
         self.labels = []
 
-        if self.shuffling: random.shuffle(self.lines)
+        if self.shuffling:
+            random.shuffle(self.lines)
         balanced = {key: 0 for key in self.selected_attrs}
         for i, line in enumerate(self.lines):
             filename = os.path.abspath(line)
             if self.mode == 'test' and 'Image_' in filename:
-                continue  #Only test for edges->images
+                continue  # Only test for edges->images
             key = self.key_fn(line)
-            if key not in self.selected_attrs: continue
+            if key not in self.selected_attrs:
+                continue
             if self.all_attr == 0 and balanced[key] >= min(self.hist.values()):
-                continue  #Balancing all classes to the minimum
+                continue  # Balancing all classes to the minimum
             balanced[key] += 1
             label = []
             for attr in self.selected_attrs:
@@ -123,9 +125,7 @@ class Image2Edges(Dataset):
 
 if __name__ == '__main__':
     # mpirun -np 10 ipython datasets/Image2Edges.py
-    from PIL import Image
     from tqdm import tqdm
-    import ipdb
     lines = sorted(glob.glob('data/Image2Edges/edges2*/*/*AB.jpg'))
     for line in tqdm(lines, total=len(lines), desc='Spliting images'):
         edges_file = line.replace(
@@ -140,4 +140,3 @@ if __name__ == '__main__':
         edges = img.crop((0, 0, 256, 256))
         edges.save(edges_file)
         image.save(image_file)
-        # ipdb.set_trace()

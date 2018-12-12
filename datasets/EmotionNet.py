@@ -3,14 +3,12 @@ import os
 import random
 from torch.utils.data import Dataset
 from PIL import Image
-import ipdb
-import numpy as np
-import glob
+
+# ==================================================================#
+# == EmotionNet
+# ==================================================================#
 
 
-######################################################################################################
-###                                            EmotionNet                                          ###
-######################################################################################################
 class EmotionNet(Dataset):
     def __init__(self,
                  image_size,
@@ -32,7 +30,8 @@ class EmotionNet(Dataset):
                 self.image_size, mode)
             file_txt = os.path.abspath(
                 os.path.join('data', 'EmotionNet', mode_data, mode + '.txt'))
-        if mode != 'val': print("Data from: " + file_txt)
+        if mode != 'val':
+            print("Data from: " + file_txt)
         self.lines = open(file_txt, 'r').readlines()
 
         if mode != 'val':
@@ -54,9 +53,9 @@ class EmotionNet(Dataset):
         for i, line in enumerate(lines):
             splits = line.split()
             filename = os.path.join(self.ssd, splits[0])
-            if not os.path.isfile(
-                    filename):  # or os.stat(filename).st_size==0:
-                ipdb.set_trace()
+            # or os.stat(filename).st_size==0:
+            if not os.path.isfile(filename):
+                continue
             values = splits[1:]
 
             label = []

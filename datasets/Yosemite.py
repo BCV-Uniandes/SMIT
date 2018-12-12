@@ -3,15 +3,14 @@ import os
 import random
 from torch.utils.data import Dataset
 from PIL import Image
-import ipdb
-import numpy as np
 import glob
 from misc.utils import PRINT
 
+# ==================================================================#
+# == Yosemite
+# ==================================================================#
 
-######################################################################################################
-###                                              CelebA                                            ###
-######################################################################################################
+
 class Yosemite(Dataset):
     def __init__(self,
                  image_size,
@@ -66,24 +65,23 @@ class Yosemite(Dataset):
 
     def preprocess(self):
         self.histogram()
-        if self.all_attr == 0 or self.all_attr == 1:  #all_attr==0 means ALL BALANCED
-            self.selected_attrs = [
-                key for key, value in sorted(
-                    self.attr2idx.items(), key=lambda kv: (kv[1], kv[0]))
-            ]  #self.attr2idx.keys()
-        elif self.all_attr == 2:
-            self.selected_attrs = ['Summer', 'Winter']
+        self.selected_attrs = [
+            key for key, value in sorted(
+                self.attr2idx.items(), key=lambda kv: (kv[1], kv[0]))
+        ]  # self.attr2idx.keys()
         self.filenames = []
         self.labels = []
 
-        if self.shuffling: random.shuffle(self.lines)
+        if self.shuffling:
+            random.shuffle(self.lines)
         balanced = {key: 0 for key in self.selected_attrs}
         for i, line in enumerate(self.lines):
             filename = os.path.abspath(line)
             key = self.key_fn(line)
-            if key not in self.selected_attrs: continue
+            if key not in self.selected_attrs:
+                continue
             if self.all_attr == 0 and balanced[key] >= min(self.hist.values()):
-                continue  #Balancing all classes to the minimum
+                continue  # Balancing all classes to the minimum
             balanced[key] += 1
             label = []
             for attr in self.selected_attrs:

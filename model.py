@@ -1,18 +1,15 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 from models.utils import get_SN
 from models.utils import print_debug as _print_debug
-from models.spectral import SpectralNorm as SpectralNormalization
-import ipdb
 import math
-from misc.utils import PRINT, to_cuda, to_var, to_parallel
-from misc.blocks import AdaptiveInstanceNorm2d, ResidualBlock, LinearBlock, Conv2dBlock, LayerNorm
+from misc.utils import PRINT, to_var, to_parallel
+from misc.blocks import (ResidualBlock, LinearBlock, LayerNorm)
 
 
-#===============================================================================================#
-#===============================================================================================#
+# ==================================================================#
+# ==================================================================#
 class MultiDiscriminator(nn.Module):
     # Multi-scale discriminator architecture
     def __init__(self, config, debug=False):
@@ -27,7 +24,8 @@ class MultiDiscriminator(nn.Module):
         SN = True
         self.SpectralNorm = get_SN(SN)
 
-        print_debug = lambda x, v: _print_debug(x, v, file=config.log)
+        def print_debug(x, v):
+            return _print_debug(x, v, file=config.log)
 
         self.downsample = nn.AvgPool2d(
             3, stride=2, padding=[1, 1], count_include_pad=False)
@@ -51,15 +49,17 @@ class MultiDiscriminator(nn.Module):
                 PRINT(config.log, '-- MultiDiscriminator ({}):'.format(idx))
                 features = print_debug(feed, outs[-3])
                 # ipdb.set_trace()
-                _ = print_debug(features, outs[-2])
-                _ = print_debug(features, outs[-1]).view(feed.size(0), -1)
+                print_debug(features, outs[-2])
+                print_debug(features, outs[-1]).view(feed.size(0), -1)
                 feed = self.downsample(feed)
 
     def _make_net(self, idx=0):
         image_size = self.image_size / (2**(idx))
         self.repeat_num = int(math.log(image_size, 2) - 1)
-        self.conv_dim = self.conv_dim if image_size < 256 else self.conv_dim // 2
-        self.conv_dim = self.conv_dim if image_size < 512 else self.conv_dim // 2
+        conv_dim = self.conv_dim
+        conv_dim = self.conv_dim if image_size < 256 else conv_dim // 2
+        conv_dim = self.conv_dim if image_size < 512 else conv_dim // 2
+        self.conv_dim = conv_dim
         k_size = int(image_size / np.power(2, self.repeat_num))
         layers = []
         layers.append(
@@ -110,8 +110,8 @@ class MultiDiscriminator(nn.Module):
         return outs_src, outs_aux,
 
 
-#===============================================================================================#
-#===============================================================================================#
+# ==================================================================#
+# ==================================================================#
 class Generator(nn.Module):
     """Generator. Encoder-Decoder Architecture."""
 
@@ -178,11 +178,12 @@ class Generator(nn.Module):
                     stride=2,
                     padding=1,
                     bias=False))
-            if not self.Deterministic: layers.append(LayerNorm(curr_dim // 2))
+            if not self.Deterministic:
+                layers.append(LayerNorm(curr_dim // 2))
             else:
                 layers.append(
                     nn.InstanceNorm2d(curr_dim // 2, affine=True)
-                )  #undesirable to generate images in vastly different styles
+                )  # undesirable to generate images in vastly different styles
             layers.append(nn.ReLU(inplace=True))
             curr_dim = curr_dim // 2
 
@@ -211,15 +212,17 @@ class Generator(nn.Module):
             self.debug()
 
     def debug(self):
-        print_debug = lambda x, v: _print_debug(x, v, file=self.config.log)
+        def print_debug(x, v):
+            return _print_debug(x, v, file=self.config.log)
+
         PRINT(self.config.log, '-- Generator:')
         feed = to_var(
             torch.ones(1, self.color_dim, self.image_size, self.image_size),
             volatile=True,
             no_cuda=True)
         features = print_debug(feed, self.main)
-        _ = print_debug(features, self.img_reg)
-        _ = print_debug(features, self.attn_reg)
+        print_debug(features, self.img_reg)
+        print_debug(features, self.attn_reg)
 
     def forward(self, x):
         features = self.main(x)
@@ -230,13 +233,12 @@ class Generator(nn.Module):
         return output
 
 
-#===============================================================================================#
-#===============================================================================================#
+# ==================================================================#
+# ==================================================================#
 class AdaInGEN(nn.Module):
     def __init__(self, config, debug=False):
         super(AdaInGEN, self).__init__()
 
-        conv_dim = config.g_conv_dim
         dc_dim = config.dc_dim
         self.config = config
         self.color_dim = config.color_dim
@@ -244,7 +246,9 @@ class AdaInGEN(nn.Module):
         self.style_dim = config.style_dim
         self.c_dim = config.c_dim
         self.Deterministic = config.Deterministic
-        print_debug = lambda x, v: _print_debug(x, v, file=config.log)
+
+        def print_debug(x, v):
+            return _print_debug(x, v, file=config.log)
 
         self.generator = Generator(config, debug=False)
         if self.Deterministic:
@@ -260,7 +264,8 @@ class AdaInGEN(nn.Module):
             norm='none',
             activ='relu',
             debug=debug)
-        if debug: self.debug()
+        if debug:
+            self.debug()
 
     def debug(self):
         feed = to_var(
@@ -277,8 +282,10 @@ class AdaInGEN(nn.Module):
         return self.generator(x)
 
     def random_style(self, x):
-        if type(x) == int: number = x
-        else: number = x.size(0)
+        if isinstance(x, int):
+            number = x
+        else:
+            number = x.size(0)
         z = torch.randn(number, self.style_dim)
         return z
 
@@ -312,8 +319,8 @@ class AdaInGEN(nn.Module):
         return num_adain_params
 
 
-#===============================================================================================#
-#===============================================================================================#
+# ==================================================================#
+# ==================================================================#
 class DC(nn.Module):
     def __init__(self,
                  config,
@@ -338,13 +345,14 @@ class DC(nn.Module):
         ]  # no output activations
         self.model = nn.Sequential(*self._model)
 
-        print_debug = lambda x, v: _print_debug(x, v, file=config.log)
+        def print_debug(x, v):
+            return _print_debug(x, v, file=config.log)
 
         if debug:
             feed = to_var(
                 torch.ones(1, input_dim), volatile=True, no_cuda=True)
             PRINT(config.log, '-- DC:')
-            _ = print_debug(feed, self._model)
+            print_debug(feed, self._model)
 
     def forward(self, x):
         return to_parallel(self.model, x.view(x.size(0), -1), self.config.GPU)

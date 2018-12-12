@@ -12,21 +12,21 @@ def remove_folder(config):
     models = os.path.join(config.model_save_path, '*.pth')
     print("YOU ARE ABOUT TO REMOVE EVERYTHING IN:\n{}\n{}\n{}".format(
         samples, samples_txt, models))
-    raw_input("ARE YOU SURE?")
+    # raw_input("ARE YOU SURE?")
+    input("ARE YOU SURE?")
     os.system("rm {} {} {}".format(samples, samples_txt, models))
 
 
 def update_config(config):
-    import os, glob, math, imageio
+    import os
+    import glob
 
     update_folder(config, config.dataset_fake)
     if '/' in config.dataset_fake:
         config.dataset_fake = config.dataset_fake.split('/')[0]
-    config.batch_size *= 2  #RaGAN
-    config.num_epochs *= config.save_epoch  #500
-    config.num_epochs_decay *= config.save_epoch  #200
-
-    # config_GENERATOR(config, update_folder)
+    config.batch_size *= 2  # RaGAN
+    config.num_epochs *= config.save_epoch
+    config.num_epochs_decay *= config.save_epoch
 
     if config.DELETE:
         remove_folder(config)
@@ -37,7 +37,7 @@ def update_config(config):
                 glob.glob(os.path.join(config.model_save_path, '*_G.pth')))[-1]
             config.pretrained_model = '_'.join(
                 os.path.basename(config.pretrained_model).split('_')[:-1])
-        except:
+        except BaseException:
             pass
 
     return config

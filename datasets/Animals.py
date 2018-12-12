@@ -3,15 +3,15 @@ import os
 import random
 from torch.utils.data import Dataset
 from PIL import Image
-import ipdb
 import numpy as np
 import glob
 from misc.utils import PRINT
 
+# ==================================================================#
+# == AwA2
+# ==================================================================#
 
-######################################################################################################
-###                                              AwA2                                              ###
-######################################################################################################
+
 class Animals(Dataset):
     def __init__(self,
                  image_size,
@@ -34,8 +34,15 @@ class Animals(Dataset):
             glob.glob(
                 os.path.abspath(
                     os.path.join(data_root, 'JPEGImages', '*', '*.jpg'))))
-        _replace = lambda line: line.strip().replace('   ',' ').replace('  ',' ').split(' ')
-        key = lambda line: (int(line.strip().split('\t')[0]) - 1, line.strip().split('\t')[1])
+
+        def _replace(line):
+            return line.strip().replace('   ', ' ').replace('  ',
+                                                            ' ').split(' ')
+
+        def key(line):
+            return (int(line.strip().split('\t')[0]) - 1,
+                    line.strip().split('\t')[1])
+
         self.idx2cls = {
             key(line)[0]: key(line)[1]
             for line in open(os.path.join(data_root, 'classes.txt')).
@@ -56,12 +63,10 @@ class Animals(Dataset):
                                                            self.num_data))
 
     def histogram(self):
-        # ipdb.set_trace()
         values = np.zeros(len(self.cls2idx))
         for line in self.lines:
             _cls = self.cls2idx[line.split('/')[-2]]
             values[_cls] += 1
-        # ipdb.set_trace()
         keys_sorted = [
             key for key, value in sorted(
                 self.cls2idx.items(), key=lambda kv: (kv[1], kv[0]))
@@ -82,7 +87,7 @@ class Animals(Dataset):
 
     def preprocess(self):
         self.histogram()
-        if self.all_attr == 1:  #ALL OF THEM
+        if self.all_attr == 1:  # ALL OF THEM
             self.selected_attrs = [
                 'antelope', 'grizzly+bear', 'killer+whale', 'beaver',
                 'dalmatian', 'persian+cat', 'horse', 'german+shepherd',
@@ -121,10 +126,12 @@ class Animals(Dataset):
         self.labels = []
 
         lines = self.lines
-        if self.shuffling or self.mode == 'test': random.shuffle(lines)
+        if self.shuffling or self.mode == 'test':
+            random.shuffle(lines)
         for i, line in enumerate(lines):
             _class = os.path.basename(line).split('_')[0]
-            if _class not in self.selected_attrs: continue
+            if _class not in self.selected_attrs:
+                continue
             label = []
             for idx, attr in enumerate(self.selected_attrs):
                 if attr == _class:

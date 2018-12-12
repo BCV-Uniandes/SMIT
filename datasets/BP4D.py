@@ -3,15 +3,12 @@ import os
 import random
 from torch.utils.data import Dataset
 from PIL import Image
-import ipdb
-import numpy as np
-import glob
-from misc.utils import PRINT
+
+# ==================================================================#
+# == BP4D
+# ==================================================================#
 
 
-######################################################################################################
-###                                                BP4D                                            ###
-######################################################################################################
 class BP4D(Dataset):
     def __init__(self,
                  image_size,
@@ -28,7 +25,8 @@ class BP4D(Dataset):
         self.name = 'BP4D'
         file_txt = os.path.abspath(
             os.path.join('data', 'BP4D', mode_data, mode + '.txt'))
-        if mode != 'val': print("Data from: " + file_txt)
+        if mode != 'val':
+            print("Data from: " + file_txt)
         self.lines = open(file_txt, 'r').readlines()
         if mode != 'val':
             print('Start preprocessing %s: %s!' % (self.name, mode))
@@ -43,7 +41,6 @@ class BP4D(Dataset):
         self.filenames = []
         self.labels = []
         lines = [i.strip() for i in self.lines]
-        # if self.mode=='train' or self.shuffling: random.shuffle(lines)   # random shuffling
         random.shuffle(lines)
         for i, line in enumerate(lines):
             splits = line.split()
@@ -51,12 +48,11 @@ class BP4D(Dataset):
             if self.mode_data != 'faces':
                 filename = filename.replace('Faces', 'Sequences_400')
             if not os.path.isfile(filename) or os.stat(filename).st_size == 0:
-                continue  #ipdb.set_trace()
+                continue
             values = splits[1:]
             label = []
             for value in values:
                 label.append(int(value))
-            # if self.mode=='test' and 1 in label: continue ###REMOVE BEFORE RELEASE
             self.filenames.append(filename)
             self.labels.append(label)
 
