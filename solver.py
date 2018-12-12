@@ -9,7 +9,7 @@ import datetime
 from torchvision.utils import save_image
 from misc.utils import color_frame
 from misc.utils import create_dir, denorm, get_labels, get_torch_version
-from misc.utils import PRINT, single_source, target_debug_list
+from misc.utils import Modality, PRINT, single_source, target_debug_list
 from misc.utils import to_cuda, to_data, to_var
 import torch.utils.data.distributed
 warnings.filterwarnings('ignore')
@@ -22,8 +22,6 @@ class Solver(object):
         self.config = config
 
         self.build_model()
-        if self.config.use_tensorboard:
-            self.build_tensorboard()
 
         # Start with trained model
         if self.config.pretrained_model:
@@ -36,7 +34,6 @@ class Solver(object):
         from model import MultiDiscriminator as Discriminator
         from model import AdaInGEN as Generator
 
-        vocabulary_size = self.data_loader.dataset.num_words
         self.D = Discriminator(self.config, debug=self.config.mode == 'train')
         to_cuda(self.D)
         D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
@@ -44,10 +41,7 @@ class Solver(object):
             D_parameters, self.config.d_lr,
             [self.config.beta1, self.config.beta2])
 
-        self.G = Generator(
-            self.config,
-            vocab_size=vocabulary_size,
-            debug=self.config.mode == 'train')
+        self.G = Generator(self.config, debug=self.config.mode == 'train')
         G_parameters = self.G.generator.parameters()
         G_parameters = filter(lambda p: p.requires_grad, G_parameters)
         self.g_optimizer = torch.optim.Adam(
@@ -289,23 +283,24 @@ class Solver(object):
             ]
             style_hair = ['Bald', 'Straight_Hair', 'Wavy_Hair']
             ammount_hair = ['Bald', 'Bangs']
-            if all_attr[index - 1] in color_hair:
-                color_hair.remove(all_attr[index - 1])
+            if all_attr[index] in color_hair:
+                color_hair.remove(all_attr[index])
                 for attr in color_hair:
                     if attr in all_attr:
                         target[:, attr2idx[attr]] = 0
-                target[:, index - 1] = 1
-            if all_attr[index - 1] in style_hair:
-                style_hair.remove(all_attr[index - 1])
+                target[:, index] = 1
+            if all_attr[index] in style_hair:
+                style_hair.remove(all_attr[index])
                 for attr in style_hair:
                     if attr in all_attr:
                         target[:, attr2idx[attr]] = 0
-                target[:, index - 1] = 1
-            if all_attr[index - 1] in ammount_hair:
-                ammount_hair.remove(all_attr[index - 1])
+                target[:, index] = 1
+            if all_attr[index] in ammount_hair:
+                ammount_hair.remove(all_attr[index])
                 for attr in ammount_hair:
                     if attr in all_attr:
                         target[:, attr2idx[attr]] = 0
+        return target
 
     # ==================================================================#
     # ==================================================================#
@@ -322,9 +317,8 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
-
     @property
-    def MultiLabel_Dataset(self):
+    def MultiLabel_Datasets(self):
         return ['BP4D', 'CelebA', 'EmotionNet', 'DEMO']
 
     # ==================================================================#
@@ -370,7 +364,7 @@ class Solver(object):
                 # Start translations
                 fake_image_list = [real_x]
                 fake_attn_list = [to_var(denorm(real_x.data), volatile=True)]
-                fake_image_list, fake_attn_list = self.Crate_Visual_List(
+                fake_image_list, fake_attn_list = self.Create_Visual_List(
                     real_x)
 
                 if self.config.dataset_fake in self.MultiLabel_Datasets \
@@ -384,20 +378,19 @@ class Solver(object):
                     style = self.G.random_style(real_x.size(0))
                     style = to_var(style, volatile=True)
                 else:
-                    style = to_var(fixed_style, volatile=True)
+                    style = to_var(fixed_style[:real_x.size(0)], volatile=True)
 
                 for k, target in enumerate(target_list):
                     if self.config.dataset_fake in self.MultiLabel_Datasets:
                         target = (out_label - target)**2  # Swap labels
                         target = self.target_multiAttr(target, k)
                     start_time = time.time()
-                    target, style = self.Modality(target, style, Multimodal)
+                    target, style = Modality(target, style, Multimodal)
                     fake_x = self.G(real_x, target, style)
                     elapsed = time.time() - start_time
                     elapsed = str(datetime.timedelta(seconds=elapsed))
                     if TIME and flag_time:
-                        print("[{}] Time/batch for one single \
-                                    forward (bs:{}): {}".format(
+                        print("[{}] Time/batch x forward (bs:{}): {}".format(
                             modal, real_x.size(0), elapsed))
                         flag_time = False
 

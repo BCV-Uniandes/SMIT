@@ -12,7 +12,6 @@ def remove_folder(config):
     models = os.path.join(config.model_save_path, '*.pth')
     print("YOU ARE ABOUT TO REMOVE EVERYTHING IN:\n{}\n{}\n{}".format(
         samples, samples_txt, models))
-    # raw_input("ARE YOU SURE?")
     input("ARE YOU SURE?")
     os.system("rm {} {} {}".format(samples, samples_txt, models))
 

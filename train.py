@@ -142,13 +142,14 @@ class Train(Solver):
 
             # Save Translation
             if not self.config.Deterministic:
-                self.save_fake_output(
+                self.generate_SMIT(
                     self.fixed_x,
                     self.output_sample(epoch, iter + 1),
+                    Multimodal=1,
                     label=self.fixed_label,
                     training=True,
                     fixed_style=self.fixed_style)
-            self.save_fake_output(
+            self.generate_SMIT(
                 self.fixed_x,
                 self.output_sample(epoch, iter + 1),
                 label=self.fixed_label,
@@ -218,13 +219,14 @@ class Train(Solver):
         self.fixed_x, self.fixed_label, self.fixed_style = self.debug_vars()
         if start == 0:
             if not self.config.Deterministic:
-                self.save_fake_output(
+                self.generate_SMIT(
                     self.fixed_x,
                     self.output_sample(0, 0),
+                    Multimodal=1,
                     label=self.fixed_label,
                     training=True,
                     fixed_style=self.fixed_style)
-            self.save_fake_output(
+            self.generate_SMIT(
                 self.fixed_x,
                 self.output_sample(0, 0),
                 label=self.fixed_label,
