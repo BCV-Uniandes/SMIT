@@ -172,16 +172,13 @@ class Test(Solver):
                 mode='test')
 
         if not self.config.Deterministic:
-            _debug = range(self.config.style_label_debug + 1)  # [3]
+            _debug = range(self.config.style_label_debug + 1)
             style_all = self.G.random_style(self.config.batch_size)
         else:
             style_all = None
             _debug = range(1)
 
-        string = '{}'
-        if self.config.NO_LABELCUM:
-            string += '_{}'.format('NO_Label_Cum', '{}')
-        string = string.format(TimeNow_str())
+        string = '{}'.format(TimeNow_str())
 
         for i, (real_x, org_c, files) in enumerate(data_loader):
             save_path = os.path.join(
@@ -199,17 +196,14 @@ class Test(Solver):
                     real_x, 1 - org_c, name, interpolation=True)
                 self.save_multimodal_output(real_x, 1 - org_c, name)
 
-            for k in _debug:
-                self.save_fake_output(
-                    real_x,
-                    name,
-                    label=label,
-                    output=True,
-                    Style=k,
-                    fixed_style=style_all,
-                    TIME=not i)
-                if not self.config.Deterministic:
-                    self.save_fake_output(real_x, name, label=label, Style=k)
-                # send_mail(body='Images from '+self.config.sample_path,
-                #    attach=output)
-            # if i==self.config.iter_test-1: break
+            self.generate_SMIT(
+                real_x,
+                name,
+                label=label,
+                output=True,
+                fixed_style=style_all,
+                TIME=not i)
+
+            if not self.config.Deterministic:
+                for k in _debug:
+                    self.generate_SMIT(real_x, name, label=label, Multimodal=k)

@@ -71,8 +71,8 @@ if __name__ == '__main__':
     parser.add_argument('--image_size', type=int, default=256)
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--num_epochs', type=int, default=100)
-    parser.add_argument('--num_epochs_decay', type=int, default=80)
+    parser.add_argument('--num_epochs', type=int, default=50)
+    parser.add_argument('--num_epochs_decay', type=int, default=40)
     parser.add_argument(
         '--save_epoch', type=int, default=1)  # Save samples how many epochs
     parser.add_argument(
@@ -93,8 +93,8 @@ if __name__ == '__main__':
 
     # Generative
     parser.add_argument('--MultiDis', type=int, default=3, choices=[1, 2, 3])
-    parser.add_argument('--g_conv_dim', type=int, default=64)
-    parser.add_argument('--d_conv_dim', type=int, default=64)
+    parser.add_argument('--g_conv_dim', type=int, default=32)
+    parser.add_argument('--d_conv_dim', type=int, default=32)
     parser.add_argument('--g_repeat_num', type=int, default=6)
     parser.add_argument('--d_repeat_num', type=int, default=6)
     parser.add_argument('--g_lr', type=float, default=0.0001)
@@ -111,8 +111,6 @@ if __name__ == '__main__':
     parser.add_argument('--d_train_repeat', type=int, default=1)
 
     # Misc
-    parser.add_argument(
-        '--use_tensorboard', action='store_true', default=False)
     parser.add_argument('--DELETE', action='store_true', default=False)
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')

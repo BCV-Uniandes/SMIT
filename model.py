@@ -56,10 +56,6 @@ class MultiDiscriminator(nn.Module):
     def _make_net(self, idx=0):
         image_size = self.image_size / (2**(idx))
         self.repeat_num = int(math.log(image_size, 2) - 1)
-        conv_dim = self.conv_dim
-        conv_dim = self.conv_dim if image_size < 256 else conv_dim // 2
-        conv_dim = self.conv_dim if image_size < 512 else conv_dim // 2
-        self.conv_dim = conv_dim
         k_size = int(image_size / np.power(2, self.repeat_num))
         layers = []
         layers.append(
@@ -128,8 +124,8 @@ class Generator(nn.Module):
         AdaIn_res = 0 if self.Deterministic else 1
 
         conv_dim = config.g_conv_dim
-        if config.Slim_Generator:
-            conv_dim = conv_dim if config.image_size < 256 else conv_dim // 2
+        if not config.Slim_Generator:
+            conv_dim *= 2
 
         layers.append(
             nn.Conv2d(
