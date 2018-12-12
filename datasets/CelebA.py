@@ -64,9 +64,9 @@ class CelebA(Dataset):
                     dict_.items(), key=lambda kv: (kv[1], kv[0]),
                     reverse=True):
                 total += value
-                if self.mode == 'train': 
+                if self.mode == 'train':
                     PRINT(f, '{} {}'.format(key, value))
-            if self.mode == 'train': 
+            if self.mode == 'train':
                 PRINT(f, 'TOTAL {}'.format(total))
 
     def preprocess(self):
@@ -109,7 +109,7 @@ class CelebA(Dataset):
         # if self.shuffling: random.shuffle(lines)
         for i, line in enumerate(lines):
             splits = line.split()
-            if self.splits[splits[0]] not in self.mode_allowed: 
+            if self.splits[splits[0]] not in self.mode_allowed:
                 continue
             if self.mode_data == 'faces':
                 filename = os.path.abspath('data/CelebA/Faces/{}'.format(
@@ -117,7 +117,7 @@ class CelebA(Dataset):
             else:
                 filename = os.path.abspath('data/CelebA/data_align/{}'.format(
                     splits[0]))
-            if not os.path.isfile(filename): 
+            if not os.path.isfile(filename):
                 continue
             values = splits[1:]
 
