@@ -390,7 +390,7 @@ class Solver(object):
                     elapsed = time.time() - start_time
                     elapsed = str(datetime.timedelta(seconds=elapsed))
                     if TIME and flag_time:
-                        print("[{}] Time/batch single forward (bs:{}): {}".format(
+                        print("[{}] Time/batch x forward (bs:{}): {}".format(
                             modal, real_x.size(0), elapsed))
                         flag_time = False
 
