@@ -121,8 +121,6 @@ if __name__ == '__main__':
     parser.add_argument('--model_save_step', type=int, default=10000)
 
     # Debug options
-    parser.add_argument('--iter_test', type=int, default=1)
-    parser.add_argument('--iter_style', type=int, default=40)
     parser.add_argument('--style_debug', type=int, default=4)
     parser.add_argument('--style_train_debug', type=int, default=9)
     parser.add_argument(

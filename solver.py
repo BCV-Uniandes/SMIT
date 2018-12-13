@@ -91,7 +91,7 @@ class Solver(object):
         return os.path.join(
             self.config.model_save_path, '{}_{}_{}.pth'.format(
                 str(epoch).zfill(4),
-                str(iter).zfill(len(str(len(self.data_loader))))))
+                str(iter).zfill(len(str(len(self.data_loader)))), '{}'))
 
     # ==================================================================#
     # ==================================================================#
@@ -232,10 +232,12 @@ class Solver(object):
         }
         if not os.path.isfile(self.config.loss_plot):
             with open(self.config.loss_plot, 'w') as f:
-                f.writelines('{}\n'.format('\t'.join(['Epoch'] + LOSS.keys())))
+                f.writelines('{}\n'.format(
+                    '\t'.join(['Epoch'] + list(LOSS.keys()))))
         with open(self.config.loss_plot, 'a') as f:
             f.writelines('{}\n'.format(
-                '\t'.join([str(Epoch)] + [str(i) for i in LOSS.values()])))
+                '\t'.join([str(Epoch)] + [str(i)
+                                          for i in list(LOSS.values())])))
         plot_txt(self.config.loss_plot)
 
     # ==================================================================#
@@ -258,8 +260,9 @@ class Solver(object):
         fake_images = to_data(torch.cat(fake_list, dim=3), cpu=True)
         if 'fake' not in os.path.basename(save_path):
             save_path = save_path.replace('.jpg', '_fake.jpg')
-        if not Attention:
+        if Attention:
             mode = mode + '_attn'
+        else:
             fake_images = denorm(fake_images)
 
         save_path = save_path.replace('fake', mode)
@@ -357,6 +360,9 @@ class Solver(object):
         with opt:
             batch = self.get_batch_inference(batch, Multimodal)
             for idx, real_x in enumerate(batch):
+                if training and Multimodal and \
+                        idx == self.config.style_train_debug:
+                    break
                 real_x = to_var(real_x, volatile=True)
                 target_list = target_debug_list(
                     real_x.size(0), self.config.c_dim, config=self.config)
@@ -410,7 +416,7 @@ class Solver(object):
                             str(idx).zfill(4), _name))
                     create_dir(_save_path)
 
-                mode = 'fake' if not Multimodal else 'idx_' + chr(65 + idx)
+                mode = 'fake' if not Multimodal else chr(65 + idx)
                 Output.extend(
                     self._SAVE_IMAGE(_save_path, fake_image_list, mode=mode))
                 Output.extend(
