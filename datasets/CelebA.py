@@ -55,7 +55,7 @@ class CelebA(Dataset):
             value = np.array([int(i) for i in line.split()[1:]]).clip(min=0)
             values += value
         dict_ = {}
-        for key, value in zip(self.lines[1].split(), values):
+        for key, value in zip(self.lines[0].split(), values):
             dict_[key] = value
         total = 0
         with open('datasets/{}_histogram_attributes.txt'.format(self.name),
