@@ -112,7 +112,7 @@ class CelebA(Dataset):
             if self.splits[splits[0]] not in self.mode_allowed:
                 continue
             filename = os.path.abspath('data/CelebA/data_align/{}'.format(
-                    splits[0]))
+                splits[0]))
             if not os.path.isfile(filename):
                 continue
             values = splits[1:]
