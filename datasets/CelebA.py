@@ -50,8 +50,8 @@ class CelebA(Dataset):
                                                            self.num_data))
 
     def histogram(self):
-        values = np.array([int(i) for i in self.lines[2].split()[1:]]) * 0
-        for line in self.lines[2:]:
+        values = np.array([int(i) for i in self.lines[1].split()[1:]]) * 0
+        for line in self.lines[1:]:
             value = np.array([int(i) for i in line.split()[1:]]).clip(min=0)
             values += value
         dict_ = {}
@@ -70,7 +70,7 @@ class CelebA(Dataset):
                 PRINT(f, 'TOTAL {}'.format(total))
 
     def preprocess(self):
-        attrs = self.lines[1].split()
+        attrs = self.lines[0].split()
         self.histogram()
 
         for i, attr in enumerate(attrs):
@@ -105,17 +105,13 @@ class CelebA(Dataset):
         self.filenames = []
         self.labels = []
 
-        lines = self.lines[2:]
+        lines = self.lines[1:]
         # if self.shuffling: random.shuffle(lines)
         for i, line in enumerate(lines):
             splits = line.split()
             if self.splits[splits[0]] not in self.mode_allowed:
                 continue
-            if self.mode_data == 'faces':
-                filename = os.path.abspath('data/CelebA/Faces/{}'.format(
-                    splits[0]))
-            else:
-                filename = os.path.abspath('data/CelebA/data_align/{}'.format(
+            filename = os.path.abspath('data/CelebA/data_align/{}'.format(
                     splits[0]))
             if not os.path.isfile(filename):
                 continue
