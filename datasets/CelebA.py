@@ -27,8 +27,11 @@ class CelebA(Dataset):
         self.name = 'CelebA'
         self.all_attr = all_attr
         self.mode_data = mode_data
-        self.lines = open(
-            os.path.abspath('data/CelebA/list_attr_celeba.txt')).readlines()
+        self.lines = [
+            line.strip().split(',') for line in open(
+                os.path.abspath('data/CelebA/list_attr_celeba.txt')).
+            readlines()
+        ]
         self.splits = {
             line.split(',')[0]: int(line.strip().split(',')[1])
             for line in open(
@@ -50,12 +53,12 @@ class CelebA(Dataset):
                                                            self.num_data))
 
     def histogram(self):
-        values = np.array([int(i) for i in self.lines[1].split()[1:]]) * 0
+        values = np.array([int(i) for i in self.lines[1][1:]]) * 0
         for line in self.lines[1:]:
-            value = np.array([int(i) for i in line.split()[1:]]).clip(min=0)
+            value = np.array([int(i) for i in line[1:]]).clip(min=0)
             values += value
         dict_ = {}
-        for key, value in zip(self.lines[0].split(), values):
+        for key, value in zip(self.lines[0], values):
             dict_[key] = value
         total = 0
         with open('datasets/{}_histogram_attributes.txt'.format(self.name),
@@ -70,7 +73,7 @@ class CelebA(Dataset):
                 PRINT(f, 'TOTAL {}'.format(total))
 
     def preprocess(self):
-        attrs = self.lines[0].split()
+        attrs = self.lines[0][1:]
         self.histogram()
 
         for i, attr in enumerate(attrs):
@@ -108,14 +111,13 @@ class CelebA(Dataset):
         lines = self.lines[1:]
         # if self.shuffling: random.shuffle(lines)
         for i, line in enumerate(lines):
-            splits = line.split()
-            if self.splits[splits[0]] not in self.mode_allowed:
+            if self.splits[line[0]] not in self.mode_allowed:
                 continue
             filename = os.path.abspath('data/CelebA/data_align/{}'.format(
-                splits[0]))
+                line[0]))
             if not os.path.isfile(filename):
                 continue
-            values = splits[1:]
+            values = line[1:]
 
             label = []
 
