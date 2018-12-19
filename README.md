@@ -14,6 +14,18 @@ This repository provides a PyTorch implementation of [SMIT](https://arxiv.org/ab
 
 <br/>
 
+## Citation
+```
+@article{romero2018smit,
+  title={SMIT: Stochastic Multi-Label Image-to-Image Translation},
+  author={Romero, Andr{\'e}s and Arbel{\'a}ez, Pablo and Van Gool, Luc and Timofte, Radu},
+  journal={arXiv preprint arXiv:1812.03704},
+  year={2018}
+}
+```
+
+<br/>
+
 ## Dependencies
 * [Python](https://www.continuum.io/downloads) (2.7, 3.5+)
 * [PyTorch](http://pytorch.org/) (0.3, 0.4, 1.0)

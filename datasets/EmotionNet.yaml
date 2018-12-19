@@ -5,7 +5,7 @@
 mode_data: 'normal'      # Either normal with augmentation or faces without augmentation. 
 Identity: False         # With identity loss
 Deterministic: False    # Deterministic approach
-Slim_Generator: False   # Fast SMIT
+Slim_Generator: True   # Fast SMIT
     
 save_epoch: 90          # 10 epochs of this dataset represents ~6000 iterations
 num_epochs: 30          #The same iterations as celebA given the high number of images in the dataset
