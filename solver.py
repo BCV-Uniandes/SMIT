@@ -359,6 +359,7 @@ class Solver(object):
 
         with opt:
             batch = self.get_batch_inference(batch, Multimodal)
+            label = self.get_batch_inference(label, Multimodal)
             for idx, real_x in enumerate(batch):
                 if training and Multimodal and \
                         idx == self.config.style_train_debug:
@@ -376,6 +377,9 @@ class Solver(object):
                 if self.config.dataset_fake in self.MultiLabel_Datasets \
                         and label is None:
                     out_label = self._CLS(real_x)
+                elif label is not None:
+
+                    out_label = to_var(label[idx].squeeze(), volatile=True)
                 else:
                     out_label = torch.zeros(real_x.size(0), self.config.c_dim)
                     out_label = to_var(out_label, volatile=True)
@@ -384,7 +388,8 @@ class Solver(object):
                     style = self.G.random_style(real_x.size(0))
                     style = to_var(style, volatile=True)
                 else:
-                    style = to_var(fixed_style[:real_x.size(0)], volatile=True)
+                    style = to_var(
+                        fixed_style[:real_x.size(0)], volatile=True)
 
                 for k, target in enumerate(target_list):
                     if self.config.dataset_fake in self.MultiLabel_Datasets:

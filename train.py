@@ -71,7 +71,8 @@ class Train(Solver):
     # ============================================================#
     def debug_vars(self):
         opt = torch.no_grad() if int(
-            torch.__version__.split('.')[1]) > 3 else open('_null.txt', 'w')
+            torch.__version__.split('.')[1]) > 3 else open(
+                '/tmp/null.txt', 'w')
         with opt:
             fixed_x = []
             fixed_label = []
@@ -149,6 +150,12 @@ class Train(Solver):
                     label=self.fixed_label,
                     training=True,
                     fixed_style=self.fixed_style)
+                self.generate_SMIT(
+                    self.fixed_x,
+                    self.output_sample(epoch, iter + 1),
+                    Multimodal=1,
+                    label=self.fixed_label,
+                    training=True)
             self.generate_SMIT(
                 self.fixed_x,
                 self.output_sample(epoch, iter + 1),
@@ -258,6 +265,7 @@ class Train(Solver):
             for _iter, (real_x, real_c, files) in self.progress_bar:
                 self.loss = {}
                 self.total_iter += 1
+
                 # RaGAN uses different data for Dis and Gen
                 try:
 
