@@ -113,8 +113,8 @@ class CelebA(Dataset):
         for i, line in enumerate(lines):
             if self.splits[line[0]] not in self.mode_allowed:
                 continue
-            filename = os.path.abspath('data/CelebA/data_align/{}'.format(
-                line[0]))
+            filename = os.path.abspath(
+                'data/CelebA/img_align_celeba/{}'.format(line[0]))
             if not os.path.isfile(filename):
                 continue
             values = line[1:]
