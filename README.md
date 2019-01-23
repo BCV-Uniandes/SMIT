@@ -7,7 +7,7 @@ This repository provides a PyTorch implementation of [SMIT](https://arxiv.org/ab
 <br/>
 
 ## Paper
-[SMIT: Stochastic Multi-Label Image-to-image Translation ](https://arxiv.org/abs/1711.09020) <br/>
+[SMIT: Stochastic Multi-Label Image-to-image Translation ](https://arxiv.org/abs/1812.03704) <br/>
 [Andrés Romero](https://afromero.co/en)<sup> 1,2</sup>, [Pablo Arbelaez](https://scholar.google.com.co/citations?user=k0nZO90AAAAJ&hl=en)<sup>1</sup>, [Luc Van Gool](https://scholar.google.com/citations?user=TwMib_QAAAAJ&hl=en)<sup> 2</sup>, [Radu Timofte](https://scholar.google.com/citations?user=u3MwH5kAAAAJ&hl=en)<sup> 2</sup> <br/>
 <sup>1 </sup>Biomedical Computer Vision ([BCV](https://biomedicalcomputervision.uniandes.edu.co/)) Lab, Universidad de Los Andes. <br/>
 <sup>2 </sup>Computer Vision Lab ([CVL](https://www.vision.ee.ethz.ch/en/)), ETH Zürich. <br/>
