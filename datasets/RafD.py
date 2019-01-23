@@ -74,7 +74,6 @@ class RafD(Dataset):
 
             self.filenames.append(line)
             self.labels.append(label)
-            # ipdb.set_trace()
         self.num_data = len(self.filenames)
 
     def get_data(self):
@@ -102,9 +101,9 @@ class RafD(Dataset):
         split = 10  # 90-10
         new_lines = []
         if mode == 'train':
-            mode_subjects = subjects[:9 * len(subjects) / split]
+            mode_subjects = subjects[:9 * len(subjects) // split]
         else:
-            mode_subjects = subjects[9 * len(subjects) / split:]
+            mode_subjects = subjects[9 * len(subjects) // split:]
         for line in lines:
             subject = os.path.basename(line).split('_')[1]
             if subject in mode_subjects:
