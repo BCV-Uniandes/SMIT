@@ -121,7 +121,6 @@ class Generator(nn.Module):
         self.color_dim = config.color_dim
         self.style_dim = config.style_dim
         self.Deterministic = config.Deterministic
-        AdaIn_res = 0 if self.Deterministic else 1
 
         conv_dim = config.g_conv_dim
         if not config.Slim_Generator:
@@ -162,7 +161,7 @@ class Generator(nn.Module):
         for i in range(repeat_num):
             layers.append(
                 ResidualBlock(
-                    dim_in=curr_dim, dim_out=curr_dim, AdaIn=AdaIn_res))
+                    dim_in=curr_dim, dim_out=curr_dim, AdaIn=True))
 
         # Up-Sampling
         for i in range(conv_repeat):
