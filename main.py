@@ -139,7 +139,8 @@ if __name__ == '__main__':
 
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = config.GPU
-        config.GPU = int(config.GPU)
+        config.GPU = [int(i) for i in config.GPU.split(',')]
+        config.batch_size *= len(config.GPU)
 
     config_yaml(config, 'datasets/{}.yaml'.format(config.dataset_fake))
     config = cfg.update_config(config)

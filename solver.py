@@ -35,19 +35,20 @@ class Solver(object):
 
         self.D = Discriminator(
             self.config, debug=self.config.mode == 'train' and self.verbose)
-        to_cuda(self.D)
+        self.D = to_cuda(self.D)
         self.G = Generator(
             self.config, debug=self.config.mode == 'train' and self.verbose)
-        to_cuda(self.G)
-
-        # Start with trained model
-        if self.config.pretrained_model and self.verbose:
-            self.load_pretrained_model()
+        self.G = to_cuda(self.G)
+        # import ipdb; ipdb.set_trace()
 
         self.d_optimizer = self.set_optimizer(
             self.D, self.config.d_lr, self.config.beta1, self.config.beta2)
         self.g_optimizer = self.set_optimizer(
             self.G, self.config.g_lr, self.config.beta1, self.config.beta2)
+
+        # Start with trained model
+        if self.config.pretrained_model and self.verbose:
+            self.load_pretrained_model()
 
         if self.config.mode == 'train' and self.verbose:
             self.print_network(self.D, 'Discriminator')
@@ -79,6 +80,8 @@ class Solver(object):
     # ==================================================================#
 
     def print_network(self, model, name):
+        if torch.cuda.device_count() > 1 and hvd.size()==1:
+            model = model.module
         if name == 'Generator':
             choices = ['generator', 'adain_net']
             for m in choices:
@@ -155,11 +158,20 @@ class Solver(object):
         # _iter = hvd.broadcast(torch.tensor(int(name[1])),
         #                   root_rank=0, name='_iter').item()
 
-        def load_model(model, name='G'):
-            model.load_state_dict(
-                torch.load(
-                    self.name.format(name),
-                    map_location=lambda storage, loc: storage))
+        def load_model(model, name='G', MultiGPU=False):
+            if not MultiGPU:
+                model.load_state_dict(
+                    torch.load(
+                        self.name.format(name),
+                        map_location=lambda storage, loc: storage))
+            else:
+                weights = torch.load(
+                        self.name.format(name),
+                        map_location=lambda storage, loc: storage)
+            
+                weights = {'module.'+k: v for k, v in weights.items()}
+                model.load_state_dict(weights)
+
 
         def load_optim(optim, name='G_optim'):
             optim.load_state_dict(
@@ -168,8 +180,12 @@ class Solver(object):
                     map_location=lambda storage, loc: storage))
             self.optim_cuda(optim)
 
-        load_model(self.G, 'G')
-        load_model(self.D, 'D')
+        try:
+            load_model(self.G, 'G')
+            load_model(self.D, 'D')
+        except RuntimeError:
+            load_model(self.G, 'G', True)
+            load_model(self.D, 'D', True)
 
         if self.config.mode == 'train':
             load_optim(self.g_optimizer, 'G_optim')
@@ -258,6 +274,14 @@ class Solver(object):
                 '\t'.join([str(Epoch)] + [str(i)
                                           for i in list(LOSS.values())])))
         plot_txt(self.config.loss_plot)
+
+    # ============================================================#
+    # ============================================================#
+    def random_style(self, data):
+        if torch.cuda.device_count() > 1 and hvd.size()==1:
+            return self.G.module.random_style(data)
+        else:
+            return self.G.random_style(data)
 
     # ==================================================================#
     # ==================================================================#
@@ -397,7 +421,7 @@ class Solver(object):
                     out_label = to_var(out_label, volatile=True)
 
                 if fixed_style is None:
-                    style = self.G.random_style(real_x.size(0))
+                    style = self.random_style(real_x.size(0))
                     style = to_var(style, volatile=True)
                 else:
                     style = to_var(fixed_style[:real_x.size(0)], volatile=True)

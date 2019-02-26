@@ -6,8 +6,8 @@ import warnings
 import datetime
 import numpy as np
 from tqdm import tqdm
-from misc.utils import get_labels, get_loss_value
-from misc.utils import TimeNow, to_var
+from misc.utils import color, get_fake, get_labels, get_loss_value
+from misc.utils import split, TimeNow, to_var
 from misc.losses import _compute_loss_smooth, _GAN_LOSS
 import torch.utils.data.distributed
 import horovod.torch as hvd
@@ -54,24 +54,7 @@ class Train(Solver):
 
     # ============================================================#
     # ============================================================#
-    def color(self, dict, key, color='red'):
-        from termcolor import colored
-        dict[key] = colored('%.2f' % (dict[key]), color)
-
-    # ============================================================#
-    # ============================================================#
-    def get_randperm(self, x):
-        if x.size(0) > 2:
-            rand_idx = to_var(torch.randperm(x.size(0)))
-        elif x.size(0) == 2:
-            rand_idx = to_var(torch.LongTensor([1, 0]))
-        else:
-            rand_idx = to_var(torch.LongTensor([0]))
-        return rand_idx
-
-    # ============================================================#
-    # ============================================================#
-    def debug_vars(self):
+    def debug_vars(self, start):
         opt = torch.no_grad() if int(
             torch.__version__.split('.')[1]) > 3 else open(
                 '/tmp/null.txt', 'w')
@@ -86,9 +69,26 @@ class Train(Solver):
             fixed_x = torch.cat(fixed_x, dim=0)
             fixed_label = torch.cat(fixed_label, dim=0)
             if not self.config.Deterministic:
-                fixed_style = self.G.random_style(fixed_x)
+                fixed_style = self.random_style(fixed_x)
             else:
                 fixed_style = None
+
+        if start == 0:
+            if not self.config.Deterministic:
+                self.generate_SMIT(
+                    fixed_x,
+                    self.output_sample(0, 0),
+                    Multimodal=1,
+                    label=fixed_label,
+                    training=True,
+                    fixed_style=fixed_style)
+            self.generate_SMIT(
+                fixed_x,
+                self.output_sample(0, 0),
+                label=fixed_label,
+                training=True)
+
+
         return fixed_x, fixed_label, fixed_style
 
     # ============================================================#
@@ -118,7 +118,7 @@ class Train(Solver):
                     key: get_loss_value(value)
                     for key, value in self.loss.items()
                 }
-                self.color(self.loss, 'Gatm', 'blue')
+                color(self.loss, 'Gatm', 'blue')
                 self.progress_bar.set_postfix(**self.loss)
             if (iter + 1) == len(self.data_loader):
                 self.progress_bar.set_postfix('')
@@ -189,34 +189,6 @@ class Train(Solver):
 
     # ============================================================#
     # ============================================================#
-    def split(self, data):
-        # RaGAN uses different data for Dis and Gen
-        try:
-
-            def split(x, mode=0):
-                if isinstance(x, list) or isinstance(x, tuple):
-                    _len = len(x)
-                else:
-                    _len = x.size(0)
-                if mode == 0:
-                    return x[:_len // 2]
-                else:
-                    return x[_len // 2:]
-
-            return split(data, 0), split(data, 1)
-
-        except ValueError:
-            return data, data
-
-    # ============================================================#
-    # ============================================================#
-    def get_fake(self, real_c):
-        rand_idx1 = self.get_randperm(real_c)
-        fake_c = real_c[rand_idx1]
-        return fake_c
-
-    # ============================================================#
-    # ============================================================#
     def reset_losses(self):
         # losses = ['Dsrc', 'Dcls']
         # losses += ['Gsrc', 'Gcls', 'Grec', 'Gatm', 'Gats']
@@ -237,36 +209,24 @@ class Train(Solver):
 
     # ============================================================#
     # ============================================================#
-    def train_model(self, generator=False, discriminator=False):
-        for p in self.G.generator.parameters():
-            p.requires_grad_(generator)
-        for p in self.D.parameters():
-            p.requires_grad_(discriminator)
 
-    # ============================================================#
-    # ============================================================#
-
-    def Disc_update(self, real_x0, real_c0, fake_c0):
-        self.train_model(discriminator=True)
-        style_fake0 = to_var(self.G.random_style(real_x0))
+    def Dis_update(self, real_x0, real_c0, fake_c0):
+        style_fake0 = to_var(self.random_style(real_x0))
         fake_x0 = self.G(real_x0, fake_c0, style_fake0)[0]
         d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0, real_c0)
 
         self.loss['Dsrc'] = d_loss_src
         self.loss['Dcls'] = d_loss_cls * self.config.lambda_cls
         d_loss = self.current_losses('D', **self.loss)
-        self.reset_grad()
         d_loss.backward()
-        self.d_optimizer.step()
 
     # ============================================================#
     # ============================================================#
     def Gen_update(self, real_x1, real_c1, fake_c1):
-        self.train_model(generator=True)
         criterion_l1 = torch.nn.L1Loss()
-        style_fake1 = to_var(self.G.random_style(real_x1))
-        style_rec1 = to_var(self.G.random_style(real_x1))
-        style_identity = to_var(self.G.random_style(real_x1))
+        style_fake1 = to_var(self.random_style(real_x1))
+        style_rec1 = to_var(self.random_style(real_x1))
+        style_identity = to_var(self.random_style(real_x1))
 
         fake_x1 = self.G(real_x1, fake_c1, style_fake1)
 
@@ -294,9 +254,7 @@ class Train(Solver):
                 g_loss_idt
 
         g_loss = self.current_losses('G', **self.loss)
-        self.reset_grad()
         g_loss.backward()
-        self.g_optimizer.step()
 
     # ============================================================#
     # ============================================================#
@@ -316,21 +274,7 @@ class Train(Solver):
             self.total_iter = 0
 
         # Fixed inputs, target domain labels, and style for debugging
-        self.fixed_x, self.fixed_label, self.fixed_style = self.debug_vars()
-        if start == 0:
-            if not self.config.Deterministic:
-                self.generate_SMIT(
-                    self.fixed_x,
-                    self.output_sample(0, 0),
-                    Multimodal=1,
-                    label=self.fixed_label,
-                    training=True,
-                    fixed_style=self.fixed_style)
-            self.generate_SMIT(
-                self.fixed_x,
-                self.output_sample(0, 0),
-                label=self.fixed_label,
-                training=True)
+        self.fixed_x, self.fixed_label, self.fixed_style = self.debug_vars(start)
 
         self.PRINT("Current time: " + TimeNow())
         self.PRINT("Debug Log txt: " + os.path.realpath(self.config.log.name))
@@ -359,9 +303,9 @@ class Train(Solver):
                 self.loss = self.reset_losses()
                 self.total_iter += 1 * hvd.size()
                 # RaGAN uses different data for Dis and Gen
-                real_x0, real_x1 = self.split(real_x)
-                real_c0, real_c1 = self.split(real_c)
-                files0, files1 = self.split(files)
+                real_x0, real_x1 = split(real_x)
+                real_c0, real_c1 = split(real_c)
+                files0, files1 = split(files)
 
                 # ============================================================#
                 # ========================= DATA2VAR =========================#
@@ -370,20 +314,24 @@ class Train(Solver):
                 real_c0 = to_var(real_c0)
                 real_x1 = to_var(real_x1)
                 real_c1 = to_var(real_c1)
-                fake_c0 = self.get_fake(real_c0)
+                fake_c0 = get_fake(real_c0)
                 fake_c0 = to_var(fake_c0.data)
-                fake_c1 = self.get_fake(real_c1)
+                fake_c1 = get_fake(real_c1)
                 fake_c1 = to_var(fake_c1.data)
 
                 # ============================================================#
                 # ======================== Train D ===========================#
                 # ============================================================#
-                self.Disc_update(real_x0, real_c0, fake_c0)
+                self.reset_grad()
+                self.Dis_update(real_x0, real_c0, fake_c0)
+                self.d_optimizer.step()
 
                 # ============================================================#
                 # ======================== Train G ===========================#
                 # ============================================================#
+                self.reset_grad()
                 self.Gen_update(real_x1, real_c1, fake_c1)
+                self.g_optimizer.step()
 
                 # ====================== DEBUG =====================#
                 self.INFO(epoch, _iter)
