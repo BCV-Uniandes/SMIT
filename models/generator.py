@@ -64,25 +64,15 @@ class Generator(nn.Module):
 
         # Up-Sampling
         for i in range(conv_repeat):
-            if self.config.UpSample:
-                layers.append(nn.Upsample(scale_factor=2, mode='bilinear'))
-                layers.append(
-                    nn.Conv2d(
-                        curr_dim,
-                        curr_dim // 2,
-                        kernel_size=3,
-                        stride=1,
-                        padding=1,
-                        bias=False))
-            else:
-                layers.append(
-                    nn.ConvTranspose2d(
-                        curr_dim,
-                        curr_dim // 2,
-                        kernel_size=4,
-                        stride=2,
-                        padding=1,
-                        bias=False))
+            layers.append(nn.Upsample(scale_factor=2, mode='bilinear'))
+            layers.append(
+                nn.Conv2d(
+                    curr_dim,
+                    curr_dim // 2,
+                    kernel_size=3,
+                    stride=1,
+                    padding=1,
+                    bias=False))
             if not self.Deterministic:
                 layers.append(LayerNorm(curr_dim // 2))
             else:

@@ -114,7 +114,6 @@ if __name__ == '__main__':
 
     # Misc
     parser.add_argument('--DELETE', action='store_true', default=False)
-    parser.add_argument('--UpSample', action='store_true', default=False)
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')
 

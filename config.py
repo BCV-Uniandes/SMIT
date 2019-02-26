@@ -32,8 +32,6 @@ def update_config(config):
     config.num_epochs *= config.save_epoch
     config.num_epochs_decay *= config.save_epoch
 
-    UPDATE_FOLDER(config, 'UpSample')
-
     if config.DELETE:
         remove_folder(config)
 
