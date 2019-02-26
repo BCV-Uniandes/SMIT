@@ -21,6 +21,7 @@ class Animals(Dataset):
                  shuffling=False,
                  all_attr=-1,
                  continuous=True,
+                 verbose=False,
                  **kwargs):
         self.transform = transform
         self.image_size = image_size
@@ -29,6 +30,7 @@ class Animals(Dataset):
         self.mode = mode
         self.all_attr = all_attr
         self.mode_data = mode_data
+        self.verbose = verbose
         data_root = os.path.join('data', 'Animals', 'Animals_with_Attributes2')
         self.lines = sorted(
             glob.glob(
@@ -54,11 +56,11 @@ class Animals(Dataset):
             readlines()
         }
 
-        if mode != 'val':
+        if self.verbose:
             print('Start preprocessing %s: %s!' % (self.name, mode))
         random.seed(1234)
         self.preprocess()
-        if mode != 'val':
+        if self.verbose:
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
                                                            self.num_data))
 
@@ -86,7 +88,8 @@ class Animals(Dataset):
             PRINT(f, 'TOTAL {}'.format(total))
 
     def preprocess(self):
-        self.histogram()
+        if self.verbose:
+            self.histogram()
         if self.all_attr == 1:  # ALL OF THEM
             self.selected_attrs = [
                 'antelope', 'grizzly+bear', 'killer+whale', 'beaver',

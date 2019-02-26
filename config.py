@@ -16,6 +16,11 @@ def remove_folder(config):
     os.system("rm {} {} {}".format(samples, samples_txt, models))
 
 
+def UPDATE_FOLDER(config, str):
+    if getattr(config, str):
+        update_folder(config, str)
+
+
 def update_config(config):
     import os
     import glob
@@ -27,8 +32,17 @@ def update_config(config):
     config.num_epochs *= config.save_epoch
     config.num_epochs_decay *= config.save_epoch
 
+    UPDATE_FOLDER(config, 'UpSample')
+
     if config.DELETE:
         remove_folder(config)
+
+    if not os.path.exists(config.log_path):
+        os.makedirs(config.log_path)
+    if not os.path.exists(config.model_save_path):
+        os.makedirs(config.model_save_path)
+    if not os.path.exists(config.sample_path):
+        os.makedirs(config.sample_path)
 
     if config.pretrained_model is None:
         try:
@@ -38,5 +52,14 @@ def update_config(config):
                 os.path.basename(config.pretrained_model).split('_')[:-1])
         except BaseException:
             pass
+
+    if config.mode == 'train':
+        config.loss_plot = os.path.abspath(
+            os.path.join(config.sample_path, 'loss.txt'))
+        config.log = os.path.abspath(
+            os.path.join(config.sample_path, 'log.txt'))
+        of = 'a' if os.path.isfile(config.log) else 'w'
+        config.log = open(config.log, of)
+        os.system('touch ' + config.log.name)
 
     return config

@@ -19,6 +19,7 @@ class Yosemite(Dataset):
                  mode,
                  shuffling=False,
                  all_attr=-1,
+                 verbose=False,
                  **kwargs):
         self.transform = transform
         self.image_size = image_size
@@ -26,6 +27,7 @@ class Yosemite(Dataset):
         self.name = 'Yosemite'
         self.all_attr = all_attr
         self.mode_data = mode_data
+        self.verbose = verbose
         mode = mode if mode == 'train' else 'test'
         self.key_fn = lambda line: line.split('/')[-2].split('_')[1]
 
@@ -40,11 +42,11 @@ class Yosemite(Dataset):
             idx: self.key_fn(line)
             for idx, line in enumerate(self.lines)
         }
-        if mode != 'val':
+        if self.verbose:
             print('Start preprocessing %s: %s!' % (self.name, mode))
         random.seed(1234)
         self.preprocess()
-        if mode != 'val':
+        if self.verbose:
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
                                                            self.num_data))
 
@@ -64,7 +66,8 @@ class Yosemite(Dataset):
             PRINT(f, 'TOTAL {}'.format(total))
 
     def preprocess(self):
-        self.histogram()
+        if self.verbose:
+            self.histogram()
         self.selected_attrs = [
             key for key, value in sorted(
                 self.attr2idx.items(), key=lambda kv: (kv[1], kv[0]))
@@ -78,10 +81,11 @@ class Yosemite(Dataset):
         for i, line in enumerate(self.lines):
             filename = os.path.abspath(line)
             key = self.key_fn(line)
-            if key not in self.selected_attrs:
-                continue
-            if self.all_attr == 0 and balanced[key] >= min(self.hist.values()):
-                continue  # Balancing all classes to the minimum
+            # if key not in self.selected_attrs:
+            #     continue
+            # if self.all_attr == 0 and balanced[\
+            #           key] >= min(self.hist.values()):
+            #     continue  # Balancing all classes to the minimum
             balanced[key] += 1
             label = []
             for attr in self.selected_attrs:

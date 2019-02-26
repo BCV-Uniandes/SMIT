@@ -19,6 +19,7 @@ class Image2Edges(Dataset):
                  mode,
                  shuffling=False,
                  all_attr=-1,
+                 verbose=False,
                  **kwargs):
         self.transform = transform
         self.image_size = image_size
@@ -26,6 +27,7 @@ class Image2Edges(Dataset):
         self.name = 'Image2Edges'
         self.all_attr = all_attr
         self.mode_data = mode_data
+        self.verbose = verbose
         self.mode = mode
         mode = mode if mode == 'train' else 'val'
 
@@ -39,11 +41,11 @@ class Image2Edges(Dataset):
             idx: self.key_fn(line)
             for idx, line in enumerate(self.lines)
         }
-        if mode != 'val':
+        if self.verbose:
             print('Start preprocessing %s: %s!' % (self.name, mode))
         random.seed(1234)
         self.preprocess()
-        if mode != 'val':
+        if self.verbose:
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
                                                            self.num_data))
 
@@ -66,7 +68,8 @@ class Image2Edges(Dataset):
             PRINT(f, 'TOTAL {}'.format(total))
 
     def preprocess(self):
-        self.histogram()
+        if self.verbose:
+            self.histogram()
         if self.all_attr == 2:  # all_attr==0 means ALL BALANCED
             self.selected_attrs = [
                 key for key, value in sorted(
@@ -84,8 +87,8 @@ class Image2Edges(Dataset):
         balanced = {key: 0 for key in self.selected_attrs}
         for i, line in enumerate(self.lines):
             filename = os.path.abspath(line)
-            if self.mode == 'test' and 'Image_' in filename:
-                continue  # Only test for edges->images
+            # if self.mode == 'test' and 'Image_' in filename:
+            #     continue  # Only test for edges->images
             key = self.key_fn(line)
             if key not in self.selected_attrs:
                 continue

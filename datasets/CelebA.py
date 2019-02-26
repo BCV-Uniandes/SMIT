@@ -19,6 +19,7 @@ class CelebA(Dataset):
                  mode,
                  shuffling=False,
                  all_attr=0,
+                 verbose=False,
                  **kwargs):
         self.transform = transform
         self.image_size = image_size
@@ -27,6 +28,7 @@ class CelebA(Dataset):
         self.name = 'CelebA'
         self.all_attr = all_attr
         self.mode_data = mode_data
+        self.verbose = verbose
         self.lines = [
             line.strip().split(',') for line in open(
                 os.path.abspath('data/CelebA/list_attr_celeba.txt')).
@@ -44,11 +46,11 @@ class CelebA(Dataset):
         self.attr2idx = {}
         self.idx2attr = {}
 
-        if mode != 'val':
+        if self.verbose:
             print('Start preprocessing %s: %s!' % (self.name, mode))
         random.seed(1234)
         self.preprocess()
-        if mode != 'val':
+        if self.verbose:
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
                                                            self.num_data))
 
@@ -67,14 +69,13 @@ class CelebA(Dataset):
                     dict_.items(), key=lambda kv: (kv[1], kv[0]),
                     reverse=True):
                 total += value
-                if self.mode == 'train':
-                    PRINT(f, '{} {}'.format(key, value))
-            if self.mode == 'train':
-                PRINT(f, 'TOTAL {}'.format(total))
+                PRINT(f, '{} {}'.format(key, value))
+            PRINT(f, 'TOTAL {}'.format(total))
 
     def preprocess(self):
         attrs = self.lines[0][1:]
-        self.histogram()
+        if self.verbose:
+            self.histogram()
 
         for i, attr in enumerate(attrs):
             self.all_attr2idx[attr] = i

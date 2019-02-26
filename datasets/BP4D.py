@@ -16,24 +16,26 @@ class BP4D(Dataset):
                  transform,
                  mode,
                  shuffling=False,
+                 verbose=False,
                  **kwargs):
         self.transform = transform
         self.mode = mode
         self.shuffling = shuffling
         self.image_size = image_size
         self.mode_data = mode_data
+        self.verbose = verbose
         self.name = 'BP4D'
         file_txt = os.path.abspath(
             os.path.join('data', 'BP4D', mode_data, mode + '.txt'))
-        if mode != 'val':
+        if self.verbose:
             print("Data from: " + file_txt)
         self.lines = open(file_txt, 'r').readlines()
-        if mode != 'val':
+        if self.verbose:
             print('Start preprocessing %s: %s!' % (self.name, mode))
         random.seed(1234)
         self.preprocess()
         self.num_data = len(self.filenames)
-        if mode != 'val':
+        if self.verbose:
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
                                                            self.num_data))
 

@@ -10,7 +10,9 @@ from misc.utils import get_labels, get_loss_value
 from misc.utils import TimeNow, to_var
 from misc.losses import _compute_loss_smooth, _GAN_LOSS
 import torch.utils.data.distributed
-
+import horovod.torch as hvd
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
 warnings.filterwarnings('ignore')
 
 
@@ -110,10 +112,16 @@ class Train(Solver):
     # ============================================================#
     def INFO(self, epoch, iter):
         # PRINT log info
-        if (iter + 1) % self.config.log_step == 0 or iter + epoch == 0:
-            self.progress_bar.set_postfix(**self.loss)
-        if (iter + 1) == len(self.data_loader):
-            self.progress_bar.set_postfix('')
+        if self.verbose:
+            if (iter + 1) % self.config.log_step == 0 or iter + epoch == 0:
+                self.loss = {
+                    key: get_loss_value(value)
+                    for key, value in self.loss.items()
+                }
+                self.color(self.loss, 'Gatm', 'blue')
+                self.progress_bar.set_postfix(**self.loss)
+            if (iter + 1) == len(self.data_loader):
+                self.progress_bar.set_postfix('')
 
     # ============================================================#
     # ============================================================#
@@ -121,8 +129,9 @@ class Train(Solver):
         self.g_lr = self.g_lr / 10.
         self.d_lr = self.d_lr / 10.
         self.update_lr(self.g_lr, self.d_lr)
-        self.PRINT('Decay learning rate to g_lr: {}, d_lr: {}.'.format(
-            self.g_lr, self.d_lr))
+        if self.verbose:
+            self.PRINT('Decay learning rate to g_lr: {}, d_lr: {}.'.format(
+                self.g_lr, self.d_lr))
 
     # ============================================================#
     # ============================================================#
@@ -137,7 +146,7 @@ class Train(Solver):
     # ============================================================#
     # ============================================================#
     def MISC(self, epoch, iter):
-        if epoch % self.config.save_epoch == 0:
+        if epoch % self.config.save_epoch == 0 and self.verbose:
             # Save Weights
             self.save(epoch, iter + 1)
 
@@ -171,39 +180,123 @@ class Train(Solver):
             for tag, value in sorted(self.LOSS.items()):
                 log += ", {}: {:.4f}".format(tag, np.array(value).mean())
             self.PRINT(log)
-            self.PLOT(epoch)
+            # self.PLOT(epoch)
 
+        comm.Barrier()
         # Decay learning rate
         if epoch != 0 and epoch % self.config.num_epochs_decay == 0:
             self.Decay_lr()
 
     # ============================================================#
     # ============================================================#
+    def split(self, data):
+        # RaGAN uses different data for Dis and Gen
+        try:
 
-    def Disc_update(self, real_x0, real_c0):
-        rand_idx0 = self.get_randperm(real_c0)
-        fake_c0 = real_c0[rand_idx0]
-        fake_c0 = to_var(fake_c0.data)
+            def split(x, mode=0):
+                if isinstance(x, list) or isinstance(x, tuple):
+                    _len = len(x)
+                else:
+                    _len = x.size(0)
+                if mode == 0:
+                    return x[:_len // 2]
+                else:
+                    return x[_len // 2:]
+
+            return split(data, 0), split(data, 1)
+
+        except ValueError:
+            return data, data
+
+    # ============================================================#
+    # ============================================================#
+    def get_fake(self, real_c):
+        rand_idx1 = self.get_randperm(real_c)
+        fake_c = real_c[rand_idx1]
+        return fake_c
+
+    # ============================================================#
+    # ============================================================#
+    def reset_losses(self):
+        # losses = ['Dsrc', 'Dcls']
+        # losses += ['Gsrc', 'Gcls', 'Grec', 'Gatm', 'Gats']
+        # if self.config.Identity:
+        #     losses += ['Gidt']
+        # losses = {key: 0 for key in losses}
+        return {}
+
+    # ============================================================#
+    # ============================================================#
+    def current_losses(self, mode, **kwargs):
+        loss = 0
+        for key, value in kwargs.items():
+            if mode in key:
+                loss += self.loss[key]
+                self.update_loss(key, get_loss_value(self.loss[key]))
+        return loss
+
+    # ============================================================#
+    # ============================================================#
+    def train_model(self, generator=False, discriminator=False):
+        for p in self.G.generator.parameters():
+            p.requires_grad_(generator)
+        for p in self.D.parameters():
+            p.requires_grad_(discriminator)
+
+    # ============================================================#
+    # ============================================================#
+
+    def Disc_update(self, real_x0, real_c0, fake_c0):
+        self.train_model(discriminator=True)
         style_fake0 = to_var(self.G.random_style(real_x0))
         fake_x0 = self.G(real_x0, fake_c0, style_fake0)[0]
-
-        # ============================================================#
-        # ======================= Train D ============================#
-        # ============================================================#
         d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0, real_c0)
-        d_loss_cls = self.config.lambda_cls * d_loss_cls
 
-        self.loss['Dsrc'] = get_loss_value(d_loss_src)
-        self.loss['Dcls'] = get_loss_value(d_loss_cls)
-        self.update_loss('Dsrc', self.loss['Dsrc'])
-        self.update_loss('Dcls', self.loss['Dcls'])
-
-        # Backward + Optimize
-        d_loss = d_loss_src + d_loss_cls
-
+        self.loss['Dsrc'] = d_loss_src
+        self.loss['Dcls'] = d_loss_cls * self.config.lambda_cls
+        d_loss = self.current_losses('D', **self.loss)
         self.reset_grad()
         d_loss.backward()
         self.d_optimizer.step()
+
+    # ============================================================#
+    # ============================================================#
+    def Gen_update(self, real_x1, real_c1, fake_c1):
+        self.train_model(generator=True)
+        criterion_l1 = torch.nn.L1Loss()
+        style_fake1 = to_var(self.G.random_style(real_x1))
+        style_rec1 = to_var(self.G.random_style(real_x1))
+        style_identity = to_var(self.G.random_style(real_x1))
+
+        fake_x1 = self.G(real_x1, fake_c1, style_fake1)
+
+        g_loss_src, g_loss_cls = self._GAN_LOSS(
+            fake_x1[0], real_x1, fake_c1, is_fake=True)
+        self.loss['Gsrc'] = g_loss_src
+        self.loss['Gcls'] = g_loss_cls * self.config.lambda_cls
+
+        # REC LOSS
+        rec_x1 = self.G(fake_x1[0], real_c1, style_rec1)
+        g_loss_rec = criterion_l1(rec_x1[0], real_x1)
+        self.loss['Grec'] = self.config.lambda_rec * g_loss_rec
+
+        # ========== Attention Part ==========#
+        self.loss['Gatm'] = self.config.lambda_mask * (
+            torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
+        self.loss['Gats'] = self.config.lambda_mask_smooth * (
+            _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(fake_x1[1]))
+
+        # ========== Identity Part ==========#
+        if self.config.Identity:
+            idt_x1 = self.G(real_x1, real_c1, style_identity)[0]
+            g_loss_idt = criterion_l1(idt_x1, real_x1)
+            self.loss['Gidt'] = self.config.lambda_idt * \
+                g_loss_idt
+
+        g_loss = self.current_losses('G', **self.loss)
+        self.reset_grad()
+        g_loss.backward()
+        self.g_optimizer.step()
 
     # ============================================================#
     # ============================================================#
@@ -245,9 +338,8 @@ class Train(Solver):
         # Log info
         # RaGAN uses different data for Dis and Gen
         self.Log = self.PRINT_LOG(self.config.batch_size // 2)
-        self.start_time = time.time()
 
-        criterion_l1 = torch.nn.L1Loss()
+        self.start_time = time.time()
 
         # Start training
         for epoch in range(start, self.config.num_epochs):
@@ -261,97 +353,37 @@ class Train(Solver):
                 unit_scale=True,
                 total=len(self.data_loader),
                 desc=desc_bar,
+                disable=not self.verbose,
                 ncols=5)
             for _iter, (real_x, real_c, files) in self.progress_bar:
-                self.loss = {}
-                self.total_iter += 1
-
+                self.loss = self.reset_losses()
+                self.total_iter += 1 * hvd.size()
                 # RaGAN uses different data for Dis and Gen
-                try:
-
-                    def split(x):
-                        return (x[:x.size(0) // 2], x[x.size(0) // 2:])
-
-                    real_x0, real_x1 = split(real_x)
-                    real_c0, real_c1 = split(real_c)
-                except ValueError:
-
-                    def split(x):
-                        return (x, x)
-
-                    real_x0, real_x1 = split(real_x)
-                    real_c0, real_c1 = split(real_c)
+                real_x0, real_x1 = self.split(real_x)
+                real_c0, real_c1 = self.split(real_c)
+                files0, files1 = self.split(files)
 
                 # ============================================================#
                 # ========================= DATA2VAR =========================#
                 # ============================================================#
-                # Convert tensor to variable
                 real_x0 = to_var(real_x0)
                 real_c0 = to_var(real_c0)
-
                 real_x1 = to_var(real_x1)
                 real_c1 = to_var(real_c1)
-
-                rand_idx1 = self.get_randperm(real_c1)
-                fake_c1 = real_c1[rand_idx1]
+                fake_c0 = self.get_fake(real_c0)
+                fake_c0 = to_var(fake_c0.data)
+                fake_c1 = self.get_fake(real_c1)
                 fake_c1 = to_var(fake_c1.data)
 
-                self.Disc_update(real_x0, real_c0)
+                # ============================================================#
+                # ======================== Train D ===========================#
+                # ============================================================#
+                self.Disc_update(real_x0, real_c0, fake_c0)
 
                 # ============================================================#
                 # ======================== Train G ===========================#
                 # ============================================================#
-                if (_iter + 1) % self.config.d_train_repeat == 0:
-
-                    style_fake1 = to_var(self.G.random_style(real_x1))
-                    style_rec1 = to_var(self.G.random_style(real_x1))
-                    fake_x1 = self.G(real_x1, fake_c1, style_fake1)
-
-                    g_loss_src, g_loss_cls = self._GAN_LOSS(
-                        fake_x1[0], real_x1, fake_c1, is_fake=True)
-
-                    g_loss_cls = g_loss_cls * self.config.lambda_cls
-                    self.loss['Gsrc'] = get_loss_value(g_loss_src)
-                    self.loss['Gcls'] = get_loss_value(g_loss_cls)
-                    self.update_loss('Gsrc', self.loss['Gsrc'])
-                    self.update_loss('Gcls', self.loss['Gcls'])
-
-                    # REC LOSS
-                    rec_x1 = self.G(fake_x1[0], real_c1, style_rec1)
-
-                    g_loss_rec = self.config.lambda_rec * criterion_l1(
-                        rec_x1[0], real_x1)
-                    self.loss['Grec'] = get_loss_value(g_loss_rec)
-                    self.update_loss('Grec', self.loss['Grec'])
-
-                    g_loss = g_loss_src + g_loss_rec + g_loss_cls
-
-                    # ========== Attention Part ==========#
-                    g_loss_mask = self.config.lambda_mask * (
-                        torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
-                    g_loss_mask_smooth = self.config.lambda_mask_smooth * (
-                        _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(
-                            fake_x1[1]))
-                    self.loss['Gatm'] = get_loss_value(g_loss_mask)
-                    self.loss['Gats'] = get_loss_value(g_loss_mask_smooth)
-                    self.update_loss('Gatm', self.loss['Gatm'])
-                    self.update_loss('Gats', self.loss['Gats'])
-                    self.color(self.loss, 'Gatm', 'blue')
-                    g_loss += g_loss_mask + g_loss_mask_smooth
-
-                    # ========== Identity Part ==========#
-                    if self.config.Identity:
-                        style_identity = to_var(self.G.random_style(real_x1))
-                        idt_x1 = self.G(real_x1, real_c1, style_identity)
-                        g_loss_idt = self.config.lambda_idt * criterion_l1(
-                            idt_x1[0], real_x1)
-                        self.loss['Gidt'] = get_loss_value(g_loss_idt)
-                        self.update_loss('Gidt', self.loss['Gidt'])
-                        g_loss += g_loss_idt
-
-                    self.reset_grad()
-                    g_loss.backward()
-                    self.g_optimizer.step()
+                self.Gen_update(real_x1, real_c1, fake_c1)
 
                 # ====================== DEBUG =====================#
                 self.INFO(epoch, _iter)

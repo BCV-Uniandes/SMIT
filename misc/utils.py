@@ -61,9 +61,10 @@ def config_yaml(config, yaml_file):
     import yaml
     with open(yaml_file, 'r') as stream:
         config_yaml = yaml.load(stream)
-    dict_dataset(config_yaml)
+    if config.ALL_ATTR == 0:
+        dict_dataset(config_yaml)
     for key, value in config_yaml.items():
-        if 'ALL_ATTR' in key and config.ALL_ATTR > 0:
+        if 'ALL_ATTR_{}'.format(config.ALL_ATTR) in key:
             config.c_dim = config_yaml['ALL_ATTR_{}'.format(
                 config.ALL_ATTR)]['c_dim']
             dict_dataset(config_yaml['ALL_ATTR_{}'.format(config.ALL_ATTR)])

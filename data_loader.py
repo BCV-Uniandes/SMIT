@@ -2,11 +2,15 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from PIL import Image
 import importlib
-
+import torch
+import horovod.torch as hvd
+hvd.init()
 
 # ==================================================================#
 # ==                           LOADER                             ==#
 # ==================================================================#
+
+
 def get_loader(mode_data,
                image_size,
                batch_size,
@@ -60,10 +64,17 @@ def get_loader(mode_data,
         transform,
         mode,
         shuffling=shuffling or mode == 'train',
+        verbose=mode == 'train' and hvd.rank() == 0,
         **kwargs)
+    if mode == 'train':
+        sampler = torch.utils.data.distributed.DistributedSampler(
+            dataset, num_replicas=hvd.size(), rank=hvd.rank())
+    else:
+        sampler = torch.utils.data.distributed.DistributedSampler(dataset)
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers)
+        num_workers=num_workers,
+        sampler=sampler)
     return data_loader

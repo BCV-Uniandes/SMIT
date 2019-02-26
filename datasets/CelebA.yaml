@@ -11,5 +11,4 @@ save_epoch: 2
 
 c_dim: 10               # Number of domains
 
-  
 lambda_mask: 0.1        # Lambda for attention loss

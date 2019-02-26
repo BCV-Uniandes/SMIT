@@ -1,12 +1,21 @@
 import torch.nn as nn
 from models.spectral import SpectralNorm as SpectralNormalization
+from models.GroupNorm import GroupNorm
 from misc.blocks import ResidualBlock, LinearBlock, Conv2dBlock
 from misc.utils import PRINT
+from torch.nn import init
 
 
 def get_SN(bool):
     if bool:
         return SpectralNormalization
+    else:
+        return lambda x: x
+
+
+def get_GN(bool):
+    if bool:
+        return GroupNorm
     else:
         return lambda x: x
 
@@ -40,3 +49,36 @@ def print_debug(feed, layers, file=None):
     else:
         print(' ')
     return feed
+
+
+def init_weights(net, init_type="normal", gain=0.02):
+    def init_func(m):
+        classname = m.__class__.__name__
+        _conv = classname.find("Conv")
+        _linear = classname.find("Linear")
+        if hasattr(m, "weight") and (_conv != -1 or _linear != -1):
+            if init_type == "normal":
+                init.normal_(m.weight.data, 0.0, gain)
+            elif init_type == "xavier":
+                init.xavier_normal_(m.weight.data, gain=gain)
+            elif init_type == "kaiming":
+                init.kaiming_normal_(m.weight.data, a=0, mode="fan_in")
+            elif init_type == "orthogonal":
+                init.orthogonal_(m.weight.data, gain=gain)
+            else:
+                raise NotImplementedError(
+                    "initialization method [%s] is not implemented" %
+                    init_type)
+            if hasattr(m, "bias") and m.bias is not None:
+                init.constant_(m.bias.data, 0.0)
+        elif classname.find("BatchNorm2d") != -1:
+            init.normal_(m.weight.data, 1.0, gain)
+            init.constant_(m.bias.data, 0.0)
+
+    # print("initialize network with %s" % init_type)
+    net.apply(init_func)
+
+
+def init_net(net, init_type="normal", init_gain=0.02):
+    init_weights(net, init_type, gain=init_gain)
+    return net

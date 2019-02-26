@@ -1,4 +1,5 @@
 import torch
+import horovod.torch as hvd
 import os
 import glob
 import warnings
@@ -12,6 +13,8 @@ from misc.utils import create_dir, denorm, get_labels, get_torch_version
 from misc.utils import Modality, PRINT, single_source, target_debug_list
 from misc.utils import to_cuda, to_data, to_var
 import torch.utils.data.distributed
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
 warnings.filterwarnings('ignore')
 
 
@@ -20,38 +23,57 @@ class Solver(object):
         # Data loader
         self.data_loader = data_loader
         self.config = config
-
+        self.verbose = 1 if hvd.rank() == 0 else 0
         self.build_model()
-
-        # Start with trained model
-        if self.config.pretrained_model:
-            self.load_pretrained_model()
 
     # ==================================================================#
     # ==================================================================#
     def build_model(self):
         # Define a generator and a discriminator
-        from model import MultiDiscriminator as Discriminator
-        from model import AdaInGEN as Generator
+        from models import Discriminator
+        from models import AdaInGEN as Generator
 
-        self.D = Discriminator(self.config, debug=self.config.mode == 'train')
+        self.D = Discriminator(
+            self.config, debug=self.config.mode == 'train' and self.verbose)
         to_cuda(self.D)
-        D_parameters = filter(lambda p: p.requires_grad, self.D.parameters())
-        self.d_optimizer = torch.optim.Adam(
-            D_parameters, self.config.d_lr,
-            [self.config.beta1, self.config.beta2])
-
-        self.G = Generator(self.config, debug=self.config.mode == 'train')
-        G_parameters = self.G.generator.parameters()
-        G_parameters = filter(lambda p: p.requires_grad, G_parameters)
-        self.g_optimizer = torch.optim.Adam(
-            G_parameters, self.config.g_lr,
-            [self.config.beta1, self.config.beta2])
+        self.G = Generator(
+            self.config, debug=self.config.mode == 'train' and self.verbose)
         to_cuda(self.G)
 
-        if self.config.mode == 'train':
+        # Start with trained model
+        if self.config.pretrained_model and self.verbose:
+            self.load_pretrained_model()
+
+        self.d_optimizer = self.set_optimizer(
+            self.D, self.config.d_lr, self.config.beta1, self.config.beta2)
+        self.g_optimizer = self.set_optimizer(
+            self.G, self.config.g_lr, self.config.beta1, self.config.beta2)
+
+        if self.config.mode == 'train' and self.verbose:
             self.print_network(self.D, 'Discriminator')
             self.print_network(self.G, 'Generator')
+
+    # ==================================================================#
+    # ==================================================================#
+    def set_optimizer(self, model, lr, beta1=0.5, beta2=0.999):
+        parameters = filter(lambda p: p.requires_grad, model.parameters())
+        optimizer = torch.optim.Adam(parameters, lr, [beta1, beta2])
+        optimizer = hvd.DistributedOptimizer(
+            optimizer, named_parameters=model.named_parameters())
+
+        # Horovod: broadcast parameters & optimizer state.
+        hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+        hvd.broadcast_optimizer_state(optimizer, root_rank=0)
+        return optimizer
+
+    # ============================================================#
+    # ============================================================#
+    def imshow(self, img):
+        import matplotlib.pyplot as plt
+        img = to_data(denorm(img), cpu=True).numpy()
+        img = img.transpose(1, 2, 0)
+        plt.imshow(img)
+        plt.show()
 
     # ==================================================================#
     # ==================================================================#
@@ -102,6 +124,10 @@ class Solver(object):
         torch.save(self.D.state_dict(), name.format('D'))
         torch.save(self.d_optimizer.state_dict(), name.format('D_optim'))
 
+        def remove(name_1, mode):
+            if os.path.isfile(name_1.format(mode)):
+                os.remove(name_1.format(mode))
+
         if self.config.model_epoch != 1 and int(
                 Epoch) % self.config.model_epoch == 0:
             for _epoch in range(
@@ -109,14 +135,8 @@ class Solver(object):
                 name_1 = os.path.join(
                     self.config.model_save_path, '{}_{}_{}.pth'.format(
                         str(_epoch).zfill(4), iter, '{}'))
-                if os.path.isfile(name_1.format('G')):
-                    os.remove(name_1.format('G'))
-                if os.path.isfile(name_1.format('G_optim')):
-                    os.remove(name_1.format('G_optim'))
-                if os.path.isfile(name_1.format('D')):
-                    os.remove(name_1.format('D'))
-                if os.path.isfile(name_1.format('D_optim')):
-                    os.remove(name_1.format('D_optim'))
+                for mode in ['G', 'G_optim', 'D', 'D_optim']:
+                    remove(name_1, mode)
 
     # ==================================================================#
     # ==================================================================#
@@ -127,37 +147,35 @@ class Solver(object):
             self.config.model_save_path, '{}_{}.pth'.format(
                 self.config.pretrained_model, '{}'))
         self.PRINT('Model: {}'.format(self.name))
-        # if self.config.mode=='train': self.PRINT('Model: {}'.format(name))
-        # self.G.load_state_dict(torch.load(self.name.format('G')))
-        # self.D.load_state_dict(torch.load(self.name.format('D')))
-        self.G.load_state_dict(
-            torch.load(
-                self.name.format('G'),
-                map_location=lambda storage, loc: storage))
-        self.D.load_state_dict(
-            torch.load(
-                self.name.format('D'),
-                map_location=lambda storage, loc: storage))
+        self.name = comm.bcast(self.name, root=0)
+
+        # name = self.name.split('_')
+        # epoch = hvd.broadcast(torch.tensor(int(name[0])),
+        #                   root_rank=0, name='epoch').item()
+        # _iter = hvd.broadcast(torch.tensor(int(name[1])),
+        #                   root_rank=0, name='_iter').item()
+
+        def load_model(model, name='G'):
+            model.load_state_dict(
+                torch.load(
+                    self.name.format(name),
+                    map_location=lambda storage, loc: storage))
+
+        def load_optim(optim, name='G_optim'):
+            optim.load_state_dict(
+                torch.load(
+                    self.name.format(name),
+                    map_location=lambda storage, loc: storage))
+            self.optim_cuda(optim)
+
+        load_model(self.G, 'G')
+        load_model(self.D, 'D')
 
         if self.config.mode == 'train':
-            try:
-                # self.g_optimizer.load_state_dict(torch.load(self.name.format('G_optim')))
-                self.g_optimizer.load_state_dict(
-                    torch.load(
-                        self.name.format('G_optim'),
-                        map_location=lambda storage, loc: storage))
-                self.optim_cuda(self.g_optimizer)
-                # self.d_optimizer.load_state_dict(torch.load(self.name.format('D_optim')))
-                self.d_optimizer.load_state_dict(
-                    torch.load(
-                        self.name.format('D_optim'),
-                        map_location=lambda storage, loc: storage))
-                self.optim_cuda(self.d_optimizer)
-                print("Success!!")
-            except BaseException:
-                print("Loading Failed!!")
-        else:
-            print("Success!!")
+            load_optim(self.g_optimizer, 'G_optim')
+            load_optim(self.d_optimizer, 'D_optim')
+
+        print("Success!!")
 
     # ==================================================================#
     # ==================================================================#
@@ -217,10 +235,11 @@ class Solver(object):
     # ==================================================================#
     # ==================================================================#
     def PRINT(self, str):
-        if self.config.mode == 'train':
-            PRINT(self.config.log, str)
-        else:
-            print(str)
+        if self.verbose:
+            if self.config.mode == 'train':
+                PRINT(self.config.log, str)
+            else:
+                print(str)
 
     # ==================================================================#
     # ==================================================================#
@@ -281,28 +300,21 @@ class Solver(object):
         if self.config.dataset_fake == 'CelebA':
             all_attr = self.data_loader.dataset.selected_attrs
             attr2idx = self.data_loader.dataset.attr2idx
+
+            def replace(attrs):
+                if all_attr[index] in attrs:
+                    for attr in attrs:
+                        if attr in all_attr:
+                            target[:, attr2idx[attr]] = 0
+                    target[:, index] = 1
+
             color_hair = [
                 'Bald', 'Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Gray_Hair'
             ]
             style_hair = ['Bald', 'Straight_Hair', 'Wavy_Hair']
-            ammount_hair = ['Bald', 'Bangs']
-            if all_attr[index] in color_hair:
-                color_hair.remove(all_attr[index])
-                for attr in color_hair:
-                    if attr in all_attr:
-                        target[:, attr2idx[attr]] = 0
-                target[:, index] = 1
-            if all_attr[index] in style_hair:
-                style_hair.remove(all_attr[index])
-                for attr in style_hair:
-                    if attr in all_attr:
-                        target[:, attr2idx[attr]] = 0
-                target[:, index] = 1
-            if all_attr[index] in ammount_hair:
-                ammount_hair.remove(all_attr[index])
-                for attr in ammount_hair:
-                    if attr in all_attr:
-                        target[:, attr2idx[attr]] = 0
+            # ammount_hair = ['Bald', 'Bangs']
+            replace(color_hair)
+            replace(style_hair)
         return target
 
     # ==================================================================#
@@ -388,8 +400,7 @@ class Solver(object):
                     style = self.G.random_style(real_x.size(0))
                     style = to_var(style, volatile=True)
                 else:
-                    style = to_var(
-                        fixed_style[:real_x.size(0)], volatile=True)
+                    style = to_var(fixed_style[:real_x.size(0)], volatile=True)
 
                 for k, target in enumerate(target_list):
                     if self.config.dataset_fake in self.MultiLabel_Datasets:

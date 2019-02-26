@@ -7,6 +7,8 @@ import glob
 import config as cfg
 import warnings
 import sys
+import torch
+import horovod.torch as hvd
 from misc.utils import PRINT, config_yaml
 warnings.filterwarnings('ignore')
 
@@ -112,6 +114,7 @@ if __name__ == '__main__':
 
     # Misc
     parser.add_argument('--DELETE', action='store_true', default=False)
+    parser.add_argument('--UpSample', action='store_true', default=False)
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')
 
@@ -129,32 +132,24 @@ if __name__ == '__main__':
     config = parser.parse_args()
 
     if config.GPU == '-1':
-        config.GPU = 'no_cuda'
-        print("NO CUDA!")
+        # Horovod
+        torch.cuda.set_device(hvd.local_rank())
+        config.GPU = [int(i) for i in range(hvd.size())]
+        config.g_lr *= hvd.size()
+        config.d_lr *= hvd.size()
+
     else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = config.GPU
-        config.GPU = [int(i) for i in config.GPU.split(',')]
+        os.environ["CUDA_VISIBLE_DEVICES"] = config.GPU
+        config.GPU = int(config.GPU)
 
     config_yaml(config, 'datasets/{}.yaml'.format(config.dataset_fake))
     config = cfg.update_config(config)
-
     if config.mode == 'train':
-        # Create directories if not exist
-        if not os.path.exists(config.log_path):
-            os.makedirs(config.log_path)
-        if not os.path.exists(config.model_save_path):
-            os.makedirs(config.model_save_path)
-        if not os.path.exists(config.sample_path):
-            os.makedirs(config.sample_path)
-        org_log = os.path.abspath(os.path.join(config.sample_path, 'log.txt'))
-        config.loss_plot = os.path.abspath(
-            os.path.join(config.sample_path, 'loss.txt'))
-        os.system('touch ' + org_log)
-
-        of = 'a' if os.path.isfile(org_log) else 'wb'
-        with open(org_log, of) as config.log:
+        if hvd.rank() == 0:
             PRINT(config.log, ' '.join(sys.argv))
             _PRINT(config)
-            main(config)
+        main(config)
+        config.log.close()
+
     else:
         main(config)
