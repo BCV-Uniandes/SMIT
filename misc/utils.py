@@ -34,6 +34,7 @@ def circle_frame(tensor, thick=5, color='green', row_color=None):
         _tensor[nn] = tensor[nn] + donut
     return _tensor
 
+
 # ============================================================#
 # ============================================================#
 def color(dict, key, color='red'):
@@ -60,20 +61,24 @@ def compute_lpips(img0, img1, model=None):
 def config_yaml(config, yaml_file):
     def dict_dataset(dict):
         import os
-        if 'dataset' in dict.keys():
-            config.dataset_fake = os.path.join(config.dataset_fake,
-                                               dict['dataset'])
+        config.dataset_fake = os.path.join(config.dataset_fake,
+                                           dict['dataset'])
 
     import yaml
     with open(yaml_file, 'r') as stream:
         config_yaml = yaml.load(stream)
-    if config.ALL_ATTR == 0:
-        dict_dataset(config_yaml)
+    # if config.ALL_ATTR == 0:
+    #     dict_dataset(config_yaml)
     for key, value in config_yaml.items():
         if 'ALL_ATTR_{}'.format(config.ALL_ATTR) in key:
-            config.c_dim = config_yaml['ALL_ATTR_{}'.format(
-                config.ALL_ATTR)]['c_dim']
-            dict_dataset(config_yaml['ALL_ATTR_{}'.format(config.ALL_ATTR)])
+            for key in config_yaml['ALL_ATTR_{}'.format(
+                    config.ALL_ATTR)].keys():
+                setattr(
+                    config, key,
+                    config_yaml['ALL_ATTR_{}'.format(config.ALL_ATTR)][key])
+                if key == 'dataset':
+                    dict_dataset(config_yaml['ALL_ATTR_{}'.format(
+                        config.ALL_ATTR)])
         else:
             setattr(config, key, value)
 
@@ -270,8 +275,11 @@ def get_randperm(x):
         rand_idx = to_var(torch.LongTensor([0]))
     return rand_idx
 
+
 # ==================================================================#
 # ==================================================================#
+
+
 def get_torch_version():
     import torch
     return float('.'.join(torch.__version__.split('.')[:2]))
@@ -516,8 +524,11 @@ def split(data):
     except ValueError:
         return data, data
 
+
 # ==================================================================#
 # ==================================================================#
+
+
 def target_debug_list(size, dim, config=None):
     import torch
     target_c = torch.zeros(size, dim)
@@ -535,7 +546,7 @@ def TimeNow():
     import datetime
     import pytz
     return str(datetime.datetime.now(
-        pytz.timezone('Europe/Amsterdam'))).split('.')[0]
+        pytz.timezone('America/Bogota'))).split('.')[0]
 
 
 # ==================================================================#
@@ -556,14 +567,14 @@ def to_cpu(x):
 def to_cuda(x):
     import torch
     import torch.nn as nn
-    import horovod.torch as hvd
 
     if get_torch_version() > 0.3:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if isinstance(x, nn.Module):
+            x = nn.DataParallel(x)
             x.to(device)
-            if torch.cuda.device_count() > 1 and hvd.size()==1:
-                x = nn.DataParallel(x)         
+            # if torch.cuda.device_count() > 1 and hvd.size()==1:
+            #     x = nn.DataParallel(x)
             return x
         else:
             return x.to(device)

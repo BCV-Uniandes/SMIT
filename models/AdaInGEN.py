@@ -34,8 +34,6 @@ class AdaInGEN(nn.Module):
             self.get_num_adain_params(self.generator),
             dc_dim,
             3,
-            norm='none',
-            activ='relu',
             debug=debug)
         if debug:
             self.debug()

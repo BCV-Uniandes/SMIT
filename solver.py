@@ -39,12 +39,12 @@ class Solver(object):
         self.G = Generator(
             self.config, debug=self.config.mode == 'train' and self.verbose)
         self.G = to_cuda(self.G)
-        # import ipdb; ipdb.set_trace()
 
-        self.d_optimizer = self.set_optimizer(
-            self.D, self.config.d_lr, self.config.beta1, self.config.beta2)
-        self.g_optimizer = self.set_optimizer(
-            self.G, self.config.g_lr, self.config.beta1, self.config.beta2)
+        if self.config.mode == 'train':
+            self.d_optimizer = self.set_optimizer(
+                self.D, self.config.d_lr, self.config.beta1, self.config.beta2)
+            self.g_optimizer = self.set_optimizer(
+                self.G, self.config.g_lr, self.config.beta1, self.config.beta2)
 
         # Start with trained model
         if self.config.pretrained_model and self.verbose:
@@ -57,14 +57,19 @@ class Solver(object):
     # ==================================================================#
     # ==================================================================#
     def set_optimizer(self, model, lr, beta1=0.5, beta2=0.999):
+        # if torch.cuda.device_count() > 1 and hvd.size()==1:
+        #     model = model.module
+        model = model.module
         parameters = filter(lambda p: p.requires_grad, model.parameters())
         optimizer = torch.optim.Adam(parameters, lr, [beta1, beta2])
-        optimizer = hvd.DistributedOptimizer(
-            optimizer, named_parameters=model.named_parameters())
 
-        # Horovod: broadcast parameters & optimizer state.
-        hvd.broadcast_parameters(model.state_dict(), root_rank=0)
-        hvd.broadcast_optimizer_state(optimizer, root_rank=0)
+        if hvd.size() > 1:
+            optimizer = hvd.DistributedOptimizer(
+                optimizer, named_parameters=model.named_parameters())
+
+            # Horovod: broadcast parameters & optimizer state.
+            hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+            hvd.broadcast_optimizer_state(optimizer, root_rank=0)
         return optimizer
 
     # ============================================================#
@@ -80,8 +85,10 @@ class Solver(object):
     # ==================================================================#
 
     def print_network(self, model, name):
-        if torch.cuda.device_count() > 1 and hvd.size()==1:
-            model = model.module
+        # if torch.cuda.device_count() > 1 and hvd.size()==1:
+        #     model = model.module
+
+        model = model.module
         if name == 'Generator':
             choices = ['generator', 'adain_net']
             for m in choices:
@@ -166,12 +173,11 @@ class Solver(object):
                         map_location=lambda storage, loc: storage))
             else:
                 weights = torch.load(
-                        self.name.format(name),
-                        map_location=lambda storage, loc: storage)
-            
-                weights = {'module.'+k: v for k, v in weights.items()}
-                model.load_state_dict(weights)
+                    self.name.format(name),
+                    map_location=lambda storage, loc: storage)
 
+                weights = {'module.' + k: v for k, v in weights.items()}
+                model.load_state_dict(weights)
 
         def load_optim(optim, name='G_optim'):
             optim.load_state_dict(
@@ -239,8 +245,6 @@ class Solver(object):
             Log += ' [*MultiDisc={}]'.format(self.config.MultiDis)
         if self.config.Identity:
             Log += ' [*Identity]'
-        if self.config.Slim_Generator:
-            Log += ' [*SlimGen]'
         if self.config.Deterministic:
             Log += ' [*Deterministic]'
         dataset_string = colored(self.config.dataset_fake, 'red')
@@ -278,10 +282,11 @@ class Solver(object):
     # ============================================================#
     # ============================================================#
     def random_style(self, data):
-        if torch.cuda.device_count() > 1 and hvd.size()==1:
-            return self.G.module.random_style(data)
-        else:
-            return self.G.random_style(data)
+        return self.G.module.random_style(data)
+        # if torch.cuda.device_count() > 1 and hvd.size()==1:
+        #     return self.G.module.random_style(data)
+        # else:
+        #     return self.G.random_style(data)
 
     # ==================================================================#
     # ==================================================================#

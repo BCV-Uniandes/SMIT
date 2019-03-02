@@ -94,7 +94,8 @@ if __name__ == '__main__':
     parser.add_argument('--DEMO_LABEL', type=str, default='')
 
     # Generative
-    parser.add_argument('--MultiDis', type=int, default=3, choices=[1, 2, 3])
+    parser.add_argument(
+        '--MultiDis', type=int, default=3, choices=[1, 2, 3, 4, 5])
     parser.add_argument('--g_conv_dim', type=int, default=32)
     parser.add_argument('--d_conv_dim', type=int, default=32)
     parser.add_argument('--g_repeat_num', type=int, default=6)
@@ -139,8 +140,11 @@ if __name__ == '__main__':
 
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = config.GPU
+        config.num_workers = 0
         config.GPU = [int(i) for i in config.GPU.split(',')]
         config.batch_size *= len(config.GPU)
+        config.g_lr *= len(config.GPU)
+        config.d_lr *= len(config.GPU)
 
     config_yaml(config, 'datasets/{}.yaml'.format(config.dataset_fake))
     config = cfg.update_config(config)

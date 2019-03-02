@@ -5,6 +5,7 @@ from models.utils import get_SN  # , get_SN
 from models.utils import print_debug as _print_debug
 import math
 from misc.utils import PRINT, to_var
+from collections import OrderedDict
 
 
 # ==================================================================#
@@ -15,7 +16,11 @@ class MultiDiscriminator(nn.Module):
         super(MultiDiscriminator, self).__init__()
 
         self.image_size = config.image_size
-        self.conv_dim = config.d_conv_dim
+        conv_dim = config.d_conv_dim
+        conv_dim = conv_dim if config.image_size <= 256 else conv_dim // 2
+        conv_dim = conv_dim if config.image_size <= 512 else conv_dim // 2
+        self.conv_dim = conv_dim
+
         self.repeat_num = config.d_repeat_num
         self.c_dim = config.c_dim
         self.color_dim = config.color_dim
@@ -55,32 +60,29 @@ class MultiDiscriminator(nn.Module):
         image_size = self.image_size / (2**(idx))
         self.repeat_num = int(math.log(image_size, 2) - 1)
         k_size = int(image_size / np.power(2, self.repeat_num))
-        layers = [
-            self.Norm(
-                nn.Conv2d(
-                    self.color_dim,
-                    self.conv_dim,
-                    kernel_size=4,
-                    stride=2,
-                    padding=1))
-        ]
+        layers = []
+        conv = self.Norm(
+            nn.Conv2d(
+                self.color_dim,
+                self.conv_dim,
+                kernel_size=4,
+                stride=2,
+                padding=1))
+        layers.append(('conv_' + str(self.conv_dim), conv))
         # layers += [nn.InstanceNorm2d(self.conv_dim, affine=True)]
-        layers += [nn.LeakyReLU(0.01, inplace=True)]
+        layers += [('relu', nn.LeakyReLU(0.01, inplace=True))]
         curr_dim = self.conv_dim
-        for i in range(1, self.repeat_num):
-            layers += [
-                self.Norm(
-                    nn.Conv2d(
-                        curr_dim,
-                        curr_dim * 2,
-                        kernel_size=4,
-                        stride=2,
-                        padding=1))
-            ]
+        for _ in range(1, self.repeat_num):
+            conv = self.Norm(
+                nn.Conv2d(
+                    curr_dim, curr_dim * 2, kernel_size=4, stride=2,
+                    padding=1))
+            layers += [('conv_' + str(curr_dim * 2), conv)]
             # layers += [nn.InstanceNorm2d(curr_dim*2, affine=True)]
-            layers += [nn.LeakyReLU(0.01, inplace=True)]
+            layers += [('relu', nn.LeakyReLU(0.01, inplace=True))]
             curr_dim *= 2
-        main = nn.Sequential(*layers)
+        # main = nn.Sequential(*layers)
+        main = nn.Sequential(OrderedDict(layers))
         src = nn.Sequential(*[
             nn.Conv2d(
                 curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)

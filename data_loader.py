@@ -70,7 +70,8 @@ def get_loader(mode_data,
         sampler = torch.utils.data.distributed.DistributedSampler(
             dataset, num_replicas=hvd.size(), rank=hvd.rank())
     else:
-        sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+        sampler = torch.utils.data.distributed.DistributedSampler(
+            dataset, num_replicas=1, rank=1)
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=batch_size,

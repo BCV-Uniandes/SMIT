@@ -88,7 +88,6 @@ class Train(Solver):
                 label=fixed_label,
                 training=True)
 
-
         return fixed_x, fixed_label, fixed_style
 
     # ============================================================#
@@ -209,8 +208,23 @@ class Train(Solver):
 
     # ============================================================#
     # ============================================================#
+    def train_model(self, generator=False, discriminator=False):
+        # if hvd.size() > 1:
+        G = self.G.module
+        # if torch.cuda.device_count() > 1 and hvd.size()==1:
+        #     G = self.G.module
+        # else:
+        #     G = self.G
+        for p in G.generator.parameters():
+            p.requires_grad_(generator)
+        for p in self.D.parameters():
+            p.requires_grad_(discriminator)
+
+    # ============================================================#
+    # ============================================================#
 
     def Dis_update(self, real_x0, real_c0, fake_c0):
+        self.train_model(discriminator=True)
         style_fake0 = to_var(self.random_style(real_x0))
         fake_x0 = self.G(real_x0, fake_c0, style_fake0)[0]
         d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0, real_c0)
@@ -223,6 +237,7 @@ class Train(Solver):
     # ============================================================#
     # ============================================================#
     def Gen_update(self, real_x1, real_c1, fake_c1):
+        self.train_model(generator=True)
         criterion_l1 = torch.nn.L1Loss()
         style_fake1 = to_var(self.random_style(real_x1))
         style_rec1 = to_var(self.random_style(real_x1))
@@ -274,7 +289,8 @@ class Train(Solver):
             self.total_iter = 0
 
         # Fixed inputs, target domain labels, and style for debugging
-        self.fixed_x, self.fixed_label, self.fixed_style = self.debug_vars(start)
+        self.fixed_x, self.fixed_label, self.fixed_style = self.debug_vars(
+            start)
 
         self.PRINT("Current time: " + TimeNow())
         self.PRINT("Debug Log txt: " + os.path.realpath(self.config.log.name))
