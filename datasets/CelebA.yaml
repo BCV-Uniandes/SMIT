@@ -5,10 +5,18 @@
 mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 
 Identity: True          # With identity loss
 Deterministic: False    # Deterministic approach
-Slim_Generator: True    # Fast SMIT
 
 save_epoch: 2       
 
 c_dim: 10               # Number of domains
 
 lambda_mask: 0.1        # Lambda for attention loss
+
+ALL_ATTR_1:
+  c_dim: 40
+  save_epoch: 1
+  num_epochs: 300
+  num_epochs_decay: 200
+  MultiDis: 3
+  lambda_idt: 15
+  dataset: 'All_Attributes'
