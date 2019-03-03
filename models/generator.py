@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from models.utils import print_debug as _print_debug
+from models.utils import init_net
 import math
 from misc.utils import PRINT, to_var
 from misc.blocks import (ResidualBlock, LayerNorm)
@@ -85,6 +86,7 @@ class Generator(nn.Module):
             curr_dim = curr_dim // 2
 
         self.main = nn.Sequential(OrderedDict(layers))
+        init_net(self.main, 'kaiming')
 
         layers0 = []
         layers0.append(
@@ -97,6 +99,7 @@ class Generator(nn.Module):
                 bias=False))
         layers0.append(nn.Tanh())
         self.fake = nn.Sequential(*layers0)
+        init_net(self.fake, 'kaiming')
 
         layers1 = []
         layers1.append(
@@ -104,6 +107,7 @@ class Generator(nn.Module):
                 curr_dim, 1, kernel_size=7, stride=1, padding=3, bias=False))
         layers1.append(nn.Sigmoid())
         self.attn = nn.Sequential(*layers1)
+        init_net(self.attn, 'kaiming')
 
         if debug and self.Deterministic:
             self.debug()

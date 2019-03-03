@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from models.utils import print_debug  # , init_net
+from models.utils import print_debug, init_net
 from misc.utils import PRINT, to_var
 
 # from misc.blocks import LinearBlock
@@ -30,7 +30,7 @@ class DC(nn.Module):
         # ]  # no output activations
         self.model = nn.Sequential(*self._model)
         # init_net(self.model, 'normal', 0.02)
-        # init_net(self.model, 'kaiming')
+        init_net(self.model, 'kaiming')
 
         for param in self.model.parameters():
             param.requires_grad = False
