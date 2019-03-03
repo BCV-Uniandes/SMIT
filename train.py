@@ -55,23 +55,19 @@ class Train(Solver):
     # ============================================================#
     # ============================================================#
     def debug_vars(self, start):
-        opt = torch.no_grad() if int(
-            torch.__version__.split('.')[1]) > 3 else open(
-                '/tmp/null.txt', 'w')
-        with opt:
-            fixed_x = []
-            fixed_label = []
-            for i, (images, labels, files) in enumerate(self.data_loader):
-                fixed_x.append(images)
-                fixed_label.append(labels)
-                if i == max(1, int(16 / self.config.batch_size)):
-                    break
-            fixed_x = torch.cat(fixed_x, dim=0)
-            fixed_label = torch.cat(fixed_label, dim=0)
-            if not self.config.Deterministic:
-                fixed_style = self.random_style(fixed_x)
-            else:
-                fixed_style = None
+        fixed_x = []
+        fixed_label = []
+        for i, (images, labels, files) in enumerate(self.data_loader):
+            fixed_x.append(images)
+            fixed_label.append(labels)
+            if i == max(1, int(16 / self.config.batch_size)):
+                break
+        fixed_x = torch.cat(fixed_x, dim=0)
+        fixed_label = torch.cat(fixed_label, dim=0)
+        if not self.config.Deterministic:
+            fixed_style = self.random_style(fixed_x)
+        else:
+            fixed_style = None
 
         if start == 0:
             if not self.config.Deterministic:

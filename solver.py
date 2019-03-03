@@ -305,7 +305,8 @@ class Solver(object):
     # ==================================================================#
     # ==================================================================#
     def _SAVE_IMAGE(self, save_path, fake_list, Attention=False, mode='fake'):
-        fake_images = to_data(torch.cat(fake_list, dim=3), cpu=True)
+        # fake_images = to_data(torch.cat(fake_list, dim=3), cpu=True)
+        fake_images = torch.cat(fake_list, dim=3)
         if 'fake' not in os.path.basename(save_path):
             save_path = save_path.replace('.jpg', '_fake.jpg')
         if Attention:
@@ -349,14 +350,17 @@ class Solver(object):
     # ==================================================================#
     # ==================================================================#
     def Create_Visual_List(self, batch):
-        fake_image_list = [single_source(batch)]
-        fake_attn_list = [
-            single_source(to_var(denorm(batch.data), volatile=True))
-        ]
-        fake_image_list[0] = color_frame(
-            fake_image_list[0], thick=5, color='green', first=True)
-        fake_attn_list[0] = color_frame(
-            fake_attn_list[0], thick=5, color='green', first=True)
+        fake_image_list = single_source(to_data(batch))
+        fake_attn_list = single_source(denorm(to_data(batch)))
+
+        fake_image_list = color_frame(
+            fake_image_list, thick=5, color='green', first=True)
+        fake_attn_list = color_frame(
+            fake_attn_list, thick=5, color='green', first=True)
+        
+        fake_image_list = [fake_image_list.cpu()]
+        fake_attn_list = [fake_attn_list.cpu()]
+
         return fake_image_list, fake_attn_list
 
     # ==================================================================#
@@ -394,11 +398,9 @@ class Solver(object):
         self.D.eval()
         modal = 'Multimodal' if Multimodal else 'Unimodal'
         Output = []
-        opt = torch.no_grad() if get_torch_version() > 0.3 else open(
-            '/tmp/null.txt', 'w')
         flag_time = True
 
-        with opt:
+        with torch.no_grad():
             batch = self.get_batch_inference(batch, Multimodal)
             label = self.get_batch_inference(label, Multimodal)
             for idx, real_x in enumerate(batch):
@@ -410,8 +412,6 @@ class Solver(object):
                     real_x.size(0), self.config.c_dim, config=self.config)
 
                 # Start translations
-                fake_image_list = [real_x]
-                fake_attn_list = [to_var(denorm(real_x.data), volatile=True)]
                 fake_image_list, fake_attn_list = self.Create_Visual_List(
                     real_x)
 
@@ -445,8 +445,8 @@ class Solver(object):
                             modal, real_x.size(0), elapsed))
                         flag_time = False
 
-                    fake_image_list.append(fake_x[0])
-                    fake_attn_list.append(fake_x[1].repeat(1, 3, 1, 1))
+                    fake_image_list.append(to_data(fake_x[0], cpu=True))
+                    fake_attn_list.append(to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
 
                 # Create Folder
                 if training:

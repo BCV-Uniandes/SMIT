@@ -4,7 +4,7 @@
 # logger options
 image_size: 1024
 MultiDis: 5
-batch_size: 3
+batch_size: 5
 style_train_debug: 2
 mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 
 Identity: True          # With identity loss
@@ -12,7 +12,7 @@ Deterministic: False    # Deterministic approach
 
 save_epoch: 1
 c_dim: 10               # Number of domains
-lambda_mask: 0.1        # Lambda for attention loss
+lambda_mask: 1.0        # Lambda for attention loss
 
 ALL_ATTR_1:
   c_dim: 40
