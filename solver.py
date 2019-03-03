@@ -9,7 +9,7 @@ import time
 import datetime
 from torchvision.utils import save_image
 from misc.utils import color_frame
-from misc.utils import create_dir, denorm, get_labels, get_torch_version
+from misc.utils import create_dir, denorm, get_labels
 from misc.utils import Modality, PRINT, single_source, target_debug_list
 from misc.utils import to_cuda, to_data, to_var
 import torch.utils.data.distributed
@@ -357,7 +357,7 @@ class Solver(object):
             fake_image_list, thick=5, color='green', first=True)
         fake_attn_list = color_frame(
             fake_attn_list, thick=5, color='green', first=True)
-        
+
         fake_image_list = [fake_image_list.cpu()]
         fake_attn_list = [fake_attn_list.cpu()]
 
@@ -446,7 +446,8 @@ class Solver(object):
                         flag_time = False
 
                     fake_image_list.append(to_data(fake_x[0], cpu=True))
-                    fake_attn_list.append(to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
+                    fake_attn_list.append(
+                        to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
 
                 # Create Folder
                 if training:
