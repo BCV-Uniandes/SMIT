@@ -67,7 +67,7 @@ class MultiDiscriminator(nn.Module):
                 kernel_size=4,
                 stride=2,
                 padding=1))
-        layers.append(('conv_' + str(self.conv_dim), conv))
+        layers += [('conv_' + str(self.conv_dim), conv)]
         layers += [('relu_' + str(self.conv_dim),
                     nn.LeakyReLU(0.01, inplace=True))]
         curr_dim = self.conv_dim

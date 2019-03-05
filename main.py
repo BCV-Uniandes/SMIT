@@ -85,7 +85,7 @@ if __name__ == '__main__':
     parser.add_argument('--beta2', type=float, default=0.999)
     parser.add_argument('--pretrained_model', type=str, default=None)
 
-    parser.add_argument('--seed', type=int, default=111)
+    parser.add_argument('--seed', type=int, default=10)
 
     # Path
     parser.add_argument('--log_path', type=str, default='./snapshot/logs')
@@ -135,10 +135,6 @@ if __name__ == '__main__':
 
     config = parser.parse_args()
 
-    torch.manual_seed(config.seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(config.seed)
-
     if config.GPU == '-1':
         # Horovod
         torch.cuda.set_device(hvd.local_rank())
@@ -152,6 +148,10 @@ if __name__ == '__main__':
         config.batch_size *= len(config.GPU)
         config.g_lr *= len(config.GPU)
         config.d_lr *= len(config.GPU)
+
+    torch.manual_seed(config.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(config.seed)
 
     config_yaml(config, 'datasets/{}.yaml'.format(config.dataset_fake))
     config = cfg.update_config(config)
