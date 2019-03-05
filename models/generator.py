@@ -33,10 +33,10 @@ class Generator(nn.Module):
             stride=1,
             padding=3,
             bias=False)
-        layers.append(('down_conv_' + str(conv_dim), conv))
+        layers = [('down_conv_' + str(conv_dim), conv)]
         IN = nn.InstanceNorm2d(conv_dim, affine=True)
-        layers.append(('down_norm_' + str(conv_dim), IN))
-        layers.append(('relu_' + str(conv_dim), nn.ReLU(inplace=True)))
+        layers += [('down_norm_' + str(conv_dim), IN)]
+        layers += [('relu_' + str(conv_dim), nn.ReLU(inplace=True))]
 
         # Down-Sampling
         conv_repeat = int(math.log(self.image_size, 2)) - 5
@@ -49,21 +49,21 @@ class Generator(nn.Module):
                 stride=2,
                 padding=1,
                 bias=False)
-            layers.append(('down_conv_' + str(curr_dim * 2), conv))
+            layers += [('down_conv_' + str(curr_dim * 2), conv)]
             IN = nn.InstanceNorm2d(curr_dim * 2, affine=True)
-            layers.append(('down_norm_' + str(curr_dim * 2), IN))
-            layers.append(('relu_' + str(curr_dim * 2), nn.ReLU(inplace=True)))
+            layers += [('down_norm_' + str(curr_dim * 2), IN)]
+            layers += [('relu_' + str(curr_dim * 2), nn.ReLU(inplace=True))]
             curr_dim = curr_dim * 2
 
         # Bottleneck
         for i in range(repeat_num):
             RB = ResidualBlock(dim_in=curr_dim, dim_out=curr_dim, AdaIn=True)
-            layers.append(('res_{}_{}'.format(curr_dim, i), RB))
+            layers += [('res_{}_{}'.format(curr_dim, i), RB)]
 
         # Up-Sampling
         for i in range(conv_repeat):
             up = nn.Upsample(scale_factor=2, mode='bilinear')
-            layers.append(('up_nn_' + str(curr_dim), up))
+            layers += [('up_nn_' + str(curr_dim), up)]
 
             conv = nn.Conv2d(
                 curr_dim,
@@ -72,21 +72,19 @@ class Generator(nn.Module):
                 stride=1,
                 padding=1,
                 bias=False)
-            layers.append(('up_conv_' + str(curr_dim // 2), conv))
+            layers += [('up_conv_' + str(curr_dim // 2), conv)]
 
             if not self.Deterministic:
                 norm = LayerNorm(curr_dim // 2)
             else:
                 norm = nn.InstanceNorm2d(curr_dim // 2, affine=True)
                 # undesirable to generate images in vastly different styles
-            layers.append(('up_norm_' + str(curr_dim // 2), norm))
-            layers.append(('relu_' + str(curr_dim // 2),
-                           nn.ReLU(inplace=True)))
+            layers += [('up_norm_' + str(curr_dim // 2), norm)]
+            layers += [('relu_' + str(curr_dim // 2), nn.ReLU(inplace=True))]
             curr_dim = curr_dim // 2
 
         self.main = nn.Sequential(OrderedDict(layers))
 
-        layers0 = []
         fake_conv = nn.Conv2d(
             curr_dim,
             self.color_dim,
@@ -94,16 +92,15 @@ class Generator(nn.Module):
             stride=1,
             padding=3,
             bias=False)
-        layers0.append(('fake', fake_conv))
-        layers0.append(('tanh', nn.Tanh()))
+        layers0 = [('fake', fake_conv)]
+        layers0 += [('tanh', nn.Tanh())]
         self.fake = nn.Sequential(OrderedDict(layers0))
 
         if not self.config.NO_ATTENTION:
-            layers1 = []
             attn_conv = nn.Conv2d(
                 curr_dim, 1, kernel_size=7, stride=1, padding=3, bias=False)
-            layers1.append(('attn', attn_conv))
-            layers1.append(('sigmoid', nn.Sigmoid()))
+            layers1 = [('attn', attn_conv)]
+            layers1 += [('sigmoid', nn.Sigmoid())]
             self.attn = nn.Sequential(OrderedDict(layers1))
 
         if debug and self.Deterministic:

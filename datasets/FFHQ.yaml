@@ -10,6 +10,9 @@ mode_data: 'normal'     # Either normal with augmentation or faces without augme
 Identity: True          # With identity loss
 Deterministic: False    # Deterministic approach
 
+num_epochs: 300
+num_epochs_decay: 200
+
 save_epoch: 1
 c_dim: 10               # Number of domains
 lambda_mask: 1.0        # Lambda for attention loss

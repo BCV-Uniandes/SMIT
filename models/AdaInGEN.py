@@ -38,6 +38,10 @@ class AdaInGEN(nn.Module):
         if debug:
             self.debug()
 
+        if self.config.STYLE_ENCODER:
+            from models.style_encoder import StyleEncoder
+            self.style_encoder = StyleEncoder(config, debug=debug)
+
     def debug(self):
         feed = to_var(
             torch.ones(1, self.color_dim, self.image_size, self.image_size),

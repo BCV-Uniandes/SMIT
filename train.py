@@ -267,6 +267,13 @@ class Train(Solver):
             self.loss['Gidt'] = self.config.lambda_idt * \
                 g_loss_idt
 
+        # ========== Style Recovery Part ==========#
+        if self.config.STYLE_ENCODER:
+            style_fake1_rec = self.G.style_encoder(fake_x1[0])
+            style_rec1_rec = self.G.style_encoder(rec_x1[0])
+            self.loss['Gsty'] = criterion_l1(style_fake1, style_fake1_rec)
+            self.loss['Gstyr'] = criterion_l1(style_rec1, style_rec1_rec)
+
         g_loss = self.current_losses('G', **self.loss)
         g_loss.backward()
 

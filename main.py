@@ -114,7 +114,8 @@ if __name__ == '__main__':
     parser.add_argument('--style_dim', type=int, default=20, choices=[20])
     parser.add_argument('--dc_dim', type=int, default=256, choices=[256])
 
-    parser.add_argument('--d_train_repeat', type=int, default=1)
+    parser.add_argument('--DETERMINISTIC', action='store_true', default=False)
+    parser.add_argument('--STYLE_ENCODER', action='store_true', default=False)
 
     # Misc
     parser.add_argument('--DELETE', action='store_true', default=False)

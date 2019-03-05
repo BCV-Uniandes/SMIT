@@ -85,7 +85,6 @@ class MultiDiscriminator(nn.Module):
 
         src_conv = nn.Conv2d(
             curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
-
         src = nn.Sequential(OrderedDict([('src', src_conv)]))
 
         aux_conv = nn.Conv2d(
@@ -104,7 +103,5 @@ class MultiDiscriminator(nn.Module):
             _aux = outs[2](main).view(main.size(0), -1)
             outs_src.append(_src)
             outs_aux.append(_aux)
-
             x = self.downsample(x)
-
         return outs_src, outs_aux,

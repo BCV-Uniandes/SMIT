@@ -91,6 +91,8 @@ class Solver(object):
         # model = model.module
         if name == 'Generator':
             choices = ['generator', 'adain_net']
+            if self.config.STYLE_ENCODER:
+                choices += ['style_encoder']
             for m in choices:
                 submodel = getattr(model, m)
                 num_params = 0

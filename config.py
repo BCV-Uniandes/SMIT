@@ -36,6 +36,8 @@ def update_config(config):
         update_folder(config, 'image_' + str(config.image_size))
 
     UPDATE_FOLDER(config, 'NO_ATTENTION')
+    UPDATE_FOLDER(config, 'DETERMINISTIC')
+    UPDATE_FOLDER(config, 'STYLE_ENCODER')
 
     if config.DELETE:
         remove_folder(config)
