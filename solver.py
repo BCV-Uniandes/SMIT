@@ -247,7 +247,7 @@ class Solver(object):
             Log += ' [*MultiDisc={}]'.format(self.config.MultiDis)
         if self.config.Identity:
             Log += ' [*Identity]'
-        if self.config.Deterministic:
+        if self.config.DETERMINISTIC:
             Log += ' [*Deterministic]'
         dataset_string = colored(self.config.dataset_fake, 'red')
         Log += ' [*{}]'.format(dataset_string)
