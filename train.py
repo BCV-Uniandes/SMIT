@@ -113,7 +113,8 @@ class Train(Solver):
                     key: get_loss_value(value)
                     for key, value in self.loss.items()
                 }
-                color(self.loss, 'Gatm', 'blue')
+                if not self.config.NO_ATTENTION:
+                    color(self.loss, 'Gatm', 'blue')
                 self.progress_bar.set_postfix(**self.loss)
             if (iter + 1) == len(self.data_loader):
                 self.progress_bar.set_postfix('')
@@ -206,11 +207,11 @@ class Train(Solver):
     # ============================================================#
     def train_model(self, generator=False, discriminator=False):
         # if hvd.size() > 1:
-        G = self.G.module
-        # if torch.cuda.device_count() > 1 and hvd.size()==1:
-        #     G = self.G.module
-        # else:
-        #     G = self.G
+        # G = self.G.module
+        if torch.cuda.device_count() > 1 and hvd.size() == 1:
+            G = self.G.module
+        else:
+            G = self.G
         for p in G.generator.parameters():
             p.requires_grad_(generator)
         for p in self.D.parameters():
@@ -252,10 +253,12 @@ class Train(Solver):
         self.loss['Grec'] = self.config.lambda_rec * g_loss_rec
 
         # ========== Attention Part ==========#
-        self.loss['Gatm'] = self.config.lambda_mask * (
-            torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
-        self.loss['Gats'] = self.config.lambda_mask_smooth * (
-            _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(fake_x1[1]))
+        if not self.config.NO_ATTENTION:
+            self.loss['Gatm'] = self.config.lambda_mask * (
+                torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
+            self.loss['Gats'] = self.config.lambda_mask_smooth * (
+                _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(
+                    fake_x1[1]))
 
         # ========== Identity Part ==========#
         if self.config.Identity:

@@ -567,14 +567,14 @@ def to_cpu(x):
 def to_cuda(x):
     import torch
     import torch.nn as nn
+    import horovod.torch as hvd
 
     if get_torch_version() > 0.3:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if isinstance(x, nn.Module):
-            x = nn.DataParallel(x)
             x.to(device)
-            # if torch.cuda.device_count() > 1 and hvd.size()==1:
-            #     x = nn.DataParallel(x)
+            if torch.cuda.device_count() > 1 and hvd.size() == 1:
+                x = nn.DataParallel(x)
             return x
         else:
             return x.to(device)

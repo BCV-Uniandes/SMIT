@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-from models.utils import print_debug, init_net
+from models.utils import print_debug
 from misc.utils import PRINT, to_var
-
-# from misc.blocks import LinearBlock
+from collections import OrderedDict
 
 # ==================================================================#
 # ==================================================================#
@@ -15,22 +14,27 @@ class DC(nn.Module):
         super(DC, self).__init__()
         self.config = config
 
-        self._model = [nn.Linear(input_dim, output_dim, bias=False)]
+        use_bias = True
+
+        # self._model = [nn.Linear(input_dim, output_dim, bias=False)]
         # self.model += [nn.ReLU(inplace=True)]
 
-        # self._model = []
-        # self._model += [
-        #     LinearBlock(input_dim, dim, norm=norm, activation=activ)
-        # ]
-        # for i in range(n_blk - 2):
-        #     self._model += [LinearBlock(dim, dim, norm=norm,
-        #           activation=activ)]
-        # self._model += [
-        #     LinearBlock(dim, output_dim, norm='none', activation='none')
-        # ]  # no output activations
-        self.model = nn.Sequential(*self._model)
+        _model = []
+        linear = nn.Linear(input_dim, dim, bias=use_bias)
+        _model += [('input', linear)]
+        _model += [('relu_input', nn.ReLU(inplace=True))]
+        # _model += [linear]
+        for i in range(n_blk - 2):
+            linear = nn.Linear(dim, dim, bias=use_bias)
+            _model += [('linear_' + str(i), linear)]
+            _model += [('relu_' + str(i), nn.ReLU(inplace=True))]
+            # _model += [linear]
+        linear = nn.Linear(dim, output_dim, bias=use_bias)
+        _model += [('output', linear)]  # no output activations
+        # _model += [linear]
+        self.model = nn.Sequential(OrderedDict(_model))
+        # self.model = nn.Sequential(*_model)
         # init_net(self.model, 'normal', 0.02)
-        init_net(self.model, 'kaiming')
 
         for param in self.model.parameters():
             param.requires_grad = False
@@ -39,7 +43,7 @@ class DC(nn.Module):
             feed = to_var(
                 torch.ones(1, input_dim), volatile=True, no_cuda=True)
             PRINT(config.log, '-- DC:')
-            print_debug(feed, self._model)
+            print_debug(feed, self.model)
 
     def forward(self, x):
         return self.model(x.view(x.size(0), -1))

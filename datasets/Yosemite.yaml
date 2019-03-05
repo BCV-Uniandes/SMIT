@@ -3,7 +3,7 @@
 
 # logger options
 batch_size: 24
-mode_data: 'faces'      # Either normal with augmentation or faces without augmentation. 
+mode_data: 'normal'      # Either normal with augmentation or faces without augmentation. 
 Identity: False         # With identity loss
 Deterministic: False    # Deterministic approach
     

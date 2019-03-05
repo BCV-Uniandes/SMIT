@@ -33,7 +33,6 @@ class Yosemite(Dataset):
 
         self.lines = sorted(
             glob.glob('data/{}/{}_*/*.jpg'.format(self.name, mode)))
-        # ipdb.set_trace()
         self.attr2idx = {
             self.key_fn(line): idx
             for idx, line in enumerate(self.lines)

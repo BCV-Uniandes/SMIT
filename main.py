@@ -32,6 +32,7 @@ def main(config):
     from torch.backends import cudnn
     # For fast training
     cudnn.benchmark = True
+    cudnn.deterministic = True
 
     data_loader = get_loader(
         config.mode_data,
@@ -84,6 +85,8 @@ if __name__ == '__main__':
     parser.add_argument('--beta2', type=float, default=0.999)
     parser.add_argument('--pretrained_model', type=str, default=None)
 
+    parser.add_argument('--seed', type=int, default=111)
+
     # Path
     parser.add_argument('--log_path', type=str, default='./snapshot/logs')
     parser.add_argument(
@@ -115,6 +118,7 @@ if __name__ == '__main__':
 
     # Misc
     parser.add_argument('--DELETE', action='store_true', default=False)
+    parser.add_argument('--NO_ATTENTION', action='store_true', default=False)
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')
 
@@ -131,6 +135,10 @@ if __name__ == '__main__':
 
     config = parser.parse_args()
 
+    torch.manual_seed(config.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(config.seed)
+
     if config.GPU == '-1':
         # Horovod
         torch.cuda.set_device(hvd.local_rank())
@@ -140,7 +148,6 @@ if __name__ == '__main__':
 
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = config.GPU
-        config.num_workers = 0
         config.GPU = [int(i) for i in config.GPU.split(',')]
         config.batch_size *= len(config.GPU)
         config.g_lr *= len(config.GPU)

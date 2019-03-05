@@ -57,9 +57,9 @@ class Solver(object):
     # ==================================================================#
     # ==================================================================#
     def set_optimizer(self, model, lr, beta1=0.5, beta2=0.999):
-        # if torch.cuda.device_count() > 1 and hvd.size()==1:
-        #     model = model.module
-        model = model.module
+        if torch.cuda.device_count() > 1 and hvd.size() == 1:
+            model = model.module
+        # model = model.module
         parameters = filter(lambda p: p.requires_grad, model.parameters())
         optimizer = torch.optim.Adam(parameters, lr, [beta1, beta2])
 
@@ -85,10 +85,10 @@ class Solver(object):
     # ==================================================================#
 
     def print_network(self, model, name):
-        # if torch.cuda.device_count() > 1 and hvd.size()==1:
-        #     model = model.module
+        if torch.cuda.device_count() > 1 and hvd.size() == 1:
+            model = model.module
 
-        model = model.module
+        # model = model.module
         if name == 'Generator':
             choices = ['generator', 'adain_net']
             for m in choices:
@@ -282,11 +282,11 @@ class Solver(object):
     # ============================================================#
     # ============================================================#
     def random_style(self, data):
-        return self.G.module.random_style(data)
-        # if torch.cuda.device_count() > 1 and hvd.size()==1:
-        #     return self.G.module.random_style(data)
-        # else:
-        #     return self.G.random_style(data)
+        # return self.G.module.random_style(data)
+        if torch.cuda.device_count() > 1 and hvd.size() == 1:
+            return self.G.module.random_style(data)
+        else:
+            return self.G.random_style(data)
 
     # ==================================================================#
     # ==================================================================#
@@ -446,8 +446,9 @@ class Solver(object):
                         flag_time = False
 
                     fake_image_list.append(to_data(fake_x[0], cpu=True))
-                    fake_attn_list.append(
-                        to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
+                    if not self.config.NO_ATTENTION:
+                        fake_attn_list.append(
+                            to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
 
                 # Create Folder
                 if training:
@@ -462,12 +463,16 @@ class Solver(object):
                             str(idx).zfill(4), _name))
                     create_dir(_save_path)
 
-                mode = 'fake' if not Multimodal else chr(65 + idx)
+                mode = 'fake' if not Multimodal else 'style_' + chr(65 + idx)
                 Output.extend(
                     self._SAVE_IMAGE(_save_path, fake_image_list, mode=mode))
-                Output.extend(
-                    self._SAVE_IMAGE(
-                        _save_path, fake_attn_list, Attention=True, mode=mode))
+                if not self.config.NO_ATTENTION:
+                    Output.extend(
+                        self._SAVE_IMAGE(
+                            _save_path,
+                            fake_attn_list,
+                            Attention=True,
+                            mode=mode))
 
         self.G.train()
         self.D.train()

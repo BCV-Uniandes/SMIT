@@ -35,6 +35,8 @@ def update_config(config):
     if config.image_size != 256:
         update_folder(config, 'image_' + str(config.image_size))
 
+    UPDATE_FOLDER(config, 'NO_ATTENTION')
+
     if config.DELETE:
         remove_folder(config)
 
