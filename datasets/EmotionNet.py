@@ -16,31 +16,33 @@ class EmotionNet(Dataset):
                  transform,
                  mode,
                  shuffling=False,
+                 verbose=False,
                  **kwargs):
         self.transform = transform
         self.mode = mode
         self.shuffling = shuffling
+        self.verbose = verbose
         self.name = 'EmotionNet'
         self.image_size = image_size if image_size >= 128 else 130
-        if mode_data == 'faces':
+        if self.verbose:
             self.ssd = '/home/afromero/ssd2/EmotionNet2018/faces/{}'.format(
                 mode)
         else:
             self.ssd = '/home/afromero/ssd2/EmotionNet2018/data_{}/{}'.format(
                 self.image_size, mode)
-            file_txt = os.path.abspath(
-                os.path.join('data', 'EmotionNet', mode_data, mode + '.txt'))
-        if mode != 'val':
+        file_txt = os.path.abspath(
+            os.path.join('data', 'EmotionNet', mode_data, mode + '.txt'))
+        if self.verbose:
             print("Data from: " + file_txt)
         self.lines = open(file_txt, 'r').readlines()
 
-        if mode != 'val':
+        if self.verbose:
             print('Start preprocessing %s: %s!' % (self.name, mode))
         random.seed(1)
         # random.seed(1234)
         self.preprocess()
         self.num_data = len(self.filenames)
-        if mode != 'val':
+        if self.verbose:
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
                                                            self.num_data))
 

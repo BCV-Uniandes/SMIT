@@ -35,6 +35,13 @@ def circle_frame(tensor, thick=5, color='green', row_color=None):
     return _tensor
 
 
+# ============================================================#
+# ============================================================#
+def color(dict, key, color='red'):
+    from termcolor import colored
+    dict[key] = colored('%.2f' % (dict[key]), color)
+
+
 # ==================================================================#
 # ==================================================================#
 def compute_lpips(img0, img1, model=None):
@@ -54,19 +61,24 @@ def compute_lpips(img0, img1, model=None):
 def config_yaml(config, yaml_file):
     def dict_dataset(dict):
         import os
-        if 'dataset' in dict.keys():
-            config.dataset_fake = os.path.join(config.dataset_fake,
-                                               dict['dataset'])
+        config.dataset_fake = os.path.join(config.dataset_fake,
+                                           dict['dataset'])
 
     import yaml
     with open(yaml_file, 'r') as stream:
         config_yaml = yaml.load(stream)
-    dict_dataset(config_yaml)
+    # if config.ALL_ATTR == 0:
+    #     dict_dataset(config_yaml)
     for key, value in config_yaml.items():
-        if 'ALL_ATTR' in key and config.ALL_ATTR > 0:
-            config.c_dim = config_yaml['ALL_ATTR_{}'.format(
-                config.ALL_ATTR)]['c_dim']
-            dict_dataset(config_yaml['ALL_ATTR_{}'.format(config.ALL_ATTR)])
+        if 'ALL_ATTR_{}'.format(config.ALL_ATTR) in key:
+            for key in config_yaml['ALL_ATTR_{}'.format(
+                    config.ALL_ATTR)].keys():
+                setattr(
+                    config, key,
+                    config_yaml['ALL_ATTR_{}'.format(config.ALL_ATTR)][key])
+                if key == 'dataset':
+                    dict_dataset(config_yaml['ALL_ATTR_{}'.format(
+                        config.ALL_ATTR)])
         else:
             setattr(config, key, value)
 
@@ -191,6 +203,14 @@ def denorm(x):
     return out.clamp_(0, 1)
 
 
+# ============================================================#
+# ============================================================#
+def get_fake(real_c):
+    rand_idx1 = get_randperm(real_c)
+    fake_c = real_c[rand_idx1]
+    return fake_c
+
+
 # ==================================================================#
 # ==================================================================#
 def get_labels(image_size, dataset, attr=None):
@@ -243,8 +263,23 @@ def get_loss_value(x):
         return x.data[0]
 
 
+# ============================================================#
+# ============================================================#
+def get_randperm(x):
+    import torch
+    if x.size(0) > 2:
+        rand_idx = to_var(torch.randperm(x.size(0)))
+    elif x.size(0) == 2:
+        rand_idx = to_var(torch.LongTensor([1, 0]))
+    else:
+        rand_idx = to_var(torch.LongTensor([0]))
+    return rand_idx
+
+
 # ==================================================================#
 # ==================================================================#
+
+
 def get_torch_version():
     import torch
     return float('.'.join(torch.__version__.split('.')[:2]))
@@ -468,8 +503,32 @@ def slerp(val, low, high):
         (1.0 - val) * omega) / so * low + np.sin(val * omega) / so * high
 
 
+# ============================================================#
+# ============================================================#
+def split(data):
+    # RaGAN uses different data for Dis and Gen
+    try:
+
+        def split(x, mode=0):
+            if isinstance(x, list) or isinstance(x, tuple):
+                _len = len(x)
+            else:
+                _len = x.size(0)
+            if mode == 0:
+                return x[:_len // 2]
+            else:
+                return x[_len // 2:]
+
+        return split(data, 0), split(data, 1)
+
+    except ValueError:
+        return data, data
+
+
 # ==================================================================#
 # ==================================================================#
+
+
 def target_debug_list(size, dim, config=None):
     import torch
     target_c = torch.zeros(size, dim)
@@ -487,7 +546,7 @@ def TimeNow():
     import datetime
     import pytz
     return str(datetime.datetime.now(
-        pytz.timezone('Europe/Amsterdam'))).split('.')[0]
+        pytz.timezone('America/Bogota'))).split('.')[0]
 
 
 # ==================================================================#
@@ -508,10 +567,15 @@ def to_cpu(x):
 def to_cuda(x):
     import torch
     import torch.nn as nn
+    import horovod.torch as hvd
+
     if get_torch_version() > 0.3:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if isinstance(x, nn.Module):
             x.to(device)
+            if torch.cuda.device_count() > 1 and hvd.size() == 1:
+                x = nn.DataParallel(x)
+            return x
         else:
             return x.to(device)
     else:
@@ -556,6 +620,8 @@ def to_var(x, volatile=False, requires_grad=False, no_cuda=False):
     if get_torch_version() > 0.3:
         if requires_grad:
             return x.requires_grad_(True)
+        elif volatile:
+            return x.requires_grad_(False)
         else:
             return x
 

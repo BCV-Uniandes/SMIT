@@ -19,6 +19,7 @@ class painters_14(Dataset):
                  mode,
                  shuffling=False,
                  all_attr=-1,
+                 verbose=False,
                  **kwargs):
         self.transform = transform
         self.image_size = image_size
@@ -26,6 +27,7 @@ class painters_14(Dataset):
         self.name = 'painters_14'
         self.all_attr = all_attr
         self.mode_data = mode_data
+        self.verbose = verbose
         self.lines = sorted(
             glob.glob('data/painters_14/{}*/*.jpg'.format(mode)))
         self.attr2idx = {
@@ -38,11 +40,11 @@ class painters_14(Dataset):
             for idx, line in enumerate(
                 sorted(glob.glob('data/painters_14/{}*'.format(mode))))
         }
-        if mode != 'val':
+        if self.verbose:
             print('Start preprocessing %s: %s!' % (self.name, mode))
         random.seed(1234)
         self.preprocess()
-        if mode != 'val':
+        if self.verbose:
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
                                                            self.num_data))
 
@@ -62,7 +64,8 @@ class painters_14(Dataset):
             PRINT(f, 'TOTAL {}'.format(total))
 
     def preprocess(self):
-        self.histogram()
+        if self.verbose:
+            self.histogram()
         self.selected_attrs = [
             key for key, value in sorted(
                 self.attr2idx.items(), key=lambda kv: (kv[1], kv[0]))

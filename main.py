@@ -7,6 +7,8 @@ import glob
 import config as cfg
 import warnings
 import sys
+import torch
+import horovod.torch as hvd
 from misc.utils import PRINT, config_yaml
 warnings.filterwarnings('ignore')
 
@@ -30,6 +32,7 @@ def main(config):
     from torch.backends import cudnn
     # For fast training
     cudnn.benchmark = True
+    cudnn.deterministic = True
 
     data_loader = get_loader(
         config.mode_data,
@@ -82,6 +85,8 @@ if __name__ == '__main__':
     parser.add_argument('--beta2', type=float, default=0.999)
     parser.add_argument('--pretrained_model', type=str, default=None)
 
+    parser.add_argument('--seed', type=int, default=10)
+
     # Path
     parser.add_argument('--log_path', type=str, default='./snapshot/logs')
     parser.add_argument(
@@ -92,7 +97,8 @@ if __name__ == '__main__':
     parser.add_argument('--DEMO_LABEL', type=str, default='')
 
     # Generative
-    parser.add_argument('--MultiDis', type=int, default=3, choices=[1, 2, 3])
+    parser.add_argument(
+        '--MultiDis', type=int, default=3, choices=[1, 2, 3, 4, 5])
     parser.add_argument('--g_conv_dim', type=int, default=32)
     parser.add_argument('--d_conv_dim', type=int, default=32)
     parser.add_argument('--g_repeat_num', type=int, default=6)
@@ -112,6 +118,7 @@ if __name__ == '__main__':
 
     # Misc
     parser.add_argument('--DELETE', action='store_true', default=False)
+    parser.add_argument('--NO_ATTENTION', action='store_true', default=False)
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')
 
@@ -129,32 +136,31 @@ if __name__ == '__main__':
     config = parser.parse_args()
 
     if config.GPU == '-1':
-        config.GPU = 'no_cuda'
-        print("NO CUDA!")
+        # Horovod
+        torch.cuda.set_device(hvd.local_rank())
+        config.GPU = [int(i) for i in range(hvd.size())]
+        config.g_lr *= hvd.size()
+        config.d_lr *= hvd.size()
+
     else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = config.GPU
+        os.environ["CUDA_VISIBLE_DEVICES"] = config.GPU
         config.GPU = [int(i) for i in config.GPU.split(',')]
+        config.batch_size *= len(config.GPU)
+        config.g_lr *= len(config.GPU)
+        config.d_lr *= len(config.GPU)
+
+    torch.manual_seed(config.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(config.seed)
 
     config_yaml(config, 'datasets/{}.yaml'.format(config.dataset_fake))
     config = cfg.update_config(config)
-
     if config.mode == 'train':
-        # Create directories if not exist
-        if not os.path.exists(config.log_path):
-            os.makedirs(config.log_path)
-        if not os.path.exists(config.model_save_path):
-            os.makedirs(config.model_save_path)
-        if not os.path.exists(config.sample_path):
-            os.makedirs(config.sample_path)
-        org_log = os.path.abspath(os.path.join(config.sample_path, 'log.txt'))
-        config.loss_plot = os.path.abspath(
-            os.path.join(config.sample_path, 'loss.txt'))
-        os.system('touch ' + org_log)
-
-        of = 'a' if os.path.isfile(org_log) else 'wb'
-        with open(org_log, of) as config.log:
+        if hvd.rank() == 0:
             PRINT(config.log, ' '.join(sys.argv))
             _PRINT(config)
-            main(config)
+        main(config)
+        config.log.close()
+
     else:
         main(config)

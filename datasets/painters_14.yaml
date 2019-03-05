@@ -5,7 +5,7 @@
 mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 
 Identity: False         # With identity loss
 Deterministic: False    # Deterministic approach
-Slim_Generator: True    # Fast SMIT
+
 save_epoch: 20          # 20 epochs of this dataset represents ~6000 iterations
 c_dim: 14               # Number of domains
   

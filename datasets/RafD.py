@@ -18,11 +18,13 @@ class RafD(Dataset):
                  transform,
                  mode,
                  shuffling=False,
+                 verbose=False,
                  **kwargs):
         self.transform = transform
         self.image_size = image_size
         self.shuffling = shuffling
         self.name = 'RafD'
+        self.verbose = verbose
         data_root = os.path.join('data', 'RafD', '{}')
         data_root = data_root.format(
             'faces') if mode_data == 'faces' else data_root.format('data')
@@ -30,11 +32,11 @@ class RafD(Dataset):
             glob.glob(os.path.abspath(os.path.join(data_root, '*.jpg'))))
         self.mode = 'train' if mode == 'train' else 'test'
         self.lines = self.get_subjects(self.lines, mode)
-        if mode != 'val':
+        if self.verbose:
             print('Start preprocessing %s: %s!' % (self.name, mode))
         random.seed(1234)
         self.preprocess()
-        if mode != 'val':
+        if self.verbose:
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
                                                            self.num_data))
 

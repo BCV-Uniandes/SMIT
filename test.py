@@ -2,9 +2,10 @@ from solver import Solver
 import torch
 import os
 import warnings
+import imageio
 import numpy as np
-from misc.utils import color_frame, create_dir, get_torch_version, slerp
-from misc.utils import single_source, TimeNow_str, to_data, to_var
+from misc.utils import color_frame, create_dir, denorm, get_torch_version
+from misc.utils import slerp, single_source, TimeNow_str, to_data, to_var
 import torch.utils.data.distributed
 
 warnings.filterwarnings('ignore')
@@ -14,6 +15,59 @@ class Test(Solver):
     def __init__(self, config, data_loader):
         super(Test, self).__init__(config, data_loader)
 
+    # ==================================================================#
+    # ==================================================================#
+    def folder_fid(self, data_loader):
+        self.G.eval()
+        n_rep = 5
+        opt = torch.no_grad() if get_torch_version() > 0.3 else open(
+            '/tmp/_null.txt', 'w')
+        save_folder = self.config.sample_path
+        self.PRINT('FID Folder at "{}"..!'.format(save_folder))
+        _dirs = [[os.path.join(save_folder, 'real_label0')]]
+        _dirs[-1].append(os.path.join(save_folder, 'real_label1'))
+        for i in range(1, n_rep + 1):
+            _dirs.append([
+                os.path.join(save_folder, 'fake%s_label0' % (str(i).zfill(2)))
+            ])
+            _dirs[-1].append(
+                os.path.join(save_folder, 'fake%s_label1' % (str(i).zfill(2))))
+        for _dir in _dirs:
+            for _di in _dir:
+                os.system('rm -rf {}'.format(_di))
+                create_dir(_di)
+
+        def save_img(data, idx, pos, iter):
+            path = os.path.join(_dirs[idx][pos], '{}_{}.jpg'.format(
+                idx,
+                str(iter).zfill(4)))
+            imageio.imwrite(path, (data * 255).astype(np.uint8))
+
+        iter = 0
+        with opt:
+            for i, (real_x, label, _) in enumerate(data_loader):
+                for idx, (real_x0, label0) in enumerate(zip(real_x, label)):
+                    # import ipdb; ipdb.set_trace()
+                    real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
+                    label0 = (1 - label0.repeat(n_rep, 1))**2
+                    real_x0 = to_var(real_x0, volatile=True)
+                    label0 = to_var(label0, volatile=True)
+
+                    style = self.G.random_style(n_rep)
+                    style = to_var(style, volatile=True)
+                    fake_x0 = self.G(real_x0, label0, stochastic=style)[0]
+
+                    fake_x0 = denorm(to_data(fake_x0, cpu=True)).numpy()
+                    real_x0 = denorm(to_data(real_x0, cpu=True)).numpy()
+                    real_x0 = real_x0.transpose(0, 2, 3, 1)[0]
+                    save_img(real_x0, 0, int(label0[0][0]), iter)
+                    fake_x0 = fake_x0.transpose(0, 2, 3, 1)
+                    for i, data in enumerate(fake_x0):
+                        save_img(data, i + 1, int(1 - label0[0][0]), iter)
+                    iter += 1
+
+    # ==================================================================#
+    # ==================================================================#
     def save_multimodal_output(self,
                                real_x,
                                label,
@@ -76,17 +130,12 @@ class Test(Solver):
                     fake_image_list.append(fake_x[0])
                     fake_attn_list.append(fake_x[1].repeat(1, 3, 1, 1))
                 self._SAVE_IMAGE(
-                    _save_path,
-                    fake_image_list,
-                    im_size=self.config.image_size,
-                    mode='style_' + chr(65 + idx),
-                    no_labels=True)
+                    _save_path, fake_image_list, mode='style_' + chr(65 + idx))
                 self._SAVE_IMAGE(
-                    _save_path.replace(_name, _name + '_attn'),
+                    _save_path,
                     fake_attn_list,
-                    im_size=self.config.image_size,
-                    mode='style_' + chr(65 + idx),
-                    no_labels=True)
+                    Attention=True,
+                    mode='style_' + chr(65 + idx))
         self.G.train()
         self.D.train()
 
@@ -155,6 +204,9 @@ class Test(Solver):
     def __call__(self, dataset='', load=False):
         import os
         from data_loader import get_loader
+        save_folder_fid = self.config.dataset_fake in [
+            'Yosemite', 'Image2Edges'
+        ]
         last_name = self.resume_name()
         save_folder = os.path.join(self.config.sample_path,
                                    '{}_test'.format(last_name))
@@ -162,6 +214,7 @@ class Test(Solver):
         if dataset == '':
             dataset = self.config.dataset_fake
             data_loader = self.data_loader
+            self.dataset_real = dataset
         else:
             data_loader = get_loader(
                 self.config.mode_data,
@@ -179,12 +232,13 @@ class Test(Solver):
             _debug = range(1)
 
         string = '{}'.format(TimeNow_str())
-
+        if save_folder_fid:
+            self.folder_fid(data_loader)
         for i, (real_x, org_c, files) in enumerate(data_loader):
             save_path = os.path.join(
                 save_folder, '{}_{}_{}.jpg'.format(dataset, '{}', i + 1))
             name = os.path.abspath(save_path.format(string))
-            if self.config.dataset_fake == self.config.dataset_real:
+            if self.config.dataset_fake == dataset:
                 label = org_c
             else:
                 label = None
