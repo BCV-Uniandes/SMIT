@@ -21,7 +21,7 @@ class Generator(nn.Module):
         self.c_dim = config.c_dim
         self.color_dim = config.color_dim
         self.style_dim = config.style_dim
-        self.Deterministic = config.Deterministic
+        self.Deterministic = config.DETERMINISTIC
 
         conv_dim = config.g_conv_dim
         conv_dim = conv_dim if config.image_size <= 256 else conv_dim // 2

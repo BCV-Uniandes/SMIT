@@ -64,13 +64,13 @@ class Train(Solver):
                 break
         fixed_x = torch.cat(fixed_x, dim=0)
         fixed_label = torch.cat(fixed_label, dim=0)
-        if not self.config.Deterministic:
+        if not self.config.DETERMINISTIC:
             fixed_style = self.random_style(fixed_x)
         else:
             fixed_style = None
 
         if start == 0:
-            if not self.config.Deterministic:
+            if not self.config.DETERMINISTIC:
                 self.generate_SMIT(
                     fixed_x,
                     self.output_sample(0, 0),
@@ -147,7 +147,7 @@ class Train(Solver):
             self.save(epoch, iter + 1)
 
             # Save Translation
-            if not self.config.Deterministic:
+            if not self.config.DETERMINISTIC:
                 self.generate_SMIT(
                     self.fixed_x,
                     self.output_sample(epoch, iter + 1),
