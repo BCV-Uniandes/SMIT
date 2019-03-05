@@ -4,7 +4,6 @@
 # logger options
 mode_data: 'faces'      # Either normal with augmentation or faces without augmentation. 
 Identity: False         # With identity loss
-Deterministic: False    # Deterministic approach
 
 save_epoch: 2          # Number of epochs of this dataset represents ~6000 iterations
               

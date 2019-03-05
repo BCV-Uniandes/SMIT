@@ -18,7 +18,7 @@ class AdaInGEN(nn.Module):
         self.image_size = config.image_size
         self.style_dim = config.style_dim
         self.c_dim = config.c_dim
-        self.Deterministic = config.Deterministic
+        self.Deterministic = config.DETERMINISTIC
 
         def print_debug(x, v):
             return _print_debug(x, v, file=config.log)

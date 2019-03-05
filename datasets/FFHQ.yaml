@@ -8,7 +8,6 @@ batch_size: 5
 style_train_debug: 2
 mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 
 Identity: True          # With identity loss
-Deterministic: False    # Deterministic approach
 
 num_epochs: 300
 num_epochs_decay: 200
