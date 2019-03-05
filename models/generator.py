@@ -22,6 +22,7 @@ class Generator(nn.Module):
         self.color_dim = config.color_dim
         self.style_dim = config.style_dim
         self.Deterministic = config.DETERMINISTIC
+        mode_upsample = self.config.upsample
 
         conv_dim = config.g_conv_dim
         conv_dim = conv_dim if config.image_size <= 256 else conv_dim // 2
@@ -62,7 +63,7 @@ class Generator(nn.Module):
 
         # Up-Sampling
         for i in range(conv_repeat):
-            up = nn.Upsample(scale_factor=2, mode='bilinear')
+            up = nn.Upsample(scale_factor=2, mode=mode_upsample)
             layers += [('up_nn_' + str(curr_dim), up)]
 
             conv = nn.Conv2d(

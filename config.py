@@ -38,6 +38,8 @@ def update_config(config):
     UPDATE_FOLDER(config, 'NO_ATTENTION')
     UPDATE_FOLDER(config, 'DETERMINISTIC')
     UPDATE_FOLDER(config, 'STYLE_ENCODER')
+    if config.upsample=='nearest':
+        update_folder(config, 'upsample_nearest')
 
     if config.DELETE:
         remove_folder(config)
