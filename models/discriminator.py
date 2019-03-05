@@ -68,10 +68,8 @@ class MultiDiscriminator(nn.Module):
                 stride=2,
                 padding=1))
         layers.append(('conv_' + str(self.conv_dim), conv))
-        # layers.append(conv)
         layers += [('relu_' + str(self.conv_dim),
                     nn.LeakyReLU(0.01, inplace=True))]
-        # layers += [nn.LeakyReLU(0.01, inplace=True)]
         curr_dim = self.conv_dim
         for _ in range(1, self.repeat_num):
             conv = self.Norm(
@@ -79,24 +77,19 @@ class MultiDiscriminator(nn.Module):
                     curr_dim, curr_dim * 2, kernel_size=4, stride=2,
                     padding=1))
             layers += [('conv_' + str(curr_dim * 2), conv)]
-            # layers += [conv]
             layers += [('relu_' + str(curr_dim * 2),
                         nn.LeakyReLU(0.01, inplace=True))]
-            # layers += [nn.LeakyReLU(0.01, inplace=True)]
             curr_dim *= 2
 
         main = nn.Sequential(OrderedDict(layers))
-        # main = nn.Sequential(*layers)
 
         src_conv = nn.Conv2d(
             curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
 
-        # src = nn.Sequential(*[src_conv])
         src = nn.Sequential(OrderedDict([('src', src_conv)]))
 
         aux_conv = nn.Conv2d(
             curr_dim, self.c_dim, kernel_size=k_size, bias=False)
-        # aux = nn.Sequential(*[aux_conv])
         aux = nn.Sequential(OrderedDict([('aux', aux_conv)]))
 
         return main, src, aux

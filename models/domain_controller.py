@@ -23,17 +23,13 @@ class DC(nn.Module):
         linear = nn.Linear(input_dim, dim, bias=use_bias)
         _model += [('input', linear)]
         _model += [('relu_input', nn.ReLU(inplace=True))]
-        # _model += [linear]
         for i in range(n_blk - 2):
             linear = nn.Linear(dim, dim, bias=use_bias)
             _model += [('linear_' + str(i), linear)]
             _model += [('relu_' + str(i), nn.ReLU(inplace=True))]
-            # _model += [linear]
         linear = nn.Linear(dim, output_dim, bias=use_bias)
         _model += [('output', linear)]  # no output activations
-        # _model += [linear]
         self.model = nn.Sequential(OrderedDict(_model))
-        # self.model = nn.Sequential(*_model)
         # init_net(self.model, 'normal', 0.02)
 
         for param in self.model.parameters():
