@@ -10,7 +10,6 @@ from collections import OrderedDict
 # ==================================================================#
 # ==================================================================#
 class Generator(nn.Module):
-
     def __init__(self, config, debug=False, **kwargs):
         super(Generator, self).__init__()
         layers = []

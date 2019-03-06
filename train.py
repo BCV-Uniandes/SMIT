@@ -1,5 +1,4 @@
 from solver import Solver
-import sys
 import torch
 import os
 import time
@@ -320,7 +319,8 @@ class Train(Solver):
                 unit_scale=True,
                 total=len(self.data_loader),
                 desc=desc_bar,
-                disable=not self.verbose and (epoch % self.config.save_epoch == 0),
+                disable=not self.verbose
+                and (epoch % self.config.save_epoch == 0),
                 ncols=5)
             for _iter, (real_x, real_c, files) in self.progress_bar:
                 self.loss = self.reset_losses()

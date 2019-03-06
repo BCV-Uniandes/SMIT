@@ -43,13 +43,12 @@ class MultiDiscriminator(nn.Module):
 
     def debug(self):
         feed = to_var(
-            torch.ones(1, self.color_dim, self.image_size,
-                       self.image_size),
+            torch.ones(1, self.color_dim, self.image_size, self.image_size),
             volatile=True,
             no_cuda=True)
         modelList = zip(self.cnns_main, self.cnns_src, self.cnns_aux)
         for idx, outs in enumerate(modelList):
-            PRINT(config.log, '-- MultiDiscriminator ({}):'.format(idx))
+            PRINT(self.config.log, '-- MultiDiscriminator ({}):'.format(idx))
             features = self.print_debug(feed, outs[-3])
             self.print_debug(features, outs[-2])
             self.print_debug(features, outs[-1]).view(feed.size(0), -1)

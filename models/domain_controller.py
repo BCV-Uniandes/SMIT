@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from models.utils import print_debug
 from misc.utils import PRINT, to_var
 from collections import OrderedDict
 
@@ -13,6 +12,7 @@ class DC(nn.Module):
 
         super(DC, self).__init__()
         self.config = config
+        self.input_dim = input_dim
 
         use_bias = True
 
@@ -40,8 +40,9 @@ class DC(nn.Module):
             self.debug()
 
     def debug(self):
-        feed = to_var(torch.ones(1, input_dim), volatile=True, no_cuda=True)
-        PRINT(config.log, '-- DC:')
+        feed = to_var(
+            torch.ones(1, self.input_dim), volatile=True, no_cuda=True)
+        PRINT(self.config.log, '-- DC:')
         self.print_debug(feed, self.model)
 
     def print_debug(self, x, v):
