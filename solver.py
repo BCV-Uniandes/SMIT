@@ -252,9 +252,11 @@ class Solver(object):
         if self.config.NO_ATTENTION:
             Log += ' [*NO_ATTENTION]'
         if self.config.DC_TRAIN:
-            Log += colored(' [*DC_TRAIN]', 'red')
+            _str = colored('DC_TRAIN', 'red')
+            Log += ' [*{}]'.format(_str)
         if self.config.STYLE_ENCODER:
-            Log += colored(' [*STYLE_ENCODER]', 'green')
+            _str = colored('STYLE_ENCODER', 'green')
+            Log += ' [*{}]'.format(_str)            
         dataset_string = colored(self.config.dataset_fake, 'red')
         Log += ' [*{}]'.format(dataset_string)
         self.PRINT(Log)
