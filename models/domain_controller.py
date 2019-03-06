@@ -32,8 +32,9 @@ class DC(nn.Module):
         self.model = nn.Sequential(OrderedDict(_model))
         # init_net(self.model, 'normal', 0.02)
 
-        for param in self.model.parameters():
-            param.requires_grad = False
+        if not self.config.DC_TRAIN:
+            for param in self.model.parameters():
+                param.requires_grad = False
 
         if debug:
             self.debug()
