@@ -35,6 +35,10 @@ def update_config(config):
     if config.image_size != 256:
         update_folder(config, 'image_' + str(config.image_size))
 
+    if config.NO_ATTENTION:
+        config.Identity = True
+        config.lambda_idt = 1.0
+
     UPDATE_FOLDER(config, 'NO_ATTENTION')
     UPDATE_FOLDER(config, 'DETERMINISTIC')
     UPDATE_FOLDER(config, 'STYLE_ENCODER')
