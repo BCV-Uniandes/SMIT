@@ -256,7 +256,7 @@ class Solver(object):
             Log += ' [*{}]'.format(_str)
         if self.config.STYLE_ENCODER:
             _str = colored('STYLE_ENCODER', 'green')
-            Log += ' [*{}]'.format(_str)            
+            Log += ' [*{}]'.format(_str)
         dataset_string = colored(self.config.dataset_fake, 'red')
         Log += ' [*{}]'.format(dataset_string)
         self.PRINT(Log)
