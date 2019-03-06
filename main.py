@@ -74,8 +74,8 @@ if __name__ == '__main__':
     parser.add_argument('--image_size', type=int, default=256)
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--num_epochs', type=int, default=50)
-    parser.add_argument('--num_epochs_decay', type=int, default=40)
+    parser.add_argument('--num_epochs', type=int, default=100)
+    parser.add_argument('--num_epochs_decay', type=int, default=80)
     parser.add_argument(
         '--save_epoch', type=int, default=1)  # Save samples how many epochs
     parser.add_argument(

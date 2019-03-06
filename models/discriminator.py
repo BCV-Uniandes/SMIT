@@ -27,9 +27,6 @@ class MultiDiscriminator(nn.Module):
         self.config = config
         self.Norm = get_SN(True)
 
-        def print_debug(x, v):
-            return _print_debug(x, v, file=config.log)
-
         self.downsample = nn.AvgPool2d(
             3, stride=2, padding=[1, 1], count_include_pad=False)
         self.cnns_main = nn.ModuleList()
@@ -42,18 +39,24 @@ class MultiDiscriminator(nn.Module):
             self.cnns_aux.append(cnns_aux)
 
         if debug:
-            feed = to_var(
-                torch.ones(1, self.color_dim, self.image_size,
-                           self.image_size),
-                volatile=True,
-                no_cuda=True)
-            modelList = zip(self.cnns_main, self.cnns_src, self.cnns_aux)
-            for idx, outs in enumerate(modelList):
-                PRINT(config.log, '-- MultiDiscriminator ({}):'.format(idx))
-                features = print_debug(feed, outs[-3])
-                print_debug(features, outs[-2])
-                print_debug(features, outs[-1]).view(feed.size(0), -1)
-                feed = self.downsample(feed)
+            self.debug()
+
+    def debug(self):
+        feed = to_var(
+            torch.ones(1, self.color_dim, self.image_size,
+                       self.image_size),
+            volatile=True,
+            no_cuda=True)
+        modelList = zip(self.cnns_main, self.cnns_src, self.cnns_aux)
+        for idx, outs in enumerate(modelList):
+            PRINT(config.log, '-- MultiDiscriminator ({}):'.format(idx))
+            features = self.print_debug(feed, outs[-3])
+            self.print_debug(features, outs[-2])
+            self.print_debug(features, outs[-1]).view(feed.size(0), -1)
+            feed = self.downsample(feed)
+
+    def print_debug(self, x, v):
+        return _print_debug(x, v, file=self.config.log)
 
     def _make_net(self, idx=0):
         image_size = self.image_size / (2**(idx))

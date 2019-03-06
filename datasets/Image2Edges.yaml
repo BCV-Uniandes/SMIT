@@ -5,11 +5,10 @@
 mode_data: 'faces'      # Either normal with augmentation or faces without augmentation. 
 Identity: False         # With identity loss
 
-save_epoch: 2          # Number of epochs of this dataset represents ~6000 iterations
-              
-c_dim: 2  # Number of domains
-dataset: 'Image2Shoes'
-
+ALL_ATTR_0:
+  save_epoch: 2          # Number of epochs of this dataset represents ~6000 iterations
+  c_dim: 2  # Number of domains
+  dataset: 'Image2Shoes'
 ALL_ATTR_1:
   c_dim: 2
   dataset: 'Image2Handbags'

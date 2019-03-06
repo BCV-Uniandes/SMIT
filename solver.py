@@ -249,6 +249,10 @@ class Solver(object):
             Log += ' [*Identity]'
         if self.config.DETERMINISTIC:
             Log += ' [*Deterministic]'
+        if self.config.NO_ATTENTION:
+            Log += ' [*NO_ATTENTION]'  
+        if self.config.STYLE_ENCODER:
+            Log += colored(' [*STYLE_ENCODER]', 'green')
         dataset_string = colored(self.config.dataset_fake, 'red')
         Log += ' [*{}]'.format(dataset_string)
         self.PRINT(Log)

@@ -36,10 +36,16 @@ class DC(nn.Module):
             param.requires_grad = False
 
         if debug:
-            feed = to_var(
-                torch.ones(1, input_dim), volatile=True, no_cuda=True)
-            PRINT(config.log, '-- DC:')
-            print_debug(feed, self.model)
+            self.debug()
+
+    def debug(self):
+        feed = to_var(torch.ones(1, input_dim), volatile=True, no_cuda=True)
+        PRINT(config.log, '-- DC:')
+        self.print_debug(feed, self.model)
+
+    def print_debug(self, x, v):
+        from models.utils import print_debug as _print_debug
+        return _print_debug(x, v, file=self.config.log)
 
     def forward(self, x):
         return self.model(x.view(x.size(0), -1))

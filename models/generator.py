@@ -10,7 +10,6 @@ from collections import OrderedDict
 # ==================================================================#
 # ==================================================================#
 class Generator(nn.Module):
-    """Generator. Encoder-Decoder Architecture."""
 
     def __init__(self, config, debug=False, **kwargs):
         super(Generator, self).__init__()
@@ -93,33 +92,33 @@ class Generator(nn.Module):
             stride=1,
             padding=3,
             bias=False)
-        layers0 = [('fake', fake_conv)]
-        layers0 += [('tanh', nn.Tanh())]
-        self.fake = nn.Sequential(OrderedDict(layers0))
+        layers = [('fake', fake_conv)]
+        layers += [('tanh', nn.Tanh())]
+        self.fake = nn.Sequential(OrderedDict(layers))
 
         if not self.config.NO_ATTENTION:
             attn_conv = nn.Conv2d(
                 curr_dim, 1, kernel_size=7, stride=1, padding=3, bias=False)
-            layers1 = [('attn', attn_conv)]
-            layers1 += [('sigmoid', nn.Sigmoid())]
-            self.attn = nn.Sequential(OrderedDict(layers1))
+            layers = [('attn', attn_conv)]
+            layers += [('sigmoid', nn.Sigmoid())]
+            self.attn = nn.Sequential(OrderedDict(layers))
 
         if debug and self.Deterministic:
             self.debug()
 
-    def debug(self):
-        def print_debug(x, v):
-            return _print_debug(x, v, file=self.config.log)
+    def print_debug(self, x, v):
+        return _print_debug(x, v, file=self.config.log)
 
+    def debug(self):
         PRINT(self.config.log, '-- Generator:')
         feed = to_var(
             torch.ones(1, self.color_dim, self.image_size, self.image_size),
             volatile=True,
             no_cuda=True)
-        features = print_debug(feed, self.main)
-        print_debug(features, self.fake)
+        features = self.print_debug(feed, self.main)
+        self.print_debug(features, self.fake)
         if not self.config.NO_ATTENTION:
-            print_debug(features, self.attn)
+            self.print_debug(features, self.attn)
 
     def forward(self, x):
         features = self.main(x)
