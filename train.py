@@ -320,7 +320,7 @@ class Train(Solver):
                 total=len(self.data_loader),
                 desc=desc_bar,
                 disable=not self.verbose
-                and ((epoch % self.config.save_epoch != 0) and epoch != 0),
+                or ((epoch % self.config.save_epoch != 0) and epoch != 0),
                 ncols=5)
             for _iter, (real_x, real_c, files) in self.progress_bar:
                 self.loss = self.reset_losses()
