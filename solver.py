@@ -250,7 +250,9 @@ class Solver(object):
         if self.config.DETERMINISTIC:
             Log += ' [*Deterministic]'
         if self.config.NO_ATTENTION:
-            Log += ' [*NO_ATTENTION]'  
+            Log += ' [*NO_ATTENTION]'
+        if self.config.DC_TRAIN:
+            Log += colored(' [*DC_TRAIN]', 'red')
         if self.config.STYLE_ENCODER:
             Log += colored(' [*STYLE_ENCODER]', 'green')
         dataset_string = colored(self.config.dataset_fake, 'red')
