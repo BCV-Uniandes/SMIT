@@ -248,7 +248,8 @@ class Solver(object):
         if self.config.Identity:
             Log += ' [*Identity]'
         if self.config.DETERMINISTIC:
-            Log += ' [*Deterministic]'
+            _str = colored('Deterministic', 'blue')
+            Log += ' [*{}]'.format(_str)
         if self.config.NO_ATTENTION:
             Log += ' [*NO_ATTENTION]'
         if self.config.DC_TRAIN:

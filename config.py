@@ -37,7 +37,7 @@ def update_config(config):
 
     if config.NO_ATTENTION:
         config.Identity = True
-        config.lambda_idt = 1.0
+        config.lambda_idt = 10.0
 
     UPDATE_FOLDER(config, 'NO_ATTENTION')
     UPDATE_FOLDER(config, 'DETERMINISTIC')

@@ -80,6 +80,7 @@ class AdaInGEN(nn.Module):
             if m.__class__.__name__ == "AdaptiveInstanceNorm2d":
                 mean = adain_params[:, :m.num_features]
                 std = adain_params[:, m.num_features:2 * m.num_features]
+                # import ipdb; ipdb.set_trace()
                 m.bias = mean.contiguous().view(-1)
                 m.weight = std.contiguous().view(-1)
                 if adain_params.size(1) > 2 * m.num_features:
