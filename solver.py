@@ -91,6 +91,9 @@ class Solver(object):
         # model = model.module
         if name == 'Generator':
             choices = ['generator', 'adain_net']
+            for i in range(1, 2**self.config.SPLIT_DC):
+                choices += ['adain_net' + str(i + 1)]
+
             if self.config.STYLE_ENCODER:
                 choices += ['style_encoder']
             for m in choices:
