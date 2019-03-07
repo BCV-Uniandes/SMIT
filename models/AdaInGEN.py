@@ -28,13 +28,29 @@ class AdaInGEN(nn.Module):
             in_dim = self.c_dim
         else:
             in_dim = self.style_dim + self.c_dim
+
+        adain_params = self.get_num_adain_params(self.generator)
+
+        if self.config.SPLIT_DC:
+            adain_params //= 2
+
         self.adain_net = DC(
             config,
             in_dim,
-            self.get_num_adain_params(self.generator),
+            adain_params,
             dc_dim,
             3,
+            train=self.config.DC_TRAIN,
             debug=debug)
+        if self.config.SPLIT_DC:
+            self.adain_net2 = DC(
+                config,
+                in_dim,
+                adain_params,
+                dc_dim,
+                3,
+                train=True,
+                debug=debug)
         if debug:
             self.debug()
 
@@ -71,20 +87,43 @@ class AdaInGEN(nn.Module):
             input_adain = label
         else:
             input_adain = torch.cat([style, label], dim=-1)
-        adain_params = self.adain_net(input_adain)
-        self.assign_adain_params(adain_params, self.generator)
+        if self.config.SPLIT_DC:
+            adain_params = self.adain_net(input_adain)
+            adain_params2 = self.adain_net2(input_adain)
+            self.assign_adain_params(adain_params, self.generator, mode=0)
+            self.assign_adain_params(adain_params2, self.generator, mode=1)
+        else:
+            adain_params = self.adain_net(input_adain)
+            self.assign_adain_params(adain_params, self.generator)
 
-    def assign_adain_params(self, adain_params, model):
+    def assign_adain_params(self, adain_params, model, mode=0):
         # assign the adain_params to the AdaIN layers in model
+
+        adain_layers = len([
+            m for m in model.modules()
+            if m.__class__.__name__ == "AdaptiveInstanceNorm2d"
+        ])
+
+        def func(x):
+            if self.config.SPLIT_DC:
+                if mode == 0:
+                    return x < adain_layers // 2
+                else:
+                    return x >= adain_layers // 2
+            else:
+                return True
+
+        idx = 0
         for m in model.modules():
             if m.__class__.__name__ == "AdaptiveInstanceNorm2d":
-                mean = adain_params[:, :m.num_features]
-                std = adain_params[:, m.num_features:2 * m.num_features]
-                # import ipdb; ipdb.set_trace()
-                m.bias = mean.contiguous().view(-1)
-                m.weight = std.contiguous().view(-1)
-                if adain_params.size(1) > 2 * m.num_features:
-                    adain_params = adain_params[:, 2 * m.num_features:]
+                if func(idx):
+                    mean = adain_params[:, :m.num_features]
+                    std = adain_params[:, m.num_features:2 * m.num_features]
+                    m.bias = mean.contiguous().view(-1)
+                    m.weight = std.contiguous().view(-1)
+                    if adain_params.size(1) > 2 * m.num_features:
+                        adain_params = adain_params[:, 2 * m.num_features:]
+                idx += 1
 
     def get_num_adain_params(self, model):
         # return the number of AdaIN parameters needed by the model

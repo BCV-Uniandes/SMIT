@@ -43,6 +43,7 @@ def update_config(config):
     UPDATE_FOLDER(config, 'DETERMINISTIC')
     UPDATE_FOLDER(config, 'STYLE_ENCODER')
     UPDATE_FOLDER(config, 'DC_TRAIN')
+    UPDATE_FOLDER(config, 'SPLIT_DC')
     if config.upsample == 'nearest':
         update_folder(config, 'upsample_nearest')
 

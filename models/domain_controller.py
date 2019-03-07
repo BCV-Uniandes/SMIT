@@ -8,7 +8,14 @@ from collections import OrderedDict
 
 
 class DC(nn.Module):
-    def __init__(self, config, input_dim, output_dim, dim, n_blk, debug=False):
+    def __init__(self,
+                 config,
+                 input_dim,
+                 output_dim,
+                 dim,
+                 n_blk,
+                 train=False,
+                 debug=False):
 
         super(DC, self).__init__()
         self.config = config
@@ -32,7 +39,7 @@ class DC(nn.Module):
         self.model = nn.Sequential(OrderedDict(_model))
         # init_net(self.model, 'normal', 0.02)
 
-        if not self.config.DC_TRAIN:
+        if not train:
             for param in self.model.parameters():
                 param.requires_grad = False
 
