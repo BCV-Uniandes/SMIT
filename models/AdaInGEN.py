@@ -39,7 +39,7 @@ class AdaInGEN(nn.Module):
         if self.config.SPLIT_DC_REVERSE:
             train = train[::-1]
         # import ipdb; ipdb.set_trace()
-        self.num_models = 2**self.config.SPLIT_DC
+        self.num_models = self.config.SPLIT_DC if self.config.SPLIT_DC else 1
         for i in range(self.num_models):
             name = 'adain_net' if i == 0 else 'adain_net' + str(i + 1)
             setattr(
