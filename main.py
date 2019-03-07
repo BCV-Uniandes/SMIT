@@ -119,6 +119,8 @@ if __name__ == '__main__':
     parser.add_argument('--DC_TRAIN', action='store_true', default=False)
     parser.add_argument('--SPLIT_DC', action='store_true', default=False)
     parser.add_argument(
+        '--SPLIT_DC_REVERSE', action='store_true', default=False)
+    parser.add_argument(
         '--upsample',
         type=str,
         default='bilinear',

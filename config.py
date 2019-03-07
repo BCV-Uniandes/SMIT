@@ -44,6 +44,11 @@ def update_config(config):
     UPDATE_FOLDER(config, 'STYLE_ENCODER')
     UPDATE_FOLDER(config, 'DC_TRAIN')
     UPDATE_FOLDER(config, 'SPLIT_DC')
+    UPDATE_FOLDER(config, 'SPLIT_DC_REVERSE')
+
+    if config.SPLIT_DC_REVERSE:
+        config.SPLIT_DC = True
+
     if config.upsample == 'nearest':
         update_folder(config, 'upsample_nearest')
 

@@ -34,13 +34,18 @@ class AdaInGEN(nn.Module):
         if self.config.SPLIT_DC:
             adain_params //= 2
 
+        train = [self.config.DC_TRAIN, True]
+
+        if self.config.SPLIT_DC_REVERSE:
+            train = train[::-1]
+
         self.adain_net = DC(
             config,
             in_dim,
             adain_params,
             dc_dim,
             3,
-            train=self.config.DC_TRAIN,
+            train=train[0],
             debug=debug)
         if self.config.SPLIT_DC:
             self.adain_net2 = DC(
@@ -49,7 +54,7 @@ class AdaInGEN(nn.Module):
                 adain_params,
                 dc_dim,
                 3,
-                train=True,
+                train=train[1],
                 debug=debug)
         if debug:
             self.debug()
