@@ -32,13 +32,12 @@ class AdaInGEN(nn.Module):
         adain_params = self.get_num_adain_params(self.generator)
 
         if self.config.SPLIT_DC:
-            adain_params //= 2 * self.config.SPLIT_DC
+            adain_params //= self.config.SPLIT_DC
 
         train = [self.config.DC_TRAIN, True]
 
         if self.config.SPLIT_DC_REVERSE:
             train = train[::-1]
-        # import ipdb; ipdb.set_trace()
         self.num_models = self.config.SPLIT_DC if self.config.SPLIT_DC else 1
         for i in range(self.num_models):
             name = 'adain_net' if i == 0 else 'adain_net' + str(i + 1)
@@ -128,7 +127,6 @@ class AdaInGEN(nn.Module):
 
     def assign_adain_params(self, adain_params, model, layers):
         # assign the adain_params to the AdaIN layers in model
-
         idx = 0
         for m in model.modules():
             if m.__class__.__name__ == "AdaptiveInstanceNorm2d":
