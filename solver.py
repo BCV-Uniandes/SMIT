@@ -191,12 +191,15 @@ class Solver(object):
                     map_location=lambda storage, loc: storage))
             self.optim_cuda(optim)
 
-        try:
-            load_model(self.G, 'G')
-            load_model(self.D, 'D')
-        except RuntimeError:
-            load_model(self.G, 'G', True)
-            load_model(self.D, 'D', True)
+        load_model(self.G, 'G')
+        load_model(self.D, 'D')
+
+        # try:
+        #     load_model(self.G, 'G')
+        #     load_model(self.D, 'D')
+        # except RuntimeError:
+        #     load_model(self.G, 'G', True)
+        #     load_model(self.D, 'D', True)
 
         if self.config.mode == 'train':
             load_optim(self.g_optimizer, 'G_optim')

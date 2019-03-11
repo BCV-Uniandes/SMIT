@@ -62,6 +62,12 @@ def update_config(config):
     if config.upsample == 'nearest':
         update_folder(config, 'upsample_nearest')
 
+    UPDATE_FOLDER(config, 'INIT_DC')
+
+    if config.seed != 10:
+        update_folder(config, 'seed' + str(config.seed))
+
+
     if config.DELETE:
         remove_folder(config)
 

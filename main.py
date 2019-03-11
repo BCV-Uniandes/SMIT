@@ -117,6 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('--DETERMINISTIC', action='store_true', default=False)
     parser.add_argument('--STYLE_ENCODER', action='store_true', default=False)
     parser.add_argument('--DC_TRAIN', action='store_true', default=False)
+    parser.add_argument('--INIT_DC', action='store_true', default=False)
     parser.add_argument(
         '--SPLIT_DC', type=int, default=0, choices=[0, 2, 3, 4, 6, 8, 12])
     parser.add_argument(
@@ -157,6 +158,8 @@ if __name__ == '__main__':
         config.d_lr *= hvd.size()
 
     else:
+        if config.GPU == 'NO_CUDA':
+            config.GPU = '-1'
         os.environ["CUDA_VISIBLE_DEVICES"] = config.GPU
         config.GPU = [int(i) for i in config.GPU.split(',')]
         config.batch_size *= len(config.GPU)

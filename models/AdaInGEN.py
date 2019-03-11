@@ -33,7 +33,6 @@ class AdaInGEN(nn.Module):
 
         if self.config.SPLIT_DC:
             adain_params //= self.config.SPLIT_DC
-
         train = [self.config.DC_TRAIN, True]
 
         if self.config.SPLIT_DC_REVERSE:
@@ -107,6 +106,7 @@ class AdaInGEN(nn.Module):
             name = 'adain_net' if i == 0 else 'adain_net' + str(i + 1)
             adain_params = getattr(self, name)(input_adain)
             layers = self.getLayers(self.generator, i)
+            import ipdb; ipdb.set_trace()
             self.assign_adain_params(adain_params, self.generator, layers)
 
     def getLayers(self, model, idx):
