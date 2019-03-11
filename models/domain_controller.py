@@ -44,8 +44,9 @@ class DC(nn.Module):
         else:
             linear = nn.Linear(input_dim, output_dim, bias=True)
             _model = [('output', linear)]  # no output activations
-            self.model = nn.Sequential(OrderedDict(_model))        
-            init_net(self.model, init_type='normal', init_gain=0.1, init_bias=-0.1)
+            self.model = nn.Sequential(OrderedDict(_model))
+            init_net(
+                self.model, init_type='normal', init_gain=0.1, init_bias=-0.1)
 
         if not train:
             for param in self.model.parameters():

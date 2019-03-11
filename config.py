@@ -67,7 +67,6 @@ def update_config(config):
     if config.seed != 10:
         update_folder(config, 'seed' + str(config.seed))
 
-
     if config.DELETE:
         remove_folder(config)
 
