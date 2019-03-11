@@ -44,17 +44,11 @@ def update_config(config):
     UPDATE_FOLDER(config, 'STYLE_ENCODER')
     UPDATE_FOLDER(config, 'DC_TRAIN')
     if config.SPLIT_DC:
-        if config.SPLIT_DC == 1:
-            update_folder(config, 'SPLIT_DC')
-        else:
-            update_folder(config, 'SPLIT_DC' + str(config.SPLIT_DC))
+        update_folder(config, 'SPLIT_DC' + str(config.SPLIT_DC))
 
     if config.SPLIT_DC_REVERSE:
-        if config.SPLIT_DC_REVERSE == 1:
-            update_folder(config, 'SPLIT_DC_REVERSE')
-        else:
-            update_folder(config,
-                          'SPLIT_DC_REVERSE' + str(config.SPLIT_DC_REVERSE))
+        update_folder(config,
+                      'SPLIT_DC_REVERSE' + str(config.SPLIT_DC_REVERSE))
 
     if config.SPLIT_DC_REVERSE:
         config.SPLIT_DC = config.SPLIT_DC_REVERSE
@@ -63,6 +57,7 @@ def update_config(config):
         update_folder(config, 'upsample_nearest')
 
     UPDATE_FOLDER(config, 'INIT_DC')
+    UPDATE_FOLDER(config, 'TRAIN_BIAS')
 
     if config.seed != 10:
         update_folder(config, 'seed' + str(config.seed))
