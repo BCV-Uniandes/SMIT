@@ -24,9 +24,6 @@ class DC(nn.Module):
 
         self.comment = 'Learn' if train else 'Fixed'
 
-        # self._model = [nn.Linear(input_dim, output_dim, bias=False)]
-        # self.model += [nn.ReLU(inplace=True)]
-
         if not self.config.INIT_DC:
             use_bias = True
             _model = []
