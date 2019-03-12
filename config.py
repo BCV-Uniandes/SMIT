@@ -59,6 +59,10 @@ def update_config(config):
     UPDATE_FOLDER(config, 'INIT_DC')
     UPDATE_FOLDER(config, 'TRAIN_BIAS')
 
+    if config.lambda_mask_smooth != 0.00001:
+        update_folder(config, 'lambda_mask_smooth' +
+                      str(config.lambda_mask_smooth))
+
     if config.seed != 10:
         update_folder(config, 'seed' + str(config.seed))
 
