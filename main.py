@@ -72,7 +72,7 @@ if __name__ == '__main__':
         '--mode', type=str, default='train', choices=['train', 'val', 'test'])
     parser.add_argument('--color_dim', type=int, default=3)
     parser.add_argument('--image_size', type=int, default=256)
-    parser.add_argument('--batch_size', type=int, default=22)
+    parser.add_argument('--batch_size', type=int, default=24)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--num_epochs', type=int, default=100)
     parser.add_argument('--num_epochs_decay', type=int, default=80)

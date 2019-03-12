@@ -4,11 +4,7 @@
 # logger options
 mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 
 Identity: True          # With identity loss
-
-save_epoch: 2       
-
 c_dim: 10               # Number of domains
-
 lambda_mask: 0.1        # Lambda for attention loss
 
 ALL_ATTR_1:

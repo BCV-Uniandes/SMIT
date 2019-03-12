@@ -46,7 +46,7 @@ class Test(Solver):
         iter = 0
         with opt:
             for i, (real_x, label, _) in enumerate(data_loader):
-                for idx, (real_x0, label0) in enumerate(zip(real_x, label)):
+                for _, (real_x0, label0) in enumerate(zip(real_x, label)):
                     real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
                     label0 = (1 - label0.repeat(n_rep, 1))**2
                     real_x0 = to_var(real_x0, volatile=True)
@@ -109,7 +109,7 @@ class Test(Solver):
                         first=True)
                 ]
 
-                for n_label, _target_c in enumerate(target_c_list):
+                for _, _target_c in enumerate(target_c_list):
                     target_c = _target_c[0].repeat(n_rep, 1)
                     if not interpolation:
                         style_ = self.G.random_style(n_rep)
