@@ -42,6 +42,7 @@ def update_config(config):
     UPDATE_FOLDER(config, 'NO_ATTENTION')
     UPDATE_FOLDER(config, 'DETERMINISTIC')
     UPDATE_FOLDER(config, 'STYLE_ENCODER')
+    UPDATE_FOLDER(config, 'DECONV')
     UPDATE_FOLDER(config, 'DC_TRAIN')
     if config.SPLIT_DC:
         update_folder(config, 'SPLIT_DC' + str(config.SPLIT_DC))

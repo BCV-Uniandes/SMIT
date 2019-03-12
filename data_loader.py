@@ -66,7 +66,7 @@ def get_loader(mode_data,
         shuffling=shuffling or mode == 'train',
         verbose=mode == 'train' and hvd.rank() == 0,
         **kwargs)
-    if mode == 'train' and hvd.size() == 1:
+    if hvd.size() == 1:
         data_loader = DataLoader(
             dataset=dataset,
             batch_size=batch_size,

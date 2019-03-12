@@ -47,7 +47,6 @@ class Test(Solver):
         with opt:
             for i, (real_x, label, _) in enumerate(data_loader):
                 for idx, (real_x0, label0) in enumerate(zip(real_x, label)):
-                    # import ipdb; ipdb.set_trace()
                     real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
                     label0 = (1 - label0.repeat(n_rep, 1))**2
                     real_x0 = to_var(real_x0, volatile=True)
@@ -154,15 +153,15 @@ class Test(Solver):
             batch_size,
             shuffling=False,
             dataset='DEMO',
-            mode='test',
-            many_faces=self.config.many_faces)
+            Detect_Face=True,
+            mode='test')
         label = self.config.DEMO_LABEL
         if self.config.DEMO_LABEL != '':
             label = torch.FloatTensor([int(i) for i in label.split(',')]).view(
                 1, -1)
         else:
             label = None
-        if self.config.Deterministic:
+        if not self.config.DETERMINISTIC:
             _debug = range(self.config.style_label_debug + 1)
             style_all = self.G.random_style(max(self.config.batch_size, 50))
         else:
@@ -170,34 +169,25 @@ class Test(Solver):
             _debug = range(1)
 
         name = TimeNow_str()
-        Output = []
-        if not self.config.many_faces:
-            for i, real_x in enumerate(data_loader):
-                save_path = os.path.join(save_folder, 'DEMO_{}_{}.jpg'.format(
-                    name, i + 1))
-                self.PRINT('Translated test images and saved into "{}"..!'.
-                           format(save_path))
-                for k in _debug:
-                    output = self.save_fake_output(
+        for i, real_x in enumerate(data_loader):
+            save_path = os.path.join(save_folder, 'DEMO_{}_{}.jpg'.format(
+                name, i + 1))
+            self.PRINT('Translated test images and saved into "{}"..!'.
+                       format(save_path))
+            for k in _debug:
+                self.generate_SMIT(
+                    real_x,
+                    save_path,
+                    label=label,
+                    Multimodal=k,
+                    fixed_style=style_all,
+                    TIME=not i)
+                if self.config.DETERMINISTIC:
+                    self.generate_SMIT(
                         real_x,
                         save_path,
-                        gif=False,
                         label=label,
-                        output=True,
-                        Style=k,
-                        fixed_style=style_all,
-                        TIME=not i)
-                    if self.config.many_faces:
-                        Output.append(output)
-                        break
-                    if self.config.Deterministic:
-                        output = self.save_fake_output(
-                            real_x,
-                            save_path,
-                            gif=False,
-                            label=label,
-                            output=True,
-                            Style=k)
+                        Multimodal=k)
 
     # ==================================================================#
     # ==================================================================#
@@ -224,7 +214,7 @@ class Test(Solver):
                 dataset=dataset,
                 mode='test')
 
-        if not self.config.Deterministic:
+        if not self.config.DETERMINISTIC:
             _debug = range(1, self.config.style_label_debug + 1)
             style_all = self.G.random_style(self.config.batch_size)
         else:
@@ -253,7 +243,7 @@ class Test(Solver):
             self.generate_SMIT(
                 real_x, name, label=label, fixed_style=style_all, TIME=not i)
 
-            if not self.config.Deterministic:
+            if not self.config.DETERMINISTIC:
                 for k in _debug:
                     self.generate_SMIT(
                         real_x,

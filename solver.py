@@ -419,25 +419,24 @@ class Solver(object):
 
         with torch.no_grad():
             batch = self.get_batch_inference(batch, Multimodal)
-            label = self.get_batch_inference(label, Multimodal)
+            _label = self.get_batch_inference(label, Multimodal)
             for idx, real_x in enumerate(batch):
                 if training and Multimodal and \
                         idx == self.config.style_train_debug:
                     break
                 real_x = to_var(real_x, volatile=True)
+                label = _label[idx]
                 target_list = target_debug_list(
                     real_x.size(0), self.config.c_dim, config=self.config)
 
                 # Start translations
                 fake_image_list, fake_attn_list = self.Create_Visual_List(
                     real_x)
-
                 if self.config.dataset_fake in self.MultiLabel_Datasets \
                         and label is None:
                     out_label = self._CLS(real_x)
                 elif label is not None:
-
-                    out_label = to_var(label[idx].squeeze(), volatile=True)
+                    out_label = to_var(label.squeeze(), volatile=True)
                 else:
                     out_label = torch.zeros(real_x.size(0), self.config.c_dim)
                     out_label = to_var(out_label, volatile=True)
