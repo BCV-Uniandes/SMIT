@@ -221,7 +221,7 @@ class Test(Solver):
         string = '{}'.format(TimeNow_str())
         if save_folder_fid:
             self.folder_fid(data_loader)
-        for i, (real_x, org_c, files) in enumerate(data_loader):
+        for i, (real_x, org_c, _) in enumerate(data_loader):
             save_path = os.path.join(
                 save_folder, '{}_{}_{}.jpg'.format(dataset, '{}', i + 1))
             name = os.path.abspath(save_path.format(string))

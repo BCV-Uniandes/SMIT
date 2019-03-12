@@ -57,7 +57,7 @@ class Train(Solver):
     def debug_vars(self, start):
         fixed_x = []
         fixed_label = []
-        for i, (images, labels, files) in enumerate(self.data_loader):
+        for i, (images, labels, _) in enumerate(self.data_loader):
             fixed_x.append(images)
             fixed_label.append(labels)
             if i == max(1, int(16 / self.config.batch_size)):
@@ -88,7 +88,7 @@ class Train(Solver):
 
     # ============================================================#
     # ============================================================#
-    def _GAN_LOSS(self, real_x, fake_x, label, is_fake=False):
+    def _GAN_LOSS(self, real_x, fake_x, label):
         cross_entropy = self.config.dataset_fake in [
             'painters_14', 'Animals', 'Image2Weather', 'Image2Season',
             'Image2Edges', 'Yosemite', 'RafD,'
@@ -96,12 +96,7 @@ class Train(Solver):
         if cross_entropy:
             label = torch.max(label, dim=1)[1]
         return _GAN_LOSS(
-            self.D,
-            real_x,
-            fake_x,
-            label,
-            is_fake=is_fake,
-            cross_entropy=cross_entropy)
+            self.D, real_x, fake_x, label, cross_entropy=cross_entropy)
 
     # ============================================================#
     # ============================================================#
@@ -242,8 +237,7 @@ class Train(Solver):
 
         fake_x1 = self.G(real_x1, fake_c1, style_fake1)
 
-        g_loss_src, g_loss_cls = self._GAN_LOSS(
-            fake_x1[0], real_x1, fake_c1, is_fake=True)
+        g_loss_src, g_loss_cls = self._GAN_LOSS(fake_x1[0], real_x1, fake_c1)
         self.loss['Gsrc'] = g_loss_src
         self.loss['Gcls'] = g_loss_cls * self.config.lambda_cls
 
