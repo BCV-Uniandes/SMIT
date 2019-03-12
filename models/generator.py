@@ -63,14 +63,14 @@ class Generator(nn.Module):
         for i in range(conv_repeat):
             if self.config.DECONV:
                 conv = nn.ConvTranspose2d(
-                            curr_dim,
-                            curr_dim // 2,
-                            kernel_size=4,
-                            stride=2,
-                            padding=1,
-                            bias=False)
-                layers += [('up_conv_' + str(curr_dim // 2), conv)]  
-            else:         
+                    curr_dim,
+                    curr_dim // 2,
+                    kernel_size=4,
+                    stride=2,
+                    padding=1,
+                    bias=False)
+                layers += [('up_conv_' + str(curr_dim // 2), conv)]
+            else:
                 up = nn.Upsample(scale_factor=2, mode=mode_upsample)
                 layers += [('up_nn_' + str(curr_dim), up)]
                 conv = nn.Conv2d(

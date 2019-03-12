@@ -172,8 +172,8 @@ class Test(Solver):
         for i, real_x in enumerate(data_loader):
             save_path = os.path.join(save_folder, 'DEMO_{}_{}.jpg'.format(
                 name, i + 1))
-            self.PRINT('Translated test images and saved into "{}"..!'.
-                       format(save_path))
+            self.PRINT('Translated test images and saved into "{}"..!'.format(
+                save_path))
             for k in _debug:
                 self.generate_SMIT(
                     real_x,
@@ -184,10 +184,7 @@ class Test(Solver):
                     TIME=not i)
                 if self.config.DETERMINISTIC:
                     self.generate_SMIT(
-                        real_x,
-                        save_path,
-                        label=label,
-                        Multimodal=k)
+                        real_x, save_path, label=label, Multimodal=k)
 
     # ==================================================================#
     # ==================================================================#
