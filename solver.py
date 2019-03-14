@@ -32,14 +32,13 @@ class Solver(object):
         # Define a generator and a discriminator
         from models import Discriminator
         from models import AdaInGEN as Generator
-
+        self.count = 0
         self.D = Discriminator(
             self.config, debug=self.config.mode == 'train' and self.verbose)
         self.D = to_cuda(self.D)
         self.G = Generator(
             self.config, debug=self.config.mode == 'train' and self.verbose)
         self.G = to_cuda(self.G)
-
         if self.config.mode == 'train':
             self.d_optimizer = self.set_optimizer(
                 self.D, self.config.d_lr, self.config.beta1, self.config.beta2)
@@ -61,11 +60,21 @@ class Solver(object):
             model = model.module
         # model = model.module
         parameters = filter(lambda p: p.requires_grad, model.parameters())
-        optimizer = torch.optim.Adam(parameters, lr, [beta1, beta2])
 
         if hvd.size() > 1:
+            self.count += 1
+            if self.config.TRAIN_BIAS and self.count == 2:
+                backward_passes_per_step = 2
+            else:
+                backward_passes_per_step = 1
+            optimizer = torch.optim.Adam(
+                parameters, lr * backward_passes_per_step, [beta1, beta2])
             optimizer = hvd.DistributedOptimizer(
-                optimizer, named_parameters=model.named_parameters())
+                optimizer,
+                named_parameters=model.named_parameters(),
+                backward_passes_per_step=backward_passes_per_step)
+        else:
+            optimizer = torch.optim.Adam(parameters, lr, [beta1, beta2])
 
             # Horovod: broadcast parameters & optimizer state.
             hvd.broadcast_parameters(model.state_dict(), root_rank=0)
@@ -201,9 +210,9 @@ class Solver(object):
         #     load_model(self.G, 'G', True)
         #     load_model(self.D, 'D', True)
 
-        if self.config.mode == 'train':
-            load_optim(self.g_optimizer, 'G_optim')
-            load_optim(self.d_optimizer, 'D_optim')
+        # if self.config.mode == 'train':
+        #     load_optim(self.g_optimizer, 'G_optim')
+        #     load_optim(self.d_optimizer, 'D_optim')
 
         print("Success!!")
 

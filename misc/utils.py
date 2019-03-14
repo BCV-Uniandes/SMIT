@@ -531,10 +531,9 @@ def split(data):
 
 def target_debug_list(size, dim, config=None):
     import torch
-    target_c = torch.zeros(size, dim)
     target_c_list = []
     for j in range(dim):
-        target_c[:] = 0
+        target_c = torch.zeros(size, dim)
         target_c[:, j] = 1
         target_c_list.append(to_var(target_c, volatile=True))
     return target_c_list
