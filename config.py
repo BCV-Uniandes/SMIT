@@ -66,6 +66,11 @@ def update_config(config):
 
     UPDATE_FOLDER(config, 'ADJUST_SMOOTH')
 
+    if config.FORCE_IDENTITY:
+        config.Identity = True
+        config.lambda_idt = 10.0
+        update_folder(config, 'FORCE_IDENTITY')
+
     if config.seed != 10:
         update_folder(config, 'seed' + str(config.seed))
 

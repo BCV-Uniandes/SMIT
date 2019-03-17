@@ -119,6 +119,7 @@ if __name__ == '__main__':
     parser.add_argument('--DC_TRAIN', action='store_true', default=False)
     parser.add_argument('--DECONV', action='store_true', default=False)
     parser.add_argument('--ADJUST_SMOOTH', action='store_true', default=False)
+    parser.add_argument('--FORCE_IDENTITY', action='store_true', default=False)
     parser.add_argument('--INIT_DC', action='store_true', default=False)
     parser.add_argument('--TRAIN_BIAS', action='store_true', default=False)
     parser.add_argument(

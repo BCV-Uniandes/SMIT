@@ -257,7 +257,7 @@ class Train(Solver):
                 self.loss['Gats'] *= 10
 
         # ========== Identity Part ==========#
-        if self.config.Identity:
+        if self.config.Identity or self.config.FORCE_IDENTITY:
             idt_x1 = self.G(real_x1, real_c1, style_identity)[0]
             g_loss_idt = criterion_l1(idt_x1, real_x1)
             self.loss['Gidt'] = self.config.lambda_idt * \
