@@ -64,6 +64,8 @@ def update_config(config):
         update_folder(config,
                       'lambda_mask_smooth' + str(config.lambda_mask_smooth))
 
+    UPDATE_FOLDER(config, 'ADJUST_SMOOTH')
+
     if config.seed != 10:
         update_folder(config, 'seed' + str(config.seed))
 

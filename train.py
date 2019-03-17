@@ -253,6 +253,8 @@ class Train(Solver):
             self.loss['Gats'] = self.config.lambda_mask_smooth * (
                 _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(
                     fake_x1[1]))
+            if self.config.ADJUST_SMOOTH and self.loss['Gats'] > 0.1:
+                self.loss['Gats'] *= 10
 
         # ========== Identity Part ==========#
         if self.config.Identity:
