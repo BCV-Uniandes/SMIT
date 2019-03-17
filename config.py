@@ -64,6 +64,9 @@ def update_config(config):
         update_folder(config,
                       'lambda_mask_smooth' + str(config.lambda_mask_smooth))
 
+    if config.lambda_cls != 1.0:
+        update_folder(config, 'lambda_cls' + str(config.lambda_cls))
+
     UPDATE_FOLDER(config, 'ADJUST_SMOOTH')
 
     if config.FORCE_IDENTITY:
