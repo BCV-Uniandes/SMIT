@@ -20,9 +20,7 @@ class Test(Solver):
     def folder_fid(self, data_loader):
         self.G.eval()
         n_rep = 5
-        opt = torch.no_grad() if get_torch_version() > 0.3 else open(
-            '/tmp/_null.txt', 'w')
-        save_folder = self.config.sample_path
+        save_folder = os.path.join(self.config.sample_path, self.resume_name())
         self.PRINT('FID Folder at "{}"..!'.format(save_folder))
         _dirs = [[os.path.join(save_folder, 'real_label0')]]
         _dirs[-1].append(os.path.join(save_folder, 'real_label1'))
@@ -44,7 +42,7 @@ class Test(Solver):
             imageio.imwrite(path, (data * 255).astype(np.uint8))
 
         iter = 0
-        with opt:
+        with torch.no_grad():
             for i, (real_x, label, _) in enumerate(data_loader):
                 for _, (real_x0, label0) in enumerate(zip(real_x, label)):
                     real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
@@ -93,22 +91,18 @@ class Test(Solver):
                 create_dir(_save_path)
                 real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
                 fake_image_list = [
-                    to_data(
-                        color_frame(
-                            single_source(real_x0),
-                            thick=5,
-                            color='green',
-                            first=True),
-                        cpu=True)
+                    to_data(color_frame(
+                        single_source(real_x0),
+                        thick=5,
+                        color='green',
+                        first=True), cpu=True)
                 ]
                 fake_attn_list = [
-                    to_data(
-                        color_frame(
-                            single_source(real_x0),
-                            thick=5,
-                            color='green',
-                            first=True),
-                        cpu=True)
+                    to_data(color_frame(
+                        single_source(real_x0),
+                        thick=5,
+                        color='green',
+                        first=True), cpu=True)
                 ]
 
                 for _, _target_c in enumerate(target_c_list):
@@ -129,15 +123,15 @@ class Test(Solver):
                     style = to_var(style_, volatile=True)
                     fake_x = self.G(real_x0, target_c, stochastic=style)
                     fake_image_list.append(to_data(fake_x[0], cpu=True))
-                    fake_attn_list.append(
-                        to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
+                    fake_attn_list.append(to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
                 self._SAVE_IMAGE(
-                    _save_path, fake_image_list, mode='style_' + chr(65 + idx))
+                    _save_path, fake_image_list, mode='style_' + chr(65 + idx), no_label=True)
                 self._SAVE_IMAGE(
                     _save_path,
                     fake_attn_list,
                     Attention=True,
-                    mode='style_' + chr(65 + idx))
+                    mode='style_' + chr(65 + idx),
+                    no_label=True)
         self.G.train()
         self.D.train()
 

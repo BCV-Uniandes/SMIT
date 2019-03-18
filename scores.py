@@ -7,9 +7,6 @@ import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 from misc.utils import PRINT, to_cuda, to_data, to_var
-import torch.utils.data.distributed
-from misc.utils import _horovod
-hvd = _horovod()
 
 warnings.filterwarnings('ignore')
 
@@ -269,7 +266,7 @@ class Scores(Solver):
         from scipy.stats import entropy
         n_styles = 20
         net = load_inception()
-        to_cuda(net)
+        net = to_cuda(net)
         net.eval()
         self.G.eval()
         inception_up = nn.Upsample(size=(299, 299), mode='bilinear')

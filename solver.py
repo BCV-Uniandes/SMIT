@@ -9,7 +9,7 @@ import time
 import datetime
 from torchvision.utils import save_image
 from misc.utils import color_frame
-from misc.utils import create_dir, denorm, get_labels
+from misc.utils import create_arrow, create_dir, denorm, get_labels
 from misc.utils import Modality, PRINT, single_source, target_debug_list
 from misc.utils import to_cuda, to_data, to_var
 import torch.utils.data.distributed
@@ -369,7 +369,7 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
-    def _SAVE_IMAGE(self, save_path, fake_list, Attention=False, mode='fake'):
+    def _SAVE_IMAGE(self, save_path, fake_list, Attention=False, mode='fake', no_label=False):
         # fake_images = to_data(torch.cat(fake_list, dim=3), cpu=True)
         fake_images = torch.cat(fake_list, dim=3)
         if 'fake' not in os.path.basename(save_path):
@@ -380,8 +380,11 @@ class Solver(object):
             fake_images = denorm(fake_images)
 
         save_path = save_path.replace('fake', mode)
-        fake_images = torch.cat((self.get_labels(), fake_images), dim=0)
+        if not no_label:
+            fake_images = torch.cat((self.get_labels(), fake_images), dim=0)
         save_image(fake_images, save_path, nrow=1, padding=0)
+        if no_label:
+            create_arrow(save_path, 0, image_size = self.config.image_size, horizontal=True)        
         return save_path
 
     # ==================================================================#
