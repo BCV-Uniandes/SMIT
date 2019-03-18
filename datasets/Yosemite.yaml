@@ -3,7 +3,7 @@
 
 # logger options
 mode_data: 'normal'      # Either normal with augmentation or faces without augmentation. 
-Identity: True         # With identity loss
+Identity: False         # With identity loss
     
 save_epoch: 90          # 10 epochs of this dataset represents ~6000 iterations
               # Number of domains
