@@ -39,31 +39,31 @@ def main(config):
 
     if config.LPIPS_REAL:
         from scores import Scores
-        scores = Scores(config, data_loader)
+        scores = Scores(config)
         scores.LPIPS_REAL()
         return
 
     if config.LPIPS_UNIMODAL:
         from scores import Scores
-        scores = Scores(config, data_loader)
+        scores = Scores(config)
         scores.LPIPS_UNIMODAL()
         return
 
     if config.LPIPS_MULTIMODAL:
         from scores import Scores
-        scores = Scores(config, data_loader)
+        scores = Scores(config)
         scores.LPIPS_MULTIMODAL()
         return
 
     if config.INCEPTION:
         from scores import Scores
-        scores = Scores(config, data_loader)
+        scores = Scores(config)
         scores.INCEPTION()
         return
 
     if config.INCEPTION_REAL:
         from scores import Scores
-        scores = Scores(config, data_loader)
+        scores = Scores(config)
         scores.INCEPTION_REAL()
         return
 

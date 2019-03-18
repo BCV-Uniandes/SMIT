@@ -7,13 +7,24 @@ import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 from misc.utils import PRINT, to_cuda, to_data, to_var
+from data_loader import get_loader
 
 warnings.filterwarnings('ignore')
 
 
 class Scores(Solver):
-    def __init__(self, config, data_loader):
-        super(Scores, self).__init__(config, data_loader)
+    def __init__(self, config):
+
+        super(Scores, self).__init__(config)
+        self.data_loader = get_loader(
+            config.mode_data,
+            config.image_size,
+            1,
+            config.dataset_fake,
+            config.mode,
+            num_workers=config.num_workers,
+            all_attr=config.ALL_ATTR,
+            c_dim=config.c_dim)
 
     def LPIPS(self):
         from misc.utils import compute_lpips
