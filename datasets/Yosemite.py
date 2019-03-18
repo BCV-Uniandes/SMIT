@@ -28,7 +28,7 @@ class Yosemite(Dataset):
         self.all_attr = all_attr
         self.mode_data = mode_data
         self.verbose = verbose
-        mode = mode if mode == 'train' else 'test'
+        self.mode = mode if mode == 'train' else 'test'
         self.key_fn = lambda line: line.split('/')[-2].split('_')[1]
 
         self.lines = sorted(
@@ -42,12 +42,12 @@ class Yosemite(Dataset):
             for idx, line in enumerate(self.lines)
         }
         if self.verbose:
-            print('Start preprocessing %s: %s!' % (self.name, mode))
+            print('Start preprocessing %s: %s!' % (self.name, self.mode))
         random.seed(1234)
         self.preprocess()
         if self.verbose:
-            print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
-                                                           self.num_data))
+            print('Finished preprocessing %s: %s (%d)!' %
+                  (self.name, self.mode, self.num_data))
 
     def histogram(self):
         self.hist = {key: 0 for key in self.attr2idx.keys()}
