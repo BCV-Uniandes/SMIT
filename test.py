@@ -4,7 +4,7 @@ import os
 import warnings
 import imageio
 import numpy as np
-from misc.utils import color_frame, create_dir, denorm, get_torch_version
+from misc.utils import color_frame, create_dir, denorm
 from misc.utils import slerp, single_source, TimeNow_str, to_data, to_var
 import torch.utils.data.distributed
 
@@ -91,18 +91,22 @@ class Test(Solver):
                 create_dir(_save_path)
                 real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
                 fake_image_list = [
-                    to_data(color_frame(
-                        single_source(real_x0),
-                        thick=5,
-                        color='green',
-                        first=True), cpu=True)
+                    to_data(
+                        color_frame(
+                            single_source(real_x0),
+                            thick=5,
+                            color='green',
+                            first=True),
+                        cpu=True)
                 ]
                 fake_attn_list = [
-                    to_data(color_frame(
-                        single_source(real_x0),
-                        thick=5,
-                        color='green',
-                        first=True), cpu=True)
+                    to_data(
+                        color_frame(
+                            single_source(real_x0),
+                            thick=5,
+                            color='green',
+                            first=True),
+                        cpu=True)
                 ]
 
                 for _, _target_c in enumerate(target_c_list):
@@ -123,9 +127,13 @@ class Test(Solver):
                     style = to_var(style_, volatile=True)
                     fake_x = self.G(real_x0, target_c, stochastic=style)
                     fake_image_list.append(to_data(fake_x[0], cpu=True))
-                    fake_attn_list.append(to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
+                    fake_attn_list.append(
+                        to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
                 self._SAVE_IMAGE(
-                    _save_path, fake_image_list, mode='style_' + chr(65 + idx), no_label=True)
+                    _save_path,
+                    fake_image_list,
+                    mode='style_' + chr(65 + idx),
+                    no_label=True)
                 self._SAVE_IMAGE(
                     _save_path,
                     fake_attn_list,

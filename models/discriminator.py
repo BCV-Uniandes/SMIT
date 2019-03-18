@@ -17,8 +17,8 @@ class MultiDiscriminator(nn.Module):
 
         self.image_size = config.image_size
         conv_dim = config.d_conv_dim
-        conv_dim = conv_dim if config.image_size <= 256 else conv_dim // 2
-        conv_dim = conv_dim if config.image_size <= 512 else conv_dim // 2
+        # conv_dim = conv_dim if config.image_size <= 256 else conv_dim // 2
+        # conv_dim = conv_dim if config.image_size <= 512 else conv_dim // 2
         self.conv_dim = conv_dim
 
         self.repeat_num = config.d_repeat_num
@@ -58,9 +58,12 @@ class MultiDiscriminator(nn.Module):
         return _print_debug(x, v, file=self.config.log)
 
     def _make_net(self, idx=0):
-        image_size = self.image_size / (2**(idx))
+        # image_size = self.image_size / (2**(idx))
+        image_size = 256 / (2**(idx))
         self.repeat_num = int(math.log(image_size, 2) - 1)
         k_size = int(image_size / np.power(2, self.repeat_num))
+        if self.image_size == 1024:
+            k_size *= 4
         layers = []
         conv = self.Norm(
             nn.Conv2d(

@@ -89,6 +89,14 @@ def base_parser():
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')
 
+    # Scores
+    parser.add_argument('--LPIPS_REAL', action='store_true', default=False)
+    parser.add_argument('--LPIPS_UNIMODAL', action='store_true', default=False)
+    parser.add_argument(
+        '--LPIPS_MULTIMODAL', action='store_true', default=False)
+    parser.add_argument('--INCEPTION', action='store_true', default=False)
+    parser.add_argument('--INCEPTION_REAL', action='store_true', default=False)
+
     # Step size
     parser.add_argument('--log_step', type=int, default=10)
     parser.add_argument('--sample_step', type=int, default=500)

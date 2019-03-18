@@ -38,8 +38,9 @@ def print_debug(feed, layers, file=None):
                         layer, ResidualBlock) or isinstance(
                             layer, LinearBlock) or isinstance(
                                 layer, Conv2dBlock) or isinstance(
-                                    layer, SpectralNormalization) or isinstance(
-                                    layer, nn.Upsample):
+                                    layer,
+                                    SpectralNormalization) or isinstance(
+                                        layer, nn.Upsample):
             _str = '{}, {}'.format(str(layer).split('(')[0], feed.size())
             if file is not None:
                 PRINT(file, _str)

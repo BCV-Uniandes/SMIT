@@ -3,7 +3,7 @@
 
 # logger options
 image_size: 1024
-#MultiDis: 5
+# MultiDis: 5
 #batch_size: 5
 # style_train_debug: 5
 mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 

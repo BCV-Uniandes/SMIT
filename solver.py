@@ -236,21 +236,26 @@ class Solver(object):
             self.config.dataset_fake, 'CelebA')
         pretrained_model = self.resume_name(model_path=model_dir)
         self.PRINT('Resuming model (step: {})...'.format(pretrained_model))
-        name = os.path.join(model_dir, '{}_G.pth'.format(
-            pretrained_model, '{}'))
-        self.PRINT('Model: {}'.format(name))
-        name = comm.bcast(name, root=0)
 
-        celeba_weights = torch.load(
-            name, map_location=lambda storage, loc: storage)
-        weights = self.G.state_dict()
-        for key, value in weights.items():
-            if key in celeba_weights.keys():
-                if weights[key].shape == celeba_weights[key].shape:
-                    # self.PRINT(
-                    #     'Copying from {0} CelebA to {0} FFHQ'.format(key))
-                    weights[key] = celeba_weights[key]
-        self.G.load_state_dict(weights)
+        def merge_weights(model, name='G'):
+            name = os.path.join(model_dir, '{}_{}.pth'.format(
+                pretrained_model, name))
+            self.PRINT('Model: {}'.format(name))
+            name = comm.bcast(name, root=0)
+
+            celeba_weights = torch.load(
+                name, map_location=lambda storage, loc: storage)
+            weights = model.state_dict()
+            for key, value in weights.items():
+                if key in celeba_weights.keys():
+                    if weights[key].shape == celeba_weights[key].shape:
+                        # self.PRINT(
+                        #   'Copying from {0} CelebA to {0} FFHQ'.format(key))
+                        weights[key] = celeba_weights[key]
+            model.load_state_dict(weights)
+
+        merge_weights(self.G, 'G')
+        merge_weights(self.D, 'D')
         # for key, value in self.G.named_parameters():
         #     if key in celeba_weights.keys():
         #         if weights[key].shape == celeba_weights[key].shape:
@@ -369,7 +374,12 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
-    def _SAVE_IMAGE(self, save_path, fake_list, Attention=False, mode='fake', no_label=False):
+    def _SAVE_IMAGE(self,
+                    save_path,
+                    fake_list,
+                    Attention=False,
+                    mode='fake',
+                    no_label=False):
         # fake_images = to_data(torch.cat(fake_list, dim=3), cpu=True)
         fake_images = torch.cat(fake_list, dim=3)
         if 'fake' not in os.path.basename(save_path):
@@ -384,7 +394,11 @@ class Solver(object):
             fake_images = torch.cat((self.get_labels(), fake_images), dim=0)
         save_image(fake_images, save_path, nrow=1, padding=0)
         if no_label:
-            create_arrow(save_path, 0, image_size = self.config.image_size, horizontal=True)        
+            create_arrow(
+                save_path,
+                0,
+                image_size=self.config.image_size,
+                horizontal=True)
         return save_path
 
     # ==================================================================#

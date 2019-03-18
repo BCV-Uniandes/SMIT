@@ -37,6 +37,36 @@ def main(config):
         all_attr=config.ALL_ATTR,
         c_dim=config.c_dim)
 
+    if config.LPIPS_REAL:
+        from scores import Scores
+        scores = Scores(config, data_loader)
+        scores.LPIPS_REAL()
+        return
+
+    if config.LPIPS_UNIMODAL:
+        from scores import Scores
+        scores = Scores(config, data_loader)
+        scores.LPIPS_UNIMODAL()
+        return
+
+    if config.LPIPS_MULTIMODAL:
+        from scores import Scores
+        scores = Scores(config, data_loader)
+        scores.LPIPS_MULTIMODAL()
+        return
+
+    if config.INCEPTION:
+        from scores import Scores
+        scores = Scores(config, data_loader)
+        scores.INCEPTION()
+        return
+
+    if config.INCEPTION_REAL:
+        from scores import Scores
+        scores = Scores(config, data_loader)
+        scores.INCEPTION_REAL()
+        return
+
     if config.mode == 'train':
         from train import Train
         Train(config, data_loader)
