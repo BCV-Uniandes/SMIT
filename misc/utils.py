@@ -47,7 +47,7 @@ def color(dict, key, color='red'):
 def compute_lpips(img0, img1, model=None):
     # RGB image from must be [-1,1]
     if model is None:
-        from lpips_model import DistModel
+        from misc.lpips_model import DistModel
         model = DistModel()
         version = '0.0'  # Totally different values with 0.1
         model.initialize(
