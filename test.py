@@ -76,10 +76,8 @@ class Test(Solver):
         self.G.eval()
         self.D.eval()
         n_rep = 4
-        opt = torch.no_grad() if get_torch_version() > 0.3 else open(
-            '/tmp/_null.txt', 'w')
 
-        with opt:
+        with torch.no_grad():
             real_x = to_var(real_x, volatile=True)
             out_label = to_var(label, volatile=True)
             target_c_list = [out_label] * 7
@@ -95,18 +93,22 @@ class Test(Solver):
                 create_dir(_save_path)
                 real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
                 fake_image_list = [
-                    color_frame(
-                        single_source(real_x0),
-                        thick=5,
-                        color='green',
-                        first=True)
+                    to_data(
+                        color_frame(
+                            single_source(real_x0),
+                            thick=5,
+                            color='green',
+                            first=True),
+                        cpu=True)
                 ]
                 fake_attn_list = [
-                    color_frame(
-                        single_source(real_x0),
-                        thick=5,
-                        color='green',
-                        first=True)
+                    to_data(
+                        color_frame(
+                            single_source(real_x0),
+                            thick=5,
+                            color='green',
+                            first=True),
+                        cpu=True)
                 ]
 
                 for _, _target_c in enumerate(target_c_list):
@@ -126,8 +128,9 @@ class Test(Solver):
                             ]))
                     style = to_var(style_, volatile=True)
                     fake_x = self.G(real_x0, target_c, stochastic=style)
-                    fake_image_list.append(fake_x[0])
-                    fake_attn_list.append(fake_x[1].repeat(1, 3, 1, 1))
+                    fake_image_list.append(to_data(fake_x[0], cpu=True))
+                    fake_attn_list.append(
+                        to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
                 self._SAVE_IMAGE(
                     _save_path, fake_image_list, mode='style_' + chr(65 + idx))
                 self._SAVE_IMAGE(
