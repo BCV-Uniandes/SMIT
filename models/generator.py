@@ -39,7 +39,13 @@ class Generator(nn.Module):
             padding=3,
             bias=False)
         layers += [('down_conv_' + str(conv_dim), conv)]
-        IN = nn.InstanceNorm2d(conv_dim, affine=True)
+        if self.config.IN:
+            IN = nn.InstanceNorm2d(conv_dim)
+        elif self.config.IN2:
+            IN = nn.InstanceNorm2d(
+                conv_dim, affine=True, track_running_stats=True)
+        else:
+            IN = nn.InstanceNorm2d(conv_dim, affine=True)
         layers += [('down_norm_' + str(conv_dim), IN)]
         layers += [('relu_' + str(conv_dim), nn.ReLU(inplace=True))]
 
@@ -55,7 +61,13 @@ class Generator(nn.Module):
                 padding=1,
                 bias=False)
             layers += [('down_conv_' + str(curr_dim * 2), conv)]
-            IN = nn.InstanceNorm2d(curr_dim * 2, affine=True)
+            if self.config.IN:
+                IN = nn.InstanceNorm2d(curr_dim * 2)
+            elif self.config.IN2:
+                IN = nn.InstanceNorm2d(
+                    curr_dim * 2, affine=True, track_running_stats=True)
+            else:
+                IN = nn.InstanceNorm2d(curr_dim * 2, affine=True)
             layers += [('down_norm_' + str(curr_dim * 2), IN)]
             layers += [('relu_' + str(curr_dim * 2), nn.ReLU(inplace=True))]
             curr_dim = curr_dim * 2
@@ -91,7 +103,14 @@ class Generator(nn.Module):
             if not self.Deterministic:
                 norm = LayerNorm(curr_dim // 2)
             else:
-                norm = nn.InstanceNorm2d(curr_dim // 2, affine=True)
+                if self.config.IN:
+                    norm = nn.InstanceNorm2d(curr_dim // 2)
+                elif self.config.IN2:
+                    IN = nn.InstanceNorm2d(
+                        curr_dim // 2, affine=True, track_running_stats=True)
+                else:
+                    norm = nn.InstanceNorm2d(curr_dim // 2, affine=True)
+
                 # undesirable to generate images in vastly different styles
             layers += [('up_norm_' + str(curr_dim // 2), norm)]
             layers += [('relu_' + str(curr_dim // 2), nn.ReLU(inplace=True))]

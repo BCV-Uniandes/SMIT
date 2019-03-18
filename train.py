@@ -332,7 +332,7 @@ class Train(Solver):
                 # RaGAN uses different data for Dis and Gen
                 real_x0, real_x1 = split(real_x)
                 real_c0, real_c1 = split(real_c)
-                files0, files1 = split(files)
+                # files0, files1 = split(files)
 
                 # ============================================================#
                 # ========================= DATA2VAR =========================#

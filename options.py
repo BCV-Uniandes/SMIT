@@ -85,6 +85,8 @@ def base_parser():
 
     # Misc
     parser.add_argument('--DELETE', action='store_true', default=False)
+    parser.add_argument('--IN', action='store_true', default=False)
+    parser.add_argument('--IN2', action='store_true', default=False)
     parser.add_argument('--NO_ATTENTION', action='store_true', default=False)
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')

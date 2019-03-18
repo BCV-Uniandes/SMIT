@@ -48,6 +48,14 @@ class ResidualBlock(nn.Module):
             norm1 = AdaptiveInstanceNorm2d(dim_out)
             norm2 = AdaptiveInstanceNorm2d(dim_out)
 
+        elif self.config.IN:
+            norm1 = nn.InstanceNorm2d(dim_out)
+            norm2 = nn.InstanceNorm2d(dim_out)
+        elif self.config.IN2:
+            norm1 = nn.InstanceNorm2d(
+                dim_out, affine=True, track_running_stats=True)
+            norm2 = nn.InstanceNorm2d(
+                dim_out, affine=True, track_running_stats=True)
         else:
             norm1 = nn.InstanceNorm2d(dim_out, affine=True)
             norm2 = nn.InstanceNorm2d(dim_out, affine=True)
@@ -87,8 +95,8 @@ class LayerNorm(nn.Module):
 
     def forward(self, x):
         shape = [-1] + [1] * (x.dim() - 1)
-        mean = x.view(x.size(0), -1).mean(1).view(*shape)
-        std = x.view(x.size(0), -1).std(1).view(*shape)
+        mean = x.view(-1).mean().view(*shape)
+        std = x.view(-1).std().view(*shape)
         x = (x - mean) / (std + self.eps)
 
         if self.affine:

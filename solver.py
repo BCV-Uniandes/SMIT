@@ -481,7 +481,7 @@ class Solver(object):
         modal = 'Multimodal' if Multimodal else 'Unimodal'
         Output = []
         flag_time = True
-
+        # from ipdb import set_trace; set_trace()
         with torch.no_grad():
             batch = self.get_batch_inference(batch, Multimodal)
             _label = self.get_batch_inference(label, Multimodal)
