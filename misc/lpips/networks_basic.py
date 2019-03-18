@@ -1,19 +1,9 @@
 from __future__ import absolute_import
 
-import sys
-# sys.path.append('..')
-# sys.path.append('.')
 import torch
 import torch.nn as nn
-import torch.nn.init as init
-from torch.autograd import Variable
-import numpy as np
-from pdb import set_trace as st
-from skimage import color
-#from IPython import embed
+from misc.utils import to_var
 from . import pretrained_networks as pn
-
-#from PerceptualSimilarity.util import util
 from misc.lpips import util
 
 # Off-the-shelf deep network
@@ -30,10 +20,9 @@ class PNet(nn.Module):
         self.pnet_type = pnet_type
         self.pnet_rand = pnet_rand
 
-        self.shift = torch.autograd.Variable(
+        self.shift = to_var(
             torch.Tensor([-.030, -.088, -.188]).view(1, 3, 1, 1))
-        self.scale = torch.autograd.Variable(
-            torch.Tensor([.458, .448, .450]).view(1, 3, 1, 1))
+        self.scale = to_var(torch.Tensor([.458, .448, .450]).view(1, 3, 1, 1))
 
         if (self.pnet_type in ['vgg', 'vgg16']):
             self.net = pn.vgg16(
@@ -132,10 +121,9 @@ class PNetLin(nn.Module):
             self.lin6 = NetLinLayer(self.chns[6], use_dropout=use_dropout)
             self.lins += [self.lin5, self.lin6]
 
-        self.shift = torch.autograd.Variable(
+        self.shift = to_var(
             torch.Tensor([-.030, -.088, -.188]).view(1, 3, 1, 1))
-        self.scale = torch.autograd.Variable(
-            torch.Tensor([.458, .448, .450]).view(1, 3, 1, 1))
+        self.scale = to_var(torch.Tensor([.458, .448, .450]).view(1, 3, 1, 1))
 
         if (use_gpu):
             if (self.pnet_tune):
@@ -212,8 +200,6 @@ class PNetLin(nn.Module):
 
 
 class Dist2LogitLayer(nn.Module):
-    ''' takes 2 distances, puts through fc layers, spits out value between [0,1] (if use_sigmoid is True) '''
-
     def __init__(self, chn_mid=32, use_sigmoid=True):
         super(Dist2LogitLayer, self).__init__()
         layers = [
@@ -303,7 +289,7 @@ class L2(FakeNet):
                 util.tensor2np(util.tensor2tensorlab(in0.data, to_norm=False)),
                 util.tensor2np(util.tensor2tensorlab(in1.data, to_norm=False)),
                 range=100.).astype('float')
-            ret_var = Variable(torch.Tensor((value, )))
+            ret_var = to_var(torch.Tensor((value, )))
             if (self.use_gpu):
                 ret_var = ret_var.cuda()
             return ret_var
@@ -323,7 +309,7 @@ class DSSIM(FakeNet):
                 util.tensor2np(util.tensor2tensorlab(in0.data, to_norm=False)),
                 util.tensor2np(util.tensor2tensorlab(in1.data, to_norm=False)),
                 range=100.).astype('float')
-        ret_var = Variable(torch.Tensor((value, )))
+        ret_var = to_var(torch.Tensor((value, )))
         if (self.use_gpu):
             ret_var = ret_var.cuda()
         return ret_var

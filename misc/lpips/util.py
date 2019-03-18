@@ -4,7 +4,6 @@ import numpy as np
 from PIL import Image
 import inspect
 import re
-import numpy as np
 import os
 import collections
 import matplotlib.pyplot as plt
@@ -12,7 +11,6 @@ from scipy.ndimage.interpolation import zoom
 from skimage.measure import compare_ssim
 import torch
 from IPython import embed
-import cv2
 from datetime import datetime
 
 
@@ -57,16 +55,15 @@ def psnr(p0, p1, peak=255.):
 
 
 def dssim(p0, p1, range=255.):
-    # embed()
     return (1 - compare_ssim(p0, p1, data_range=range, multichannel=True)) / 2.
 
 
-def rgb2lab(in_img, mean_cent=False):
-    from skimage import color
-    img_lab = color.rgb2lab(in_img)
-    if (mean_cent):
-        img_lab[:, :, 0] = img_lab[:, :, 0] - 50
-    return img_lab
+# def rgb2lab(in_img, mean_cent=False):
+#     from skimage import color
+#     img_lab = color.rgb2lab(in_img)
+#     if (mean_cent):
+#         img_lab[:, :, 0] = img_lab[:, :, 0] - 50
+#     return img_lab
 
 
 def normalize_blob(in_feat, eps=1e-10):
@@ -84,7 +81,6 @@ def cos_sim_blob(in0, in1):
 
 
 def normalize_tensor(in_feat, eps=1e-10):
-    # norm_factor = torch.sqrt(torch.sum(in_feat**2,dim=1)).view(in_feat.size()[0],1,in_feat.size()[2],in_feat.size()[3]).repeat(1,in_feat.size()[1],1,1)
     norm_factor = torch.sqrt(torch.sum(in_feat**2, dim=1)).view(
         in_feat.size()[0], 1,
         in_feat.size()[2],
@@ -306,11 +302,11 @@ def montage(imgs,
             backClr=np.array((0, 0, 0))):
     # INPUTS
     #   imgs        YxXxMxN or YxXxN
-    #   PAD         scalar              number of pixels in between
-    #   RATIO       scalar              target ratio of cols/rows
-    #   MM          scalar              # rows, if specified, overrides RATIO
-    #   NN          scalar              # columns, if specified, overrides RATIO
-    #   primeDir    scalar              0 for top-to-bottom, 1 for left-to-right
+    #   PAD         scalar           number of pixels in between
+    #   RATIO       scalar           target ratio of cols/rows
+    #   MM          scalar           # rows, if specified, overrides RATIO
+    #   NN          scalar           # columns, if specified, overrides RATIO
+    #   primeDir    scalar           0 for top-to-bottom, 1 for left-to-right
     # OUTPUTS
     #   mont_imgs   MM*Y x NN*X x M     big image with everything montaged
     # def montage(imgs, PAD=5, RATIO=16/9., MM=-1, NN=-1, primeDir=0,
@@ -356,7 +352,6 @@ def montage(imgs,
     EXTRA_PADY = EXTRA_PAD[0] * PADY
     EXTRA_PADX = EXTRA_PAD[0] * PADX
 
-    # mont_imgs = np.zeros(((Y+PAD)*MM-PAD, (X+PAD)*NN-PAD, M), dtype=use_dtype)
     mont_imgs = np.zeros((np.uint((Y + PADY) * MM - PADY + EXTRA_PADY),
                           np.uint((X + PADX) * NN - PADX + EXTRA_PADX), M),
                          dtype=imgs.dtype)
@@ -364,8 +359,6 @@ def montage(imgs,
         backClr.flatten()[np.newaxis, np.newaxis, :].astype(mont_imgs.dtype)
 
     for ii in np.random.permutation(N):
-        # print imgs[:,:,:,ii].shape
-        # mont_imgs[grid_mm[ii]*(Y+PAD):(grid_mm[ii]*(Y+PAD)+Y), grid_nn[ii]*(X+PAD):(grid_nn[ii]*(X+PAD)+X),:]
         mont_imgs[np.uint(grid_mm[ii] * (Y + PADY)):np.uint((
             grid_mm[ii] * (Y + PADY) + Y)),
                   np.uint(grid_nn[ii] * (X + PADX)):np.uint((
@@ -378,13 +371,10 @@ def montage(imgs,
         mont_imgs = mont_imgs[:, :, 0]
 
     if (returnGridPos):
-        # return (mont_imgs,np.concatenate((grid_mm[:,:,np.newaxis]*(Y+PAD),
-        # grid_nn[:,:,np.newaxis]*(X+PAD)),axis=2))
         return (mont_imgs,
                 np.concatenate((grid_mm[:, np.newaxis] * (Y + PADY),
                                 grid_nn[:, np.newaxis] * (X + PADX)),
                                axis=1))
-        # return (mont_imgs, (grid_mm,grid_nn))
     else:
         return mont_imgs
 
@@ -417,7 +407,7 @@ def read_file(in_path, list_lines=False):
         agg_str += cur_line
         cur_line = f.readline()
     f.close()
-    if (list_lines == False):
+    if list_lines is False:
         return agg_str.replace('\n', '')
     else:
         line_list = agg_str.split('\n')

@@ -1,9 +1,5 @@
 import os
 import torch
-#import util.util as util
-from torch.autograd import Variable
-from pdb import set_trace as st
-from IPython import embed
 
 
 class BaseModel():
@@ -19,9 +15,6 @@ class BaseModel():
         # self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
 
     def forward(self):
-        pass
-
-    def get_image_paths(self):
         pass
 
     def optimize_parameters(self):
@@ -57,6 +50,7 @@ class BaseModel():
         return self.image_paths
 
     def save_done(self, flag=False):
+        import numpy as np
         np.save(os.path.join(self.save_dir, 'done_flag'), flag)
         np.savetxt(
             os.path.join(self.save_dir, 'done_flag'), [
