@@ -39,6 +39,11 @@ class Solver(object):
         self.G = Generator(
             self.config, debug=self.config.mode == 'train' and self.verbose)
         self.G = to_cuda(self.G)
+
+        if self.config.dataset_fake == 'FFHQ':
+            self.load_init_HD()
+            self.config.g_lr /= 10.0
+
         if self.config.mode == 'train':
             self.d_optimizer = self.set_optimizer(
                 self.D, self.config.d_lr, self.config.beta1, self.config.beta2)
@@ -108,16 +113,24 @@ class Solver(object):
             for m in choices:
                 submodel = getattr(model, m)
                 num_params = 0
+                num_learns = 0
                 for p in submodel.parameters():
                     num_params += p.numel()
-                self.PRINT("{} number of parameters: {}".format(
-                    m.upper(), num_params))
+                    if p.requires_grad:
+                        num_learns += p.numel()
+                self.PRINT(
+                    "{} number of parameters (TOTAL): {}\t(LEARNABLE): {}.".
+                    format(m.upper(), num_params, num_learns))
         else:
             num_params = 0
+            num_learns = 0
             for p in model.parameters():
                 num_params += p.numel()
-            self.PRINT("{} number of parameters: {}".format(
-                name.upper(), num_params))
+                if p.requires_grad:
+                    num_learns += p.numel()
+            self.PRINT(
+                "{} number of parameters (TOTAL): {}\t(LEARNABLE): {}.".format(
+                    name.upper(), num_params, num_learns))
         # self.PRINT(name)
         # self.PRINT(model)
         # self.PRINT("{} number of parameters: {}".format(name, num_params))
@@ -218,6 +231,33 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
+    def load_init_HD(self):
+        model_dir = self.config.model_save_path.replace(
+            self.config.dataset_fake, 'CelebA')
+        pretrained_model = self.resume_name(model_path=model_dir)
+        self.PRINT('Resuming model (step: {})...'.format(pretrained_model))
+        name = os.path.join(model_dir, '{}_G.pth'.format(
+            pretrained_model, '{}'))
+        self.PRINT('Model: {}'.format(name))
+        name = comm.bcast(name, root=0)
+
+        celeba_weights = torch.load(
+            name, map_location=lambda storage, loc: storage)
+        weights = self.G.state_dict()
+        for key, value in weights.items():
+            if key in celeba_weights.keys():
+                if weights[key].shape == celeba_weights[key].shape:
+                    # self.PRINT(
+                    #     'Copying from {0} CelebA to {0} FFHQ'.format(key))
+                    weights[key] = celeba_weights[key]
+        self.G.load_state_dict(weights)
+        # for key, value in self.G.named_parameters():
+        #     if key in celeba_weights.keys():
+        #         if weights[key].shape == celeba_weights[key].shape:
+        #             value.requires_grad = False
+
+    # ==================================================================#
+    # ==================================================================#
     def optim_cuda(self, optimizer):
         for state in optimizer.state.values():
             for k, v in state.items():
@@ -226,16 +266,15 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
-    def resume_name(self):
+    def resume_name(self, model_path=None):
+        if model_path is None:
+            model_path = self.config.model_save_path
         if self.config.pretrained_model in ['', None]:
             try:
                 last_file = sorted(
-                    glob.glob(
-                        os.path.join(self.config.model_save_path,
-                                     '*_G.pth')))[-1]
+                    glob.glob(os.path.join(model_path, '*_G.pth')))[-1]
             except IndexError:
-                raise IndexError("No model found at " +
-                                 self.config.model_save_path)
+                raise IndexError("No model found at " + model_path)
             last_name = '_'.join(os.path.basename(last_file).split('_')[:2])
         else:
             last_name = self.config.pretrained_model

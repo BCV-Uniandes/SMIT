@@ -22,9 +22,11 @@ class Generator(nn.Module):
         self.Deterministic = config.DETERMINISTIC
         mode_upsample = self.config.upsample
 
+        layers = []
+
         conv_dim = config.g_conv_dim
-        conv_dim = conv_dim if config.image_size <= 256 else conv_dim // 2
-        conv_dim = conv_dim if config.image_size <= 512 else conv_dim // 2
+        layers += [] if config.image_size <= 512 else [('down_nn_512', nn.Upsample(scale_factor=0.5, mode='bilinear'))]
+        layers += [] if config.image_size <= 256 else [('down_nn_256', nn.Upsample(scale_factor=0.5, mode='bilinear'))]
         conv = nn.Conv2d(
             self.color_dim,
             conv_dim,
@@ -32,13 +34,13 @@ class Generator(nn.Module):
             stride=1,
             padding=3,
             bias=False)
-        layers = [('down_conv_' + str(conv_dim), conv)]
+        layers += [('down_conv_' + str(conv_dim), conv)]
         IN = nn.InstanceNorm2d(conv_dim, affine=True)
         layers += [('down_norm_' + str(conv_dim), IN)]
         layers += [('relu_' + str(conv_dim), nn.ReLU(inplace=True))]
 
         # Down-Sampling
-        conv_repeat = int(math.log(self.image_size, 2)) - 5
+        conv_repeat = int(math.log(256, 2)) - 5
         curr_dim = conv_dim
         for i in range(conv_repeat):
             conv = nn.Conv2d(
@@ -101,6 +103,8 @@ class Generator(nn.Module):
             padding=3,
             bias=False)
         layers = [('fake', fake_conv)]
+        layers += [] if config.image_size <= 256 else [('fake_up_nn_512', nn.Upsample(scale_factor=2, mode='bilinear'))]
+        layers += [] if config.image_size <= 512 else [('fake_up_nn_1024', nn.Upsample(scale_factor=2, mode='bilinear'))]        
         layers += [('tanh', nn.Tanh())]
         self.fake = nn.Sequential(OrderedDict(layers))
 
@@ -108,6 +112,8 @@ class Generator(nn.Module):
             attn_conv = nn.Conv2d(
                 curr_dim, 1, kernel_size=7, stride=1, padding=3, bias=False)
             layers = [('attn', attn_conv)]
+            layers += [] if config.image_size <= 256 else [('attn_up_nn_512', nn.Upsample(scale_factor=2, mode='bilinear'))]
+            layers += [] if config.image_size <= 512 else [('attn_up_nn_1024', nn.Upsample(scale_factor=2, mode='bilinear'))]             
             layers += [('sigmoid', nn.Sigmoid())]
             self.attn = nn.Sequential(OrderedDict(layers))
 

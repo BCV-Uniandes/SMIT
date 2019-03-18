@@ -78,11 +78,12 @@ class Train(Solver):
                     label=fixed_label,
                     training=True,
                     fixed_style=fixed_style)
-            self.generate_SMIT(
-                fixed_x,
-                self.output_sample(0, 0),
-                label=fixed_label,
-                training=True)
+            if not self.config.dataset_fake == 'FFHQ':
+                self.generate_SMIT(
+                    fixed_x,
+                    self.output_sample(0, 0),
+                    label=fixed_label,
+                    training=True)
 
         return fixed_x, fixed_label, fixed_style
 
@@ -108,7 +109,7 @@ class Train(Solver):
                     key: get_loss_value(value)
                     for key, value in self.loss.items()
                 }
-                if not self.config.NO_ATTENTION:
+                if not self.config.NO_ATTENTION and 'Gatm' in self.loss.keys():
                     color(self.loss, 'Gatm', 'blue')
                 self.progress_bar.set_postfix(**self.loss)
             if (iter + 1) == len(self.data_loader):
@@ -150,17 +151,19 @@ class Train(Solver):
                     label=self.fixed_label,
                     training=True,
                     fixed_style=self.fixed_style)
+                if not self.config.dataset_fake == 'FFHQ':
+                    self.generate_SMIT(
+                        self.fixed_x,
+                        self.output_sample(epoch, iter + 1),
+                        Multimodal=1,
+                        label=self.fixed_label,
+                        training=True)
+            if not self.config.dataset_fake == 'FFHQ':
                 self.generate_SMIT(
                     self.fixed_x,
                     self.output_sample(epoch, iter + 1),
-                    Multimodal=1,
                     label=self.fixed_label,
                     training=True)
-            self.generate_SMIT(
-                self.fixed_x,
-                self.output_sample(epoch, iter + 1),
-                label=self.fixed_label,
-                training=True)
 
             # Debug INFO
             elapsed = time.time() - self.start_time
@@ -192,7 +195,7 @@ class Train(Solver):
     # ============================================================#
     def current_losses(self, mode, **kwargs):
         loss = 0
-        for key, value in kwargs.items():
+        for key, _ in kwargs.items():
             if mode in key:
                 loss += self.loss[key]
                 self.update_loss(key, get_loss_value(self.loss[key]))
@@ -290,6 +293,11 @@ class Train(Solver):
             start = 0
             self.total_iter = 0
 
+        if self.config.dataset_fake == 'FFHQ':
+            d_iter = 1
+        else:
+            d_iter = 1
+
         # Fixed inputs, target domain labels, and style for debugging
         self.fixed_x, self.fixed_label, self.fixed_style = self.debug_vars(
             start)
@@ -348,9 +356,10 @@ class Train(Solver):
                 # ============================================================#
                 # ======================== Train G ===========================#
                 # ============================================================#
-                self.reset_grad()
-                self.Gen_update(real_x1, real_c1, fake_c1)
-                self.g_optimizer.step()
+                if (_iter + 1) % d_iter == 0:
+                    self.reset_grad()
+                    self.Gen_update(real_x1, real_c1, fake_c1)
+                    self.g_optimizer.step()
 
                 # ====================== DEBUG =====================#
                 self.INFO(epoch, _iter)

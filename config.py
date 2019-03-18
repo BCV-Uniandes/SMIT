@@ -32,8 +32,8 @@ def update_config(config):
     config.num_epochs *= config.save_epoch
     config.num_epochs_decay *= config.save_epoch
 
-    if config.image_size != 256:
-        update_folder(config, 'image_' + str(config.image_size))
+    # if config.image_size != 256:
+    #     update_folder(config, 'image_' + str(config.image_size))
 
     if config.NO_ATTENTION:
         config.Identity = True
@@ -74,8 +74,8 @@ def update_config(config):
         config.lambda_idt = 10.0
         update_folder(config, 'FORCE_IDENTITY')
 
-    if config.seed != 10:
-        update_folder(config, 'seed' + str(config.seed))
+    # if config.seed != 10:
+    #     update_folder(config, 'seed' + str(config.seed))
 
     if config.DELETE:
         remove_folder(config)
