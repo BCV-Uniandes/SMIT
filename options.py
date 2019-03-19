@@ -85,6 +85,7 @@ def base_parser():
 
     # Misc
     parser.add_argument('--DELETE', action='store_true', default=False)
+    parser.add_argument('--BIG', action='store_true', default=False)
     parser.add_argument('--IN', action='store_true', default=False)
     parser.add_argument('--IN2', action='store_true', default=False)
     parser.add_argument('--NO_ATTENTION', action='store_true', default=False)

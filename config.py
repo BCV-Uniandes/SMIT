@@ -70,6 +70,7 @@ def update_config(config):
     UPDATE_FOLDER(config, 'ADJUST_SMOOTH')
     UPDATE_FOLDER(config, 'IN')
     UPDATE_FOLDER(config, 'IN2')
+    UPDATE_FOLDER(config, 'BIG')
 
     if config.FORCE_IDENTITY:
         config.Identity = True

@@ -24,6 +24,12 @@ class Generator(nn.Module):
 
         layers = []
 
+        if config.BIG:
+            config.g_conv_dim *= 2
+            conv_repeat = 2
+        else:
+            conv_repeat = int(math.log(256, 2)) - 5
+
         conv_dim = config.g_conv_dim
         layers += [] if config.image_size <= 512 else [
             ('down_nn_512', nn.Upsample(scale_factor=0.5, mode='bilinear'))
@@ -50,7 +56,6 @@ class Generator(nn.Module):
         layers += [('relu_' + str(conv_dim), nn.ReLU(inplace=True))]
 
         # Down-Sampling
-        conv_repeat = int(math.log(256, 2)) - 5
         curr_dim = conv_dim
         for i in range(conv_repeat):
             conv = nn.Conv2d(

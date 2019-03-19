@@ -268,8 +268,8 @@ class Train(Solver):
 
         # ========== Style Recovery Part ==========#
         if self.config.STYLE_ENCODER:
-            style_fake1_rec = self.G.style_encoder(fake_x1[0])
-            style_rec1_rec = self.G.style_encoder(rec_x1[0])
+            style_fake1_rec = self.G.style_encoder(fake_x1[0].detach())
+            style_rec1_rec = self.G.style_encoder(rec_x1[0].detach())
             self.loss['Gsty'] = criterion_l1(style_fake1, style_fake1_rec)
             self.loss['Gstyr'] = criterion_l1(style_rec1, style_rec1_rec)
 

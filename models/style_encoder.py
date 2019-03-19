@@ -16,7 +16,7 @@ class StyleEncoder(nn.Module):
         self.c_dim = config.c_dim
         self.config = config
         style_dim = config.style_dim
-        conv_dim = config.g_conv_dim // 2
+        conv_dim = 16  # config.g_conv_dim // 2
 
         layers = []
         layers.append(
