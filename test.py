@@ -31,10 +31,11 @@ class Test(Solver):
             ])
             _dirs[-1].append(
                 os.path.join(save_folder, 'fake%s_label1' % (str(i).zfill(2))))
-        for _dir in _dirs:
-            for _di in _dir:
-                os.system('rm -rf {}'.format(_di))
-                create_dir(_di)
+
+        # for _dir in _dirs:
+        #     for _di in _dir:
+        #         os.system('rm -rf {}'.format(_di))
+        #         create_dir(_di)
 
         def save_img(data, idx, pos, iter):
             path = os.path.join(_dirs[idx][pos], '{}_{}.jpg'.format(
@@ -43,31 +44,31 @@ class Test(Solver):
             if not os.path.isfile(path):
                 imageio.imwrite(path, (data * 255).astype(np.uint8))
 
-        iter = 0
-        with torch.no_grad():
-            for i, (real_x, label, _) in enumerate(data_loader):
-                for _, (real_x0, label0) in enumerate(zip(real_x, label)):
-                    real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
-                    label0 = (1 - label0.repeat(n_rep, 1))**2
-                    real_x0 = to_var(real_x0, volatile=True)
-                    label0 = to_var(label0, volatile=True)
+        # iter = 0
+        # with torch.no_grad():
+        #     for i, (real_x, label, _) in enumerate(data_loader):
+        #         for _, (real_x0, label0) in enumerate(zip(real_x, label)):
+        #             real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
+        #             label0 = (1 - label0.repeat(n_rep, 1))**2
+        #             real_x0 = to_var(real_x0, volatile=True)
+        #             label0 = to_var(label0, volatile=True)
 
-                    style = self.G.random_style(n_rep)
-                    style = to_var(style, volatile=True)
-                    fake_x0 = self.G(real_x0, label0, stochastic=style)[0]
+        #             style = self.G.random_style(n_rep)
+        #             style = to_var(style, volatile=True)
+        #             fake_x0 = self.G(real_x0, label0, stochastic=style)[0]
 
-                    fake_x0 = denorm(to_data(fake_x0, cpu=True)).numpy()
-                    real_x0 = denorm(to_data(real_x0, cpu=True)).numpy()
-                    real_x0 = real_x0.transpose(0, 2, 3, 1)[0]
-                    save_img(real_x0, 0, int(label0[0][0]), iter)
-                    fake_x0 = fake_x0.transpose(0, 2, 3, 1)
-                    for i, data in enumerate(fake_x0):
-                        save_img(data, i + 1, int(1 - label0[0][0]), iter)
-                    iter += 1
+        #             fake_x0 = denorm(to_data(fake_x0, cpu=True)).numpy()
+        #             real_x0 = denorm(to_data(real_x0, cpu=True)).numpy()
+        #             real_x0 = real_x0.transpose(0, 2, 3, 1)[0]
+        #             save_img(real_x0, 0, int(label0[0][0]), iter)
+        #             fake_x0 = fake_x0.transpose(0, 2, 3, 1)
+        #             for i, data in enumerate(fake_x0):
+        #                 save_img(data, i + 1, int(1 - label0[0][0]), iter)
+        #             iter += 1
 
         for j in range(2):
             fid = []
-            self.PRINT('Calculating FID - label {}'.formt(j))
+            self.PRINT('Calculating FID - label {}'.format(j))
             for i in range(1, n_rep + 1):
                 real_folder = os.path.join(save_folder,
                                            'real_label{}'.format(j))
