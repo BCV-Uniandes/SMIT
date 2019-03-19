@@ -148,7 +148,7 @@ class Scores(Solver):
 
         style0 = to_var(
             self.G.random_style(1),
-            volatile=True) if 'Stochastic' in self.config.GAN_options else None
+            volatile=True) if not self.config.DETERMINISTIC else None
         print(file_name)
         for i, (real_x, org_c, files) in tqdm(
                 enumerate(data_loader),
@@ -288,12 +288,12 @@ class Scores(Solver):
         net.eval()
         self.G.eval()
         inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
-        if 'Stochastic' in self.config.GAN_options:
+        if not self.config.DETERMINISTIC:
             mode = 'SMIT'
-        elif 'Attention' in self.config.GAN_options:
-            mode = 'GANimation'
-        else:
+        elif not self.config.NO_ATTENTION:
             mode = 'StarGAN'
+        else:
+            mode = 'GANimation'
         data_loader = self.data_loader
         file_name = 'scores/Inception_{}.txt'.format(mode)
 
