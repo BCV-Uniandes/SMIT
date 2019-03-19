@@ -33,7 +33,7 @@ def base_parser():
     parser.add_argument('--beta2', type=float, default=0.999)
     parser.add_argument('--pretrained_model', type=str, default=None)
 
-    parser.add_argument('--seed', type=int, default=10)
+    parser.add_argument('--seed', type=int, default=1)
 
     # Path
     parser.add_argument('--log_path', type=str, default='./snapshot/logs')

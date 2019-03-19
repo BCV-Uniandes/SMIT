@@ -17,16 +17,11 @@ class StyleEncoder(nn.Module):
         self.config = config
         style_dim = config.style_dim
         conv_dim = 16  # config.g_conv_dim // 2
-
         layers = []
+        layers.append(nn.ReflectionPad2d(3))
         layers.append(
             nn.Conv2d(
-                self.color_dim,
-                conv_dim,
-                kernel_size=7,
-                stride=1,
-                padding=3,
-                bias=False))
+                self.color_dim, conv_dim, kernel_size=7, stride=1, bias=True))
         layers.append(nn.ReLU(inplace=True))
 
         # Down-Sampling
@@ -35,25 +30,18 @@ class StyleEncoder(nn.Module):
             down[0]    # 1 until 2x2, 2 for 4x4
         curr_dim = conv_dim
         for i in range(conv_repeat):
+            layers.append(nn.ReflectionPad2d(1))
             layers.append(
                 nn.Conv2d(
-                    curr_dim,
-                    curr_dim * 2,
-                    kernel_size=4,
-                    stride=2,
-                    padding=1,
-                    bias=False))
+                    curr_dim, curr_dim * 2, kernel_size=4, stride=2,
+                    bias=True))
             layers.append(nn.ReLU(inplace=True))
             curr_dim = curr_dim * 2
 
+        layers.append(nn.ReflectionPad2d(1))
         layers.append(
             nn.Conv2d(
-                curr_dim,
-                curr_dim * 2,
-                kernel_size=4,
-                stride=2,
-                padding=1,
-                bias=False))
+                curr_dim, curr_dim * 2, kernel_size=4, stride=2, bias=False))
         self.main = nn.Sequential(*layers)
         curr_dim = curr_dim * 2
 
