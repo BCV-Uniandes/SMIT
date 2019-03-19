@@ -76,7 +76,7 @@ class Test(Solver):
                     save_folder, 'fake{}_label{}'.format(str(i).zfill(2), j))
                 folder = [real_folder, fake_folder]
                 fid.append(FID(folder, gpu=self.config.GPU[0]))
-            self.PRINT('Mean FID: {}'.formt(np.mean(fid)))
+            self.PRINT('Mean FID: {}'.format(np.mean(fid)))
 
     # ==================================================================#
     # ==================================================================#
