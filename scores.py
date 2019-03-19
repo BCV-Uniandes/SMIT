@@ -12,6 +12,13 @@ from data_loader import get_loader
 warnings.filterwarnings('ignore')
 
 
+def FID(path, gpu=''):
+    from misc.fid_score import calculate_fid_given_paths
+    fid_value = calculate_fid_given_paths(path, 64, gpu, 2048)
+    print('FID: ', fid_value)
+    return fid_value
+
+
 class Scores(Solver):
     def __init__(self, config):
 
@@ -25,12 +32,6 @@ class Scores(Solver):
             num_workers=config.num_workers,
             all_attr=config.ALL_ATTR,
             c_dim=config.c_dim)
-
-    def FID(self, path, gpu=''):
-        from misc.fid_score import calculate_fid_given_paths
-        fid_value = calculate_fid_given_paths(path, 64, gpu, 2048)
-        print('FID: ', fid_value)
-        return fid_value
 
     def LPIPS(self):
         from misc.utils import compute_lpips
