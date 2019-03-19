@@ -18,6 +18,7 @@ class Test(Solver):
     # ==================================================================#
     # ==================================================================#
     def folder_fid(self, data_loader):
+        from scores import FID
         self.G.eval()
         n_rep = 5
         save_folder = os.path.join(self.config.sample_path, self.resume_name())
@@ -39,7 +40,8 @@ class Test(Solver):
             path = os.path.join(_dirs[idx][pos], '{}_{}.jpg'.format(
                 idx,
                 str(iter).zfill(4)))
-            imageio.imwrite(path, (data * 255).astype(np.uint8))
+            if not os.path.isfile(path):
+                imageio.imwrite(path, (data * 255).astype(np.uint8))
 
         iter = 0
         with torch.no_grad():
@@ -62,6 +64,18 @@ class Test(Solver):
                     for i, data in enumerate(fake_x0):
                         save_img(data, i + 1, int(1 - label0[0][0]), iter)
                     iter += 1
+
+        for j in range(2):
+            fid = []
+            self.PRINT('Calculating FID - label {}'.formt(j))
+            for i in range(1, n_rep + 1):
+                real_folder = os.path.join(save_folder,
+                                           'real_label{}'.format(j))
+                fake_folder = os.path.join(
+                    save_folder, 'fake{}_label{}'.format(str(i).zfill(2), j))
+                folder = [real_folder, fake_folder]
+                fid.append(FID(folder, gpu=self.config.GPU[0]))
+            self.PRINT('Mean FID: {}'.formt(np.mean(fid)))
 
     # ==================================================================#
     # ==================================================================#

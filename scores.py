@@ -26,6 +26,12 @@ class Scores(Solver):
             all_attr=config.ALL_ATTR,
             c_dim=config.c_dim)
 
+    def FID(self, path, gpu=''):
+        from misc.fid_score import calculate_fid_given_paths
+        fid_value = calculate_fid_given_paths(path, 64, gpu, 2048)
+        print('FID: ', fid_value)
+        return fid_value
+
     def LPIPS(self):
         from misc.utils import compute_lpips
         data_loader = self.data_loader
