@@ -10,9 +10,10 @@ from misc.utils import color, get_fake, get_labels, get_loss_value
 from misc.utils import split, TimeNow, to_var
 from misc.losses import _compute_loss_smooth, _GAN_LOSS
 import torch.utils.data.distributed
-import horovod.torch as hvd
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
+from misc.utils import horovod
+hvd = horovod()
+# from mpi4py import MPI
+# comm = MPI.COMM_WORLD
 warnings.filterwarnings('ignore')
 
 
@@ -176,7 +177,7 @@ class Train(Solver):
             self.PRINT(log)
             # self.PLOT(epoch)
 
-        comm.Barrier()
+        # comm.Barrier()
         # Decay learning rate
         if epoch != 0 and epoch % self.config.num_epochs_decay == 0:
             self.Decay_lr()
@@ -211,15 +212,21 @@ class Train(Solver):
         else:
             G = self.G
         for p in G.generator.parameters():
-            p.requires_grad_(generator)
+            try:
+                p.requires_grad_(generator)
+            except AttributeError:
+                p.requires_grad = generator
         for p in self.D.parameters():
-            p.requires_grad_(discriminator)
+            try:
+                p.requires_grad_(discriminator)
+            except AttributeError:
+                p.requires_grad = discriminator
 
     # ============================================================#
     # ============================================================#
 
     def Dis_update(self, real_x0, real_c0, fake_c0):
-        self.train_model(discriminator=True)
+        # self.train_model(discriminator=True)
         style_fake0 = to_var(self.random_style(real_x0))
         fake_x0 = self.G(real_x0, fake_c0, style_fake0)[0]
         d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0, real_c0)
@@ -232,7 +239,7 @@ class Train(Solver):
     # ============================================================#
     # ============================================================#
     def Gen_update(self, real_x1, real_c1, fake_c1):
-        self.train_model(generator=True)
+        # self.train_model(generator=True)
         criterion_l1 = torch.nn.L1Loss()
         style_fake1 = to_var(self.random_style(real_x1))
         style_rec1 = to_var(self.random_style(real_x1))

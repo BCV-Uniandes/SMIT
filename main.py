@@ -1,13 +1,14 @@
 #!/usr/bin/ipython
 from __future__ import print_function
+from misc.utils import PRINT, config_yaml
 import os
 from data_loader import get_loader
 import config as cfg
 import warnings
 import sys
 import torch
-import horovod.torch as hvd
-from misc.utils import PRINT, config_yaml
+from misc.utils import horovod
+hvd = horovod()
 warnings.filterwarnings('ignore')
 
 

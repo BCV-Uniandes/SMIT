@@ -3,7 +3,9 @@ from torchvision import transforms
 from PIL import Image
 import importlib
 import torch
-import horovod.torch as hvd
+from misc.utils import horovod
+# import horovod.torch as hvd
+hvd = horovod()
 hvd.init()
 
 # ==================================================================#

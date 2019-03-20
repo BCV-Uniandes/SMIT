@@ -287,6 +287,31 @@ def get_torch_version():
 
 # ==================================================================#
 # ==================================================================#
+
+
+def horovod():
+    try:
+        import horovod.torch as hvd
+    except ImportError:
+
+        class hvd():
+            def init(self):
+                pass
+
+            def size(self):
+                return 1
+
+            def rank(self):
+                return 0
+
+        hvd = hvd()
+    return hvd
+
+
+# ==================================================================#
+# ==================================================================#
+
+
 def imgShow(img):
     from torchvision.utils import save_image
     try:
@@ -566,7 +591,7 @@ def to_cpu(x):
 def to_cuda(x):
     import torch
     import torch.nn as nn
-    import horovod.torch as hvd
+    hvd = horovod()
 
     if get_torch_version() > 0.3:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -582,7 +607,8 @@ def to_cuda(x):
             if isinstance(x, nn.Module):
                 x.cuda()
             else:
-                return x.cuda()
+                x = x.cuda()
+            return x
         else:
             return x
 

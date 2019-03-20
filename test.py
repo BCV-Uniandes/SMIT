@@ -4,7 +4,7 @@ import os
 import warnings
 import imageio
 import numpy as np
-from misc.utils import color_frame, create_dir, denorm
+from misc.utils import color_frame, create_dir, denorm, get_torch_version
 from misc.utils import slerp, single_source, TimeNow_str, to_data, to_var
 import torch.utils.data.distributed
 
@@ -45,7 +45,9 @@ class Test(Solver):
                 imageio.imwrite(path, (data * 255).astype(np.uint8))
 
         iter = 0
-        with torch.no_grad():
+        no_grad = open('/var/tmp/null.txt',
+                       'w') if get_torch_version() < 1.0 else torch.no_grad()
+        with no_grad:
             for i, (real_x, label, _) in enumerate(data_loader):
                 for _, (real_x0, label0) in enumerate(zip(real_x, label)):
                     real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
@@ -90,7 +92,9 @@ class Test(Solver):
         self.D.eval()
         n_rep = 4
 
-        with torch.no_grad():
+        no_grad = open('/var/tmp/null.txt',
+                       'w') if get_torch_version() < 1.0 else torch.no_grad()
+        with no_grad:
             real_x = to_var(real_x, volatile=True)
             out_label = to_var(label, volatile=True)
             target_c_list = [out_label] * 7

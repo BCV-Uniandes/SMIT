@@ -1,20 +1,21 @@
-import torch
-import horovod.torch as hvd
-import os
-import glob
-import warnings
-import torch.nn.functional as F
-import numpy as np
-import time
-import datetime
-from torchvision.utils import save_image
-from misc.utils import color_frame
-from misc.utils import create_arrow, create_dir, denorm, get_labels
-from misc.utils import Modality, PRINT, single_source, target_debug_list
-from misc.utils import to_cuda, to_data, to_var
 import torch.utils.data.distributed
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
+from misc.utils import to_cuda, to_data, to_var
+from misc.utils import Modality, PRINT, single_source, target_debug_list
+from misc.utils import create_arrow, create_dir, denorm, get_labels
+from misc.utils import color_frame, get_torch_version
+from torchvision.utils import save_image
+import datetime
+import time
+import numpy as np
+import torch.nn.functional as F
+import warnings
+import glob
+import os
+import torch
+from misc.utils import horovod
+hvd = horovod()
+# from mpi4py import MPI
+# comm = MPI.COMM_WORLD
 warnings.filterwarnings('ignore')
 
 
@@ -78,12 +79,12 @@ class Solver(object):
                 optimizer,
                 named_parameters=model.named_parameters(),
                 backward_passes_per_step=backward_passes_per_step)
-        else:
-            optimizer = torch.optim.Adam(parameters, lr, [beta1, beta2])
-
             # Horovod: broadcast parameters & optimizer state.
             hvd.broadcast_parameters(model.state_dict(), root_rank=0)
             hvd.broadcast_optimizer_state(optimizer, root_rank=0)
+
+        else:
+            optimizer = torch.optim.Adam(parameters, lr, [beta1, beta2])
         return optimizer
 
     # ============================================================#
@@ -184,7 +185,8 @@ class Solver(object):
             self.config.model_save_path, '{}_{}.pth'.format(
                 self.config.pretrained_model, '{}'))
         self.PRINT('Model: {}'.format(self.name))
-        self.name = comm.bcast(self.name, root=0)
+
+        # self.name = comm.bcast(self.name, root=0)
 
         # name = self.name.split('_')
         # epoch = hvd.broadcast(torch.tensor(int(name[0])),
@@ -241,7 +243,7 @@ class Solver(object):
             name = os.path.join(model_dir, '{}_{}.pth'.format(
                 pretrained_model, name))
             self.PRINT('Model: {}'.format(name))
-            name = comm.bcast(name, root=0)
+            # name = comm.bcast(name, root=0)
 
             celeba_weights = torch.load(
                 name, map_location=lambda storage, loc: storage)
@@ -481,8 +483,10 @@ class Solver(object):
         modal = 'Multimodal' if Multimodal else 'Unimodal'
         Output = []
         flag_time = True
+        no_grad = open('/var/tmp/null.txt',
+                       'w') if get_torch_version() < 1.0 else torch.no_grad()
         # from ipdb import set_trace; set_trace()
-        with torch.no_grad():
+        with no_grad:
             batch = self.get_batch_inference(batch, Multimodal)
             _label = self.get_batch_inference(label, Multimodal)
             for idx, real_x in enumerate(batch):

@@ -80,6 +80,10 @@ def update_config(config):
     if config.seed != 10:
         update_folder(config, 'seed' + str(config.seed))
 
+    from misc.utils import get_torch_version
+    if get_torch_version() < 1.0:
+        update_folder(config, 'pytorch' + str(get_torch_version()))
+
     if config.DELETE:
         remove_folder(config)
 
