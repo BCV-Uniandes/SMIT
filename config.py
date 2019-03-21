@@ -71,6 +71,7 @@ def update_config(config):
     UPDATE_FOLDER(config, 'IN')
     UPDATE_FOLDER(config, 'IN2')
     UPDATE_FOLDER(config, 'BIG')
+    UPDATE_FOLDER(config, 'SPLIT')
 
     if config.FORCE_IDENTITY:
         config.Identity = True

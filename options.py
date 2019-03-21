@@ -88,6 +88,7 @@ def base_parser():
     parser.add_argument('--BIG', action='store_true', default=False)
     parser.add_argument('--IN', action='store_true', default=False)
     parser.add_argument('--IN2', action='store_true', default=False)
+    parser.add_argument('--SPLIT', action='store_true', default=False)
     parser.add_argument('--NO_ATTENTION', action='store_true', default=False)
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')

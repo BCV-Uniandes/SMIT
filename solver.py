@@ -45,11 +45,20 @@ class Solver(object):
             self.load_init_HD()
             self.config.g_lr /= 10.0
 
+        if self.config.SPLIT:
+            parameters = self.G.generator.parameters()
+        else:
+            parameters = None
+
         if self.config.mode == 'train':
             self.d_optimizer = self.set_optimizer(
                 self.D, self.config.d_lr, self.config.beta1, self.config.beta2)
             self.g_optimizer = self.set_optimizer(
-                self.G, self.config.g_lr, self.config.beta1, self.config.beta2)
+                self.G,
+                self.config.g_lr,
+                self.config.beta1,
+                self.config.beta2,
+                parameters=parameters)
 
         # Start with trained model
         if self.config.pretrained_model and self.verbose:
@@ -61,11 +70,15 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
-    def set_optimizer(self, model, lr, beta1=0.5, beta2=0.999):
+    def set_optimizer(self, model, lr, beta1=0.5, beta2=0.999,
+                      parameters=None):
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
             model = model.module
         # model = model.module
-        parameters = filter(lambda p: p.requires_grad, model.parameters())
+        if parameters is None:
+            parameters = filter(lambda p: p.requires_grad, model.parameters())
+        else:
+            parameters = filter(lambda p: p.requires_grad, parameters)
 
         if hvd.size() > 1:
             self.count += 1

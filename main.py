@@ -1,4 +1,4 @@
-#!/usr/bin/ipython
+#!/home/afromero/datos2/anaconda3/bin/ipython
 from __future__ import print_function
 from misc.utils import PRINT, config_yaml
 import os
