@@ -26,34 +26,8 @@ class AdaInGEN(nn.Module):
             in_dim = self.style_dim + self.c_dim
 
         adain_params = self.get_num_adain_params(self.generator)
-
-        if self.config.SPLIT_DC:
-            adain_params //= self.config.SPLIT_DC
-        train = [self.config.DC_TRAIN, True]
-
-        if self.config.SPLIT_DC_REVERSE:
-            train = train[::-1]
-        self.num_models = self.config.SPLIT_DC if self.config.SPLIT_DC else 1
-        for i in range(self.num_models):
-            name = 'adain_net' if i == 0 else 'adain_net' + str(i + 1)
-            setattr(
-                self, name,
-                DC(config,
-                   in_dim,
-                   adain_params,
-                   dc_dim,
-                   3,
-                   train=train[i % 2],
-                   debug=debug))
-        # if self.config.SPLIT_DC:
-        #     self.adain_net2 = DC(
-        #         config,
-        #         in_dim,
-        #         adain_params,
-        #         dc_dim,
-        #         3,
-        #         train=train[1],
-        #         debug=debug)
+        self.adain_net = DC(
+            config, in_dim, adain_params, dc_dim, 3, train=False, debug=debug)
         if debug:
             self.debug()
 
@@ -75,11 +49,13 @@ class AdaInGEN(nn.Module):
         self.apply_style(x, c, stochastic)
         return self.generator(x)
 
-    def random_style(self, x):
+    def random_style(self, x, seed=None):
         if isinstance(x, int):
             number = x
         else:
             number = x.size(0)
+        if seed is not None:
+            torch.manual_seed(seed)
         z = torch.randn(number, self.style_dim)
         return z
 
@@ -90,49 +66,20 @@ class AdaInGEN(nn.Module):
             input_adain = label
         else:
             input_adain = torch.cat([style, label], dim=-1)
-        # if self.config.SPLIT_DC:
-        #     adain_params = self.adain_net(input_adain)
-        #     adain_params2 = self.adain_net2(input_adain)
-        #     self.assign_adain_params(adain_params, self.generator, mode=0)
-        #     self.assign_adain_params(adain_params2, self.generator, mode=1)
-        # else:
-        #     adain_params = self.adain_net(input_adain)
-        #     self.assign_adain_params(adain_params, self.generator)
-        for i in range(self.num_models):
-            name = 'adain_net' if i == 0 else 'adain_net' + str(i + 1)
-            adain_params = getattr(self, name)(input_adain)
-            layers = self.getLayers(self.generator, i)
-            self.assign_adain_params(adain_params, self.generator, layers)
 
-    def getLayers(self, model, idx):
-        import numpy as np
-        adain_layers = len([
-            m for m in model.modules()
-            if m.__class__.__name__ == "AdaptiveInstanceNorm2d"
-        ])
-        assert adain_layers % self.num_models == 0, \
-            'Number of parameters must be divisible by number of models.'
-        layers_per_model = adain_layers // self.num_models
-        adain_layers = np.arange(adain_layers)
-        adain_layers = [
-            adain_layers[i:i + layers_per_model]
-            for i in range(0, len(adain_layers), layers_per_model)
-        ]
-        return adain_layers[idx]
+        adain_params = self.adain_net(input_adain)
+        self.assign_adain_params(adain_params, self.generator)
 
-    def assign_adain_params(self, adain_params, model, layers):
+    def assign_adain_params(self, adain_params, model):
         # assign the adain_params to the AdaIN layers in model
-        idx = 0
         for m in model.modules():
             if m.__class__.__name__ == "AdaptiveInstanceNorm2d":
-                if idx in layers:
-                    mean = adain_params[:, :m.num_features]
-                    std = adain_params[:, m.num_features:2 * m.num_features]
-                    m.bias = mean.contiguous().view(-1)
-                    m.weight = std.contiguous().view(-1)
-                    if adain_params.size(1) > 2 * m.num_features:
-                        adain_params = adain_params[:, 2 * m.num_features:]
-                idx += 1
+                mean = adain_params[:, :m.num_features]
+                std = adain_params[:, m.num_features:2 * m.num_features]
+                m.bias = mean.contiguous().view(-1)
+                m.weight = std.contiguous().view(-1)
+                if adain_params.size(1) > 2 * m.num_features:
+                    adain_params = adain_params[:, 2 * m.num_features:]
 
     def get_num_adain_params(self, model):
         # return the number of AdaIN parameters needed by the model

@@ -1,4 +1,3 @@
-#!/home/afromero/datos2/anaconda3/bin/ipython
 from __future__ import print_function
 from misc.utils import PRINT, config_yaml
 import os
@@ -26,7 +25,7 @@ def main(config):
     from torch.backends import cudnn
     # For fast training
     cudnn.benchmark = True
-    cudnn.deterministic = True
+    # cudnn.deterministic = True
 
     data_loader = get_loader(
         config.mode_data,

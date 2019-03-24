@@ -366,12 +366,12 @@ class Solver(object):
 
     # ============================================================#
     # ============================================================#
-    def random_style(self, data):
+    def random_style(self, data, seed=None):
         # return self.G.module.random_style(data)
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
-            return self.G.module.random_style(data)
+            return self.G.module.random_style(data, seed=seed)
         else:
-            return self.G.random_style(data)
+            return self.G.random_style(data, seed=seed)
 
     # ==================================================================#
     # ==================================================================#

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from misc.utils import PRINT, to_var
-from models.utils import init_net
+# from models.utils import init_net
 from collections import OrderedDict
 
 # ==================================================================#
@@ -42,8 +42,8 @@ class DC(nn.Module):
             linear = nn.Linear(input_dim, output_dim, bias=True)
             _model = [('output', linear)]  # no output activations
             self.model = nn.Sequential(OrderedDict(_model))
-            init_net(
-                self.model, init_type='normal', init_gain=0.1, init_bias=-0.1)
+            # init_net(
+            # self.model, init_type='normal', init_gain=0.1, init_bias=-0.1)
 
         if not train:
             for param in self.model.parameters():

@@ -53,7 +53,7 @@ class Generator(nn.Module):
         else:
             IN = nn.InstanceNorm2d(conv_dim, affine=True)
         layers += [('down_norm_' + str(conv_dim), IN)]
-        layers += [('relu_' + str(conv_dim), nn.ReLU(inplace=True))]
+        layers += [('down_relu_' + str(conv_dim), nn.ReLU(inplace=True))]
 
         # Down-Sampling
         curr_dim = conv_dim
@@ -74,7 +74,8 @@ class Generator(nn.Module):
             else:
                 IN = nn.InstanceNorm2d(curr_dim * 2, affine=True)
             layers += [('down_norm_' + str(curr_dim * 2), IN)]
-            layers += [('relu_' + str(curr_dim * 2), nn.ReLU(inplace=True))]
+            layers += [('down_relu_' + str(curr_dim * 2),
+                        nn.ReLU(inplace=True))]
             curr_dim = curr_dim * 2
 
         # Bottleneck
@@ -82,7 +83,7 @@ class Generator(nn.Module):
             RB = ResidualBlock(dim_in=curr_dim, dim_out=curr_dim, AdaIn=True)
             layers += [('res_{}_{}'.format(curr_dim, i), RB)]
 
-        # Up-Sampling
+        # # Up-Sampling
         for i in range(conv_repeat):
             if self.config.DECONV:
                 conv = nn.ConvTranspose2d(
@@ -111,14 +112,14 @@ class Generator(nn.Module):
                 if self.config.IN:
                     norm = nn.InstanceNorm2d(curr_dim // 2)
                 elif self.config.IN2:
-                    IN = nn.InstanceNorm2d(
+                    norm = nn.InstanceNorm2d(
                         curr_dim // 2, affine=True, track_running_stats=True)
                 else:
                     norm = nn.InstanceNorm2d(curr_dim // 2, affine=True)
 
-                # undesirable to generate images in vastly different styles
             layers += [('up_norm_' + str(curr_dim // 2), norm)]
-            layers += [('relu_' + str(curr_dim // 2), nn.ReLU(inplace=True))]
+            layers += [('up_relu_' + str(curr_dim // 2),
+                        nn.ReLU(inplace=True))]
             curr_dim = curr_dim // 2
 
         self.main = nn.Sequential(OrderedDict(layers))

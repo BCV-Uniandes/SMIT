@@ -205,8 +205,8 @@ def denorm(x):
 
 # ============================================================#
 # ============================================================#
-def get_fake(real_c):
-    rand_idx1 = get_randperm(real_c)
+def get_fake(real_c, seed=None):
+    rand_idx1 = get_randperm(real_c, seed=seed)
     fake_c = real_c[rand_idx1]
     return fake_c
 
@@ -265,8 +265,10 @@ def get_loss_value(x):
 
 # ============================================================#
 # ============================================================#
-def get_randperm(x):
+def get_randperm(x, seed=None):
     import torch
+    if seed is not None:
+        torch.manual_seed(seed)
     if x.size(0) > 2:
         rand_idx = to_var(torch.randperm(x.size(0)))
     elif x.size(0) == 2:
@@ -534,17 +536,14 @@ def split(data):
     # RaGAN uses different data for Dis and Gen
     try:
 
-        def split(x, mode=0):
+        def split(x):
             if isinstance(x, list) or isinstance(x, tuple):
                 _len = len(x)
             else:
                 _len = x.size(0)
-            if mode == 0:
-                return x[:_len // 2]
-            else:
-                return x[_len // 2:]
+            return x[:_len // 2], x[_len // 2:]
 
-        return split(data, 0), split(data, 1)
+        return split(data)
 
     except ValueError:
         return data, data

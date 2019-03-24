@@ -20,6 +20,8 @@ warnings.filterwarnings('ignore')
 class Train(Solver):
     def __init__(self, config, data_loader):
         super(Train, self).__init__(config, data_loader)
+        self.count_seed = 0
+        self.step_seed = 4  # 1 disc - 3 gen
         self.run()
 
     # ============================================================#
@@ -66,7 +68,7 @@ class Train(Solver):
         fixed_x = torch.cat(fixed_x, dim=0)
         fixed_label = torch.cat(fixed_label, dim=0)
         if not self.config.DETERMINISTIC:
-            fixed_style = self.random_style(fixed_x)
+            fixed_style = self.random_style(fixed_x, seed=self.count_seed)
         else:
             fixed_style = None
 
@@ -131,6 +133,7 @@ class Train(Solver):
     def RESUME_INFO(self):
         start = int(self.config.pretrained_model.split('_')[0]) + 1
         total_iter = start * int(self.config.pretrained_model.split('_')[1])
+        self.count_seed = start * total_iter * self.step_seed
         for e in range(start):
             if e != 0 and e % self.config.num_epochs_decay == 0:
                 self.Decay_lr()
@@ -227,23 +230,29 @@ class Train(Solver):
 
     def Dis_update(self, real_x0, real_c0, fake_c0):
         # self.train_model(discriminator=True)
-        style_fake0 = to_var(self.random_style(real_x0))
+        style_fake0 = to_var(self.random_style(real_x0, seed=self.count_seed))
+        self.count_seed += 1
         fake_x0 = self.G(real_x0, fake_c0, style_fake0)[0]
         d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0, real_c0)
 
         self.loss['Dsrc'] = d_loss_src
         self.loss['Dcls'] = d_loss_cls * self.config.lambda_cls
         d_loss = self.current_losses('D', **self.loss)
+        self.reset_grad()
         d_loss.backward()
+        self.d_optimizer.step()
 
     # ============================================================#
     # ============================================================#
     def Gen_update(self, real_x1, real_c1, fake_c1):
         # self.train_model(generator=True)
         criterion_l1 = torch.nn.L1Loss()
-        style_fake1 = to_var(self.random_style(real_x1))
-        style_rec1 = to_var(self.random_style(real_x1))
-        style_identity = to_var(self.random_style(real_x1))
+        style_fake1 = to_var(self.random_style(real_x1, seed=self.count_seed))
+        style_rec1 = to_var(
+            self.random_style(real_x1, seed=self.count_seed + 1))
+        style_identity = to_var(
+            self.random_style(real_x1, seed=self.count_seed + 2))
+        self.count_seed += 3
 
         fake_x1 = self.G(real_x1, fake_c1, style_fake1)
 
@@ -281,7 +290,9 @@ class Train(Solver):
             self.loss['Gstyr'] = criterion_l1(style_rec1, style_rec1_rec)
 
         g_loss = self.current_losses('G', **self.loss)
+        self.reset_grad()
         g_loss.backward()
+        self.g_optimizer.step()
 
     # ============================================================#
     # ============================================================#
@@ -299,11 +310,6 @@ class Train(Solver):
         else:
             start = 0
             self.total_iter = 0
-
-        if self.config.dataset_fake == 'FFHQ':
-            d_iter = 1
-        else:
-            d_iter = 1
 
         # Fixed inputs, target domain labels, and style for debugging
         self.fixed_x, self.fixed_label, self.fixed_style = self.debug_vars(
@@ -334,6 +340,7 @@ class Train(Solver):
                 or ((epoch % self.config.save_epoch != 0) and epoch != 0),
                 ncols=5)
             for _iter, (real_x, real_c, files) in self.progress_bar:
+                # time0 = time.time()
                 self.loss = self.reset_losses()
                 self.total_iter += 1 * hvd.size()
                 # RaGAN uses different data for Dis and Gen
@@ -348,25 +355,20 @@ class Train(Solver):
                 real_c0 = to_var(real_c0)
                 real_x1 = to_var(real_x1)
                 real_c1 = to_var(real_c1)
-                fake_c0 = get_fake(real_c0)
+                fake_c0 = get_fake(real_c0, seed=_iter)
                 fake_c0 = to_var(fake_c0.data)
-                fake_c1 = get_fake(real_c1)
+                fake_c1 = get_fake(real_c1, seed=_iter)
                 fake_c1 = to_var(fake_c1.data)
 
                 # ============================================================#
                 # ======================== Train D ===========================#
                 # ============================================================#
-                self.reset_grad()
                 self.Dis_update(real_x0, real_c0, fake_c0)
-                self.d_optimizer.step()
 
                 # ============================================================#
                 # ======================== Train G ===========================#
                 # ============================================================#
-                if (_iter + 1) % d_iter == 0:
-                    self.reset_grad()
-                    self.Gen_update(real_x1, real_c1, fake_c1)
-                    self.g_optimizer.step()
+                self.Gen_update(real_x1, real_c1, fake_c1)
 
                 # ====================== DEBUG =====================#
                 self.INFO(epoch, _iter)
