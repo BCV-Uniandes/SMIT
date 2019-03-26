@@ -18,7 +18,7 @@ def _PRINT(config):
     for k, v in sorted(vars(config).items()):
         string = '%s: %s' % (str(k), str(v))
         PRINT(config.log, string)
-    string = '-------------- End ----------------'
+    string = '-------------- End ---------------'
     PRINT(config.log, string)
 
 
@@ -26,7 +26,6 @@ def main(config):
     from torch.backends import cudnn
     # For fast training
     cudnn.benchmark = True
-    # cudnn.deterministic = True
 
     data_loader = get_loader(
         config.mode_data,
