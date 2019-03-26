@@ -143,8 +143,7 @@ class Generator(nn.Module):
             no_cuda=True)
         features = self.print_debug(feed, self.main)
         self.print_debug(features, self.fake)
-        if not self.config.NO_ATTENTION:
-            self.print_debug(features, self.attn)
+        self.print_debug(features, self.attn)
 
     def forward(self, x):
         features = self.main(x)
