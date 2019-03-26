@@ -37,7 +37,7 @@ def main(config):
         all_attr=config.ALL_ATTR,
         c_dim=config.c_dim)
 
-    from scores import set_score
+    from misc.scores import set_score
     if set_score(config):
         return
 
@@ -59,7 +59,7 @@ def main(config):
 
 if __name__ == '__main__':
 
-    from options import base_parser
+    from misc.options import base_parser
     config = base_parser()
 
     if config.GPU == '-1':
