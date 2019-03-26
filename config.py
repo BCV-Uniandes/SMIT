@@ -44,15 +44,6 @@ def update_config(config):
     UPDATE_FOLDER(config, 'STYLE_ENCODER')
     UPDATE_FOLDER(config, 'DECONV')
     UPDATE_FOLDER(config, 'DC_TRAIN')
-    if config.SPLIT_DC:
-        update_folder(config, 'SPLIT_DC' + str(config.SPLIT_DC))
-
-    if config.SPLIT_DC_REVERSE:
-        update_folder(config,
-                      'SPLIT_DC_REVERSE' + str(config.SPLIT_DC_REVERSE))
-
-    if config.SPLIT_DC_REVERSE:
-        config.SPLIT_DC = config.SPLIT_DC_REVERSE
 
     if config.upsample == 'nearest':
         update_folder(config, 'upsample_nearest')
@@ -71,7 +62,6 @@ def update_config(config):
     UPDATE_FOLDER(config, 'IN')
     UPDATE_FOLDER(config, 'IN2')
     UPDATE_FOLDER(config, 'BIG')
-    UPDATE_FOLDER(config, 'SPLIT')
 
     if config.FORCE_IDENTITY:
         config.Identity = True

@@ -373,3 +373,51 @@ class Scores(Solver):
                 np.array(total_cis).mean(),
                 np.array(total_cis).std()))
         file_.close()
+
+    def INCEPTION_REAL(self):
+        from misc.utils import load_inception
+        from scipy.stats import entropy
+        net = load_inception()
+        to_cuda(net)
+        net.eval()
+        inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
+        mode = 'Real'
+        data_loader = self.data_loader
+        file_name = 'scores/Inception_{}.txt'.format(mode)
+
+        # 0:[], 1:[], 2:[]}
+        PRED_IS = {i: [] for i in range(len(data_loader.dataset.labels[0]))}
+        IS = {i: [] for i in range(len(data_loader.dataset.labels[0]))}
+
+        for i, (real_x, org_c, files) in tqdm(
+                enumerate(data_loader),
+                desc='Calculating CIS/IS - {}'.format(file_name),
+                total=len(data_loader)):
+            label = torch.max(org_c, 1)[1][0]
+            real_x = to_var((real_x + 1) / 2., volatile=True)
+            pred = to_data(
+                F.softmax(net(inception_up(real_x)), dim=1), cpu=True).numpy()
+            PRED_IS[label].append(pred)
+
+        for label in range(len(data_loader.dataset.labels[0])):
+            PRED_IS[label] = np.concatenate(PRED_IS[label], 0)
+            # prior is computed from all outputs
+            py = np.sum(PRED_IS[label], axis=0)
+            for j in range(PRED_IS[label].shape[0]):
+                pyx = PRED_IS[label][j, :]
+                IS[label].append(entropy(pyx, py))
+
+        # ipdb.set_trace()
+        total_is = []
+        file_ = open(file_name, 'w')
+        for label in range(len(data_loader.dataset.labels[0])):
+            _is = np.exp(np.mean(IS[label]))
+            total_is.append(_is)
+            PRINT(file_, "Label {}".format(label))
+            PRINT(file_, "Inception Score: {:.4f}".format(_is))
+        PRINT(file_, "")
+        PRINT(
+            file_, "[TOTAL] Inception Score: {:.4f} +/- {:.4f}".format(
+                np.array(total_is).mean(),
+                np.array(total_is).std()))
+        file_.close()

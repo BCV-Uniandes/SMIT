@@ -340,7 +340,6 @@ class Train(Solver):
                 or ((epoch % self.config.save_epoch != 0) and epoch != 0),
                 ncols=5)
             for _iter, (real_x, real_c, files) in self.progress_bar:
-                # time0 = time.time()
                 self.loss = self.reset_losses()
                 self.total_iter += 1 * hvd.size()
                 # RaGAN uses different data for Dis and Gen

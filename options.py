@@ -22,8 +22,8 @@ def base_parser():
     parser.add_argument('--image_size', type=int, default=256)
     parser.add_argument('--batch_size', type=int, default=22)
     parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--num_epochs', type=int, default=100)
-    parser.add_argument('--num_epochs_decay', type=int, default=80)
+    parser.add_argument('--num_epochs', type=int, default=80)
+    parser.add_argument('--num_epochs_decay', type=int, default=30)
     parser.add_argument(
         '--save_epoch', type=int, default=1)  # Save samples how many epochs
     parser.add_argument(
@@ -71,13 +71,6 @@ def base_parser():
     parser.add_argument('--INIT_DC', action='store_true', default=False)
     parser.add_argument('--TRAIN_BIAS', action='store_true', default=False)
     parser.add_argument(
-        '--SPLIT_DC', type=int, default=0, choices=[0, 2, 3, 4, 6, 8, 12])
-    parser.add_argument(
-        '--SPLIT_DC_REVERSE',
-        type=int,
-        default=0,
-        choices=[0, 2, 3, 4, 6, 8, 12])
-    parser.add_argument(
         '--upsample',
         type=str,
         default='bilinear',
@@ -88,7 +81,6 @@ def base_parser():
     parser.add_argument('--BIG', action='store_true', default=False)
     parser.add_argument('--IN', action='store_true', default=False)
     parser.add_argument('--IN2', action='store_true', default=False)
-    parser.add_argument('--SPLIT', action='store_true', default=False)
     parser.add_argument('--NO_ATTENTION', action='store_true', default=False)
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')

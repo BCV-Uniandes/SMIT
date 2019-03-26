@@ -45,20 +45,11 @@ class Solver(object):
             self.load_init_HD()
             self.config.g_lr /= 10.0
 
-        if self.config.SPLIT:
-            parameters = self.G.generator.parameters()
-        else:
-            parameters = None
-
         if self.config.mode == 'train':
             self.d_optimizer = self.set_optimizer(
                 self.D, self.config.d_lr, self.config.beta1, self.config.beta2)
             self.g_optimizer = self.set_optimizer(
-                self.G,
-                self.config.g_lr,
-                self.config.beta1,
-                self.config.beta2,
-                parameters=parameters)
+                self.G, self.config.g_lr, self.config.beta1, self.config.beta2)
 
         # Start with trained model
         if self.config.pretrained_model and self.verbose:
@@ -70,15 +61,9 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
-    def set_optimizer(self, model, lr, beta1=0.5, beta2=0.999,
-                      parameters=None):
+    def set_optimizer(self, model, lr, beta1=0.5, beta2=0.999):
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
             model = model.module
-        # model = model.module
-        if parameters is None:
-            parameters = filter(lambda p: p.requires_grad, model.parameters())
-        else:
-            parameters = filter(lambda p: p.requires_grad, parameters)
 
         if hvd.size() > 1:
             self.count += 1
@@ -86,8 +71,9 @@ class Solver(object):
                 backward_passes_per_step = 2
             else:
                 backward_passes_per_step = 1
-            optimizer = torch.optim.Adam(
-                parameters, lr * backward_passes_per_step, [beta1, beta2])
+            optimizer = torch.optim.Adam(model.parameters(),
+                                         lr * backward_passes_per_step,
+                                         [beta1, beta2])
             optimizer = hvd.DistributedOptimizer(
                 optimizer,
                 named_parameters=model.named_parameters(),
@@ -97,7 +83,8 @@ class Solver(object):
             hvd.broadcast_optimizer_state(optimizer, root_rank=0)
 
         else:
-            optimizer = torch.optim.Adam(parameters, lr, [beta1, beta2])
+            optimizer = torch.optim.Adam(model.parameters(), lr,
+                                         [beta1, beta2])
         return optimizer
 
     # ============================================================#
@@ -119,8 +106,6 @@ class Solver(object):
         # model = model.module
         if name == 'Generator':
             choices = ['generator', 'adain_net']
-            for i in range(1, self.config.SPLIT_DC):
-                choices += ['adain_net' + str(i + 1)]
 
             if self.config.STYLE_ENCODER:
                 choices += ['style_encoder']
@@ -200,12 +185,6 @@ class Solver(object):
         self.PRINT('Model: {}'.format(self.name))
 
         # self.name = comm.bcast(self.name, root=0)
-
-        # name = self.name.split('_')
-        # epoch = hvd.broadcast(torch.tensor(int(name[0])),
-        #                   root_rank=0, name='epoch').item()
-        # _iter = hvd.broadcast(torch.tensor(int(name[1])),
-        #                   root_rank=0, name='_iter').item()
 
         def load_model(model, name='G', MultiGPU=False):
             if not MultiGPU:
@@ -395,7 +374,6 @@ class Solver(object):
                     Attention=False,
                     mode='fake',
                     no_label=False):
-        # fake_images = to_data(torch.cat(fake_list, dim=3), cpu=True)
         fake_images = torch.cat(fake_list, dim=3)
         if 'fake' not in os.path.basename(save_path):
             save_path = save_path.replace('.jpg', '_fake.jpg')
@@ -419,11 +397,6 @@ class Solver(object):
     # ==================================================================#
     # ==================================================================#
     def target_multiAttr(self, target, index):
-        # if self.config.dataset_fake == 'CelebA' and \
-        #         self.config.c_dim == 10 and \
-        #         k >= 3 and k <= 6:
-        #     target_c[:, 2:5] = 0
-        #     target_c[:, k - 1] = 1
         if self.config.dataset_fake == 'CelebA':
             all_attr = self.data_loader.dataset.selected_attrs
             attr2idx = self.data_loader.dataset.attr2idx
@@ -498,7 +471,6 @@ class Solver(object):
         flag_time = True
         no_grad = open('/var/tmp/null.txt',
                        'w') if get_torch_version() < 1.0 else torch.no_grad()
-        # from ipdb import set_trace; set_trace()
         with no_grad:
             batch = self.get_batch_inference(batch, Multimodal)
             _label = self.get_batch_inference(label, Multimodal)
