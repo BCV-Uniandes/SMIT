@@ -16,7 +16,7 @@ checkpoint/
 tools/
 tools
 snapshot/
-main_*
+main_*.py
 
 *.png
 *.jpg
