@@ -31,42 +31,10 @@ def update_config(config):
     config.batch_size *= 2  # RaGAN
     config.num_epochs *= config.save_epoch
     config.num_epochs_decay *= config.save_epoch
-
-    # if config.image_size != 256:
-    #     update_folder(config, 'image_' + str(config.image_size))
-
-    if config.NO_ATTENTION:
-        config.Identity = True
-        config.lambda_idt = 10.0
-
-    UPDATE_FOLDER(config, 'NO_ATTENTION')
-    UPDATE_FOLDER(config, 'DETERMINISTIC')
-    UPDATE_FOLDER(config, 'STYLE_ENCODER')
     UPDATE_FOLDER(config, 'DECONV')
-    UPDATE_FOLDER(config, 'DC_TRAIN')
-
-    if config.upsample == 'nearest':
-        update_folder(config, 'upsample_nearest')
-
     UPDATE_FOLDER(config, 'INIT_DC')
-    UPDATE_FOLDER(config, 'TRAIN_BIAS')
-
-    if config.lambda_mask_smooth != 0.00001:
-        update_folder(config,
-                      'lambda_mask_smooth' + str(config.lambda_mask_smooth))
-
     if config.lambda_cls != 1.0:
         update_folder(config, 'lambda_cls' + str(config.lambda_cls))
-
-    UPDATE_FOLDER(config, 'ADJUST_SMOOTH')
-    UPDATE_FOLDER(config, 'IN')
-    UPDATE_FOLDER(config, 'IN2')
-    UPDATE_FOLDER(config, 'BIG')
-
-    if config.FORCE_IDENTITY:
-        config.Identity = True
-        config.lambda_idt = 10.0
-        update_folder(config, 'FORCE_IDENTITY')
 
     if config.seed != 10:
         update_folder(config, 'seed' + str(config.seed))

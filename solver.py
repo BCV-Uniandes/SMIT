@@ -1,3 +1,4 @@
+from mpi4py import MPI
 import torch.utils.data.distributed
 from misc.utils import to_cuda, to_data, to_var
 from misc.utils import Modality, PRINT, single_source, target_debug_list
@@ -14,8 +15,7 @@ import os
 import torch
 from misc.utils import horovod
 hvd = horovod()
-# from mpi4py import MPI
-# comm = MPI.COMM_WORLD
+comm = MPI.COMM_WORLD
 warnings.filterwarnings('ignore')
 
 
@@ -103,7 +103,6 @@ class Solver(object):
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
             model = model.module
 
-        # model = model.module
         if name == 'Generator':
             choices = ['generator', 'adain_net']
 
@@ -184,7 +183,7 @@ class Solver(object):
                 self.config.pretrained_model, '{}'))
         self.PRINT('Model: {}'.format(self.name))
 
-        # self.name = comm.bcast(self.name, root=0)
+        self.name = comm.bcast(self.name, root=0)
 
         def load_model(model, name='G', MultiGPU=False):
             if not MultiGPU:
@@ -235,12 +234,12 @@ class Solver(object):
             name = os.path.join(model_dir, '{}_{}.pth'.format(
                 pretrained_model, name))
             self.PRINT('Model: {}'.format(name))
-            # name = comm.bcast(name, root=0)
+            name = comm.bcast(name, root=0)
 
             celeba_weights = torch.load(
                 name, map_location=lambda storage, loc: storage)
             weights = model.state_dict()
-            for key, value in weights.items():
+            for key in weights.keys():
                 if key in celeba_weights.keys():
                     if weights[key].shape == celeba_weights[key].shape:
                         # self.PRINT(
@@ -261,7 +260,7 @@ class Solver(object):
         for state in optimizer.state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
-                    state[k] = to_cuda(v)  # .cuda()
+                    state[k] = to_cuda(v)
 
     # ==================================================================#
     # ==================================================================#
@@ -301,15 +300,7 @@ class Solver(object):
         if self.config.Identity:
             Log += ' [*Identity]'
         if self.config.DETERMINISTIC:
-            _str = colored('Deterministic', 'blue')
-            Log += ' [*{}]'.format(_str)
-        if self.config.NO_ATTENTION:
-            Log += ' [*NO_ATTENTION]'
-        if self.config.DC_TRAIN:
-            _str = colored('DC_TRAIN', 'red')
-            Log += ' [*{}]'.format(_str)
-        if self.config.STYLE_ENCODER:
-            _str = colored('STYLE_ENCODER', 'green')
+            _str = colored('Deterministic', 'green')
             Log += ' [*{}]'.format(_str)
         dataset_string = colored(self.config.dataset_fake, 'red')
         Log += ' [*{}]'.format(dataset_string)
@@ -516,9 +507,8 @@ class Solver(object):
                         flag_time = False
 
                     fake_image_list.append(to_data(fake_x[0], cpu=True))
-                    if not self.config.NO_ATTENTION:
-                        fake_attn_list.append(
-                            to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
+                    fake_attn_list.append(
+                        to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
 
                 # Create Folder
                 if training:
@@ -536,13 +526,9 @@ class Solver(object):
                 mode = 'fake' if not Multimodal else 'style_' + chr(65 + idx)
                 Output.extend(
                     self._SAVE_IMAGE(_save_path, fake_image_list, mode=mode))
-                if not self.config.NO_ATTENTION:
-                    Output.extend(
-                        self._SAVE_IMAGE(
-                            _save_path,
-                            fake_attn_list,
-                            Attention=True,
-                            mode=mode))
+                Output.extend(
+                    self._SAVE_IMAGE(
+                        _save_path, fake_attn_list, Attention=True, mode=mode))
 
         self.G.train()
         self.D.train()

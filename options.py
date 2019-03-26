@@ -45,8 +45,7 @@ def base_parser():
     parser.add_argument('--DEMO_LABEL', type=str, default='')
 
     # Generative
-    parser.add_argument(
-        '--MultiDis', type=int, default=3, choices=[1, 2, 3, 4, 5])
+    parser.add_argument('--MultiDis', type=int, default=3, choices=[1, 2, 3])
     parser.add_argument('--g_conv_dim', type=int, default=32)
     parser.add_argument('--d_conv_dim', type=int, default=32)
     parser.add_argument('--g_repeat_num', type=int, default=6)
@@ -62,26 +61,12 @@ def base_parser():
     parser.add_argument('--style_dim', type=int, default=20, choices=[20])
     parser.add_argument('--dc_dim', type=int, default=256, choices=[256])
 
-    parser.add_argument('--DETERMINISTIC', action='store_true', default=False)
-    parser.add_argument('--STYLE_ENCODER', action='store_true', default=False)
-    parser.add_argument('--DC_TRAIN', action='store_true', default=False)
     parser.add_argument('--DECONV', action='store_true', default=False)
-    parser.add_argument('--ADJUST_SMOOTH', action='store_true', default=False)
-    parser.add_argument('--FORCE_IDENTITY', action='store_true', default=False)
     parser.add_argument('--INIT_DC', action='store_true', default=False)
-    parser.add_argument('--TRAIN_BIAS', action='store_true', default=False)
-    parser.add_argument(
-        '--upsample',
-        type=str,
-        default='bilinear',
-        choices=['bilinear', 'nearest'])
+    parser.add_argument('--DETERMINISTIC', action='store_true', default=False)
 
     # Misc
     parser.add_argument('--DELETE', action='store_true', default=False)
-    parser.add_argument('--BIG', action='store_true', default=False)
-    parser.add_argument('--IN', action='store_true', default=False)
-    parser.add_argument('--IN2', action='store_true', default=False)
-    parser.add_argument('--NO_ATTENTION', action='store_true', default=False)
     parser.add_argument('--ALL_ATTR', type=int, default=0)
     parser.add_argument('--GPU', type=str, default='-1')
 

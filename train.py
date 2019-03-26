@@ -112,8 +112,7 @@ class Train(Solver):
                     key: get_loss_value(value)
                     for key, value in self.loss.items()
                 }
-                if not self.config.NO_ATTENTION and 'Gatm' in self.loss.keys():
-                    color(self.loss, 'Gatm', 'blue')
+                color(self.loss, 'Gatm', 'blue')
                 self.progress_bar.set_postfix(**self.loss)
             if (iter + 1) == len(self.data_loader):
                 self.progress_bar.set_postfix('')
@@ -188,11 +187,6 @@ class Train(Solver):
     # ============================================================#
     # ============================================================#
     def reset_losses(self):
-        # losses = ['Dsrc', 'Dcls']
-        # losses += ['Gsrc', 'Gcls', 'Grec', 'Gatm', 'Gats']
-        # if self.config.Identity:
-        #     losses += ['Gidt']
-        # losses = {key: 0 for key in losses}
         return {}
 
     # ============================================================#
@@ -266,28 +260,17 @@ class Train(Solver):
         self.loss['Grec'] = self.config.lambda_rec * g_loss_rec
 
         # ========== Attention Part ==========#
-        if not self.config.NO_ATTENTION:
-            self.loss['Gatm'] = self.config.lambda_mask * (
-                torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
-            self.loss['Gats'] = self.config.lambda_mask_smooth * (
-                _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(
-                    fake_x1[1]))
-            if self.config.ADJUST_SMOOTH and self.loss['Gats'] > 0.1:
-                self.loss['Gats'] *= 10
+        self.loss['Gatm'] = self.config.lambda_mask * (
+            torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
+        self.loss['Gats'] = self.config.lambda_mask_smooth * (
+            _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(fake_x1[1]))
 
         # ========== Identity Part ==========#
-        if self.config.Identity or self.config.FORCE_IDENTITY:
+        if self.config.Identity:
             idt_x1 = self.G(real_x1, real_c1, style_identity)[0]
             g_loss_idt = criterion_l1(idt_x1, real_x1)
             self.loss['Gidt'] = self.config.lambda_idt * \
                 g_loss_idt
-
-        # ========== Style Recovery Part ==========#
-        if self.config.STYLE_ENCODER:
-            style_fake1_rec = self.G.style_encoder(fake_x1[0].detach())
-            style_rec1_rec = self.G.style_encoder(rec_x1[0].detach())
-            self.loss['Gsty'] = criterion_l1(style_fake1, style_fake1_rec)
-            self.loss['Gstyr'] = criterion_l1(style_rec1, style_rec1_rec)
 
         g_loss = self.current_losses('G', **self.loss)
         self.reset_grad()

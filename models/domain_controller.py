@@ -47,8 +47,7 @@ class DC(nn.Module):
 
         if not train:
             for param in self.model.parameters():
-                if len(param.shape) != 1 or not self.config.TRAIN_BIAS:
-                    param.requires_grad = False
+                param.requires_grad = False
 
         if debug:
             self.debug()

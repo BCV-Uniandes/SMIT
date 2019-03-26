@@ -19,6 +19,34 @@ def FID(path, gpu=''):
     return fid_value
 
 
+def set_score(config):
+    if config.LPIPS_REAL:
+        scores = Scores(config)
+        scores.LPIPS_REAL()
+        return True
+
+    if config.LPIPS_UNIMODAL:
+        scores = Scores(config)
+        scores.LPIPS_UNIMODAL()
+        return True
+
+    if config.LPIPS_MULTIMODAL:
+        scores = Scores(config)
+        scores.LPIPS_MULTIMODAL()
+        return True
+
+    if config.INCEPTION:
+        scores = Scores(config)
+        scores.INCEPTION()
+        return True
+
+    if config.INCEPTION_REAL:
+        scores = Scores(config)
+        scores.INCEPTION_REAL()
+        return True
+    return False
+
+
 class Scores(Solver):
     def __init__(self, config):
 
@@ -290,8 +318,8 @@ class Scores(Solver):
         inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
         if not self.config.DETERMINISTIC:
             mode = 'SMIT'
-        elif not self.config.NO_ATTENTION:
-            mode = 'StarGAN'
+        # elif not self.config.NO_ATTENTION:
+        #     mode = 'StarGAN'
         else:
             mode = 'GANimation'
         data_loader = self.data_loader
@@ -378,7 +406,7 @@ class Scores(Solver):
         from misc.utils import load_inception
         from scipy.stats import entropy
         net = load_inception()
-        to_cuda(net)
+        net = to_cuda(net)
         net.eval()
         inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
         mode = 'Real'
@@ -407,7 +435,6 @@ class Scores(Solver):
                 pyx = PRED_IS[label][j, :]
                 IS[label].append(entropy(pyx, py))
 
-        # ipdb.set_trace()
         total_is = []
         file_ = open(file_name, 'w')
         for label in range(len(data_loader.dataset.labels[0])):
