@@ -103,23 +103,15 @@ class Solver(object):
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
             model = model.module
 
+        submodel = []
         if name == 'Generator':
             choices = ['generator', 'adain_net']
-
-            if self.config.STYLE_ENCODER:
-                choices += ['style_encoder']
             for m in choices:
-                submodel = getattr(model, m)
-                num_params = 0
-                num_learns = 0
-                for p in submodel.parameters():
-                    num_params += p.numel()
-                    if p.requires_grad:
-                        num_learns += p.numel()
-                self.PRINT(
-                    "{} number of parameters (TOTAL): {}\t(LEARNABLE): {}.".
-                    format(m.upper(), num_params, num_learns))
+                submodel.append((m, getattr(model, m)))
         else:
+            submodel.append((name, model))
+
+        for name, model in submodel:
             num_params = 0
             num_learns = 0
             for p in model.parameters():
