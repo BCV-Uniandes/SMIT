@@ -22,13 +22,13 @@ def base_parser():
     parser.add_argument('--image_size', type=int, default=256)
     parser.add_argument('--batch_size', type=int, default=22)
     parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--num_epochs', type=int, default=80)
-    parser.add_argument('--num_epochs_decay', type=int, default=30)
+    parser.add_argument('--num_epochs', type=int, default=70)
+    parser.add_argument('--num_epochs_decay', type=int, default=20)
     parser.add_argument(
         '--save_epoch', type=int, default=1)  # Save samples how many epochs
     parser.add_argument(
         '--model_epoch', type=int,
-        default=2)  # Save models and weights every how many epochs
+        default=5)  # Save models and weights every how many epochs
     parser.add_argument('--beta1', type=float, default=0.5)
     parser.add_argument('--beta2', type=float, default=0.999)
     parser.add_argument('--pretrained_model', type=str, default=None)
