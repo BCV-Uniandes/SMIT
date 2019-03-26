@@ -22,8 +22,8 @@ def base_parser():
     parser.add_argument('--image_size', type=int, default=256)
     parser.add_argument('--batch_size', type=int, default=22)
     parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--num_epochs', type=int, default=70)
-    parser.add_argument('--num_epochs_decay', type=int, default=30)
+    parser.add_argument('--num_epochs', type=int, default=50)
+    parser.add_argument('--num_epochs_decay', type=int, default=20)
     parser.add_argument(
         '--save_epoch', type=int, default=1)  # Save samples how many epochs
     parser.add_argument(
