@@ -1,3 +1,4 @@
+from mpi4py import MPI
 from solver import Solver
 import torch
 import os
@@ -12,8 +13,7 @@ from misc.losses import _compute_loss_smooth, _GAN_LOSS
 import torch.utils.data.distributed
 from misc.utils import horovod
 hvd = horovod()
-# from mpi4py import MPI
-# comm = MPI.COMM_WORLD
+comm = MPI.COMM_WORLD
 warnings.filterwarnings('ignore')
 
 
@@ -120,8 +120,14 @@ class Train(Solver):
     # ============================================================#
     # ============================================================#
     def Decay_lr(self):
-        self.g_lr = self.g_lr / 10.
-        self.d_lr = self.d_lr / 10.
+        self.d_lr -= (
+            self.config.d_lr /
+            float(self.config.num_epochs - self.config.num_epochs_decay))
+        self.g_lr -= (
+            self.config.d_lr /
+            float(self.config.num_epochs - self.config.num_epochs_decay))
+        # self.g_lr = self.g_lr / 10.
+        # self.d_lr = self.d_lr / 10.
         self.update_lr(self.g_lr, self.d_lr)
         if self.verbose:
             self.PRINT('Decay learning rate to g_lr: {}, d_lr: {}.'.format(
@@ -134,7 +140,7 @@ class Train(Solver):
         total_iter = start * int(self.config.pretrained_model.split('_')[1])
         self.count_seed = start * total_iter * self.step_seed
         for e in range(start):
-            if e != 0 and e % self.config.num_epochs_decay == 0:
+            if e > self.config.num_epochs_decay:
                 self.Decay_lr()
         return start, total_iter
 
@@ -179,9 +185,9 @@ class Train(Solver):
             self.PRINT(log)
             # self.PLOT(epoch)
 
-        # comm.Barrier()
+        comm.Barrier()
         # Decay learning rate
-        if epoch != 0 and epoch % self.config.num_epochs_decay == 0:
+        if epoch > self.config.num_epochs_decay:
             self.Decay_lr()
 
     # ============================================================#

@@ -7,8 +7,8 @@ Identity: False         # With identity loss
 Deterministic: False    # Deterministic approach
     
 save_epoch: 1           # number of epochs of this dataset represents ~6000 iterations
-num_epochs: 30          #The same iterations as celebA given the high number of images in the dataset
-num_epochs_decay: 20
+num_epochs: 15          #The same iterations as celebA given the high number of images in the dataset
+num_epochs_decay: 8
 c_dim: 12
   
 lambda_mask: 0.1        # Lambda for attention loss

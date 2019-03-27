@@ -52,7 +52,7 @@ def base_parser():
     parser.add_argument('--d_repeat_num', type=int, default=6)
     parser.add_argument('--g_lr', type=float, default=0.0001)
     parser.add_argument('--d_lr', type=float, default=0.0001)
-    parser.add_argument('--lambda_cls', type=float, default=1.0)
+    parser.add_argument('--lambda_cls', type=float, default=2.0)
     parser.add_argument('--lambda_rec', type=float, default=10.0)
     parser.add_argument('--lambda_idt', type=float, default=10.0)
     parser.add_argument('--lambda_mask', type=float, default=0.1)
