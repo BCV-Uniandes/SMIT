@@ -50,10 +50,7 @@ def get_loader(mode_data,
         ]
         transform += [
             transforms.RandomResizedCrop(
-                # image_size, scale=(0.7, 1.0), ratio=(0.8, 1.2))
-                image_size,
-                scale=(0.8, 1.0),
-                ratio=(0.9, 1.2))
+                image_size, scale=(0.7, 1.0), ratio=(0.8, 1.2))
         ]
 
     if dataset != 'RafD' and mode == 'train':

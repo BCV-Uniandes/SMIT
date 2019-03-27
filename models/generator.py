@@ -19,6 +19,7 @@ class Generator(nn.Module):
         self.color_dim = config.color_dim
         self.style_dim = config.style_dim
         self.Deterministic = config.DETERMINISTIC
+        mode_upsample = self.config.upsample
 
         layers = []
 
@@ -77,7 +78,7 @@ class Generator(nn.Module):
                     bias=False)
                 layers += [('up_conv_' + str(curr_dim // 2), conv)]
             else:
-                up = nn.Upsample(scale_factor=2, mode='bilinear')
+                up = nn.Upsample(scale_factor=2, mode=mode_upsample)
                 layers += [('up_nn_' + str(curr_dim), up)]
                 conv = nn.Conv2d(
                     curr_dim,

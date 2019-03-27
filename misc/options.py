@@ -61,6 +61,11 @@ def base_parser():
     parser.add_argument('--style_dim', type=int, default=20, choices=[20])
     parser.add_argument('--dc_dim', type=int, default=256, choices=[256])
 
+    parser.add_argument(
+        '--upsample',
+        type=str,
+        default='bilinear',
+        choices=['bilinear', 'nearest'])
     parser.add_argument('--DECONV', action='store_true', default=False)
     parser.add_argument('--INIT_DC', action='store_true', default=False)
     parser.add_argument('--DETERMINISTIC', action='store_true', default=False)

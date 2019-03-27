@@ -35,7 +35,7 @@ class DEMO(Dataset):
     def __getitem__(self, index):
         if self.Detect_Face:
             image, success = self.face.get_face_from_file(
-                self.img_path, margin=5.)
+                self.img_path, margin=3.)
             if not success:
                 image = Image.open(self.lines[index]).convert('RGB')
             else:
