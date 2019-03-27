@@ -67,6 +67,7 @@ def base_parser():
         default='bilinear',
         choices=['bilinear', 'nearest'])
     parser.add_argument('--DECONV', action='store_true', default=False)
+    parser.add_argument('--UPCONV', action='store_true', default=False)
     parser.add_argument('--INIT_DC', action='store_true', default=False)
     parser.add_argument('--DETERMINISTIC', action='store_true', default=False)
 

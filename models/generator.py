@@ -80,13 +80,22 @@ class Generator(nn.Module):
             else:
                 up = nn.Upsample(scale_factor=2, mode=mode_upsample)
                 layers += [('up_nn_' + str(curr_dim), up)]
-                conv = nn.Conv2d(
-                    curr_dim,
-                    curr_dim // 2,
-                    kernel_size=3,
-                    stride=1,
-                    padding=1,
-                    bias=False)
+                if self.config.UPCONV:
+                    conv = nn.Conv2d(
+                        curr_dim,
+                        curr_dim // 2,
+                        kernel_size=5,
+                        stride=1,
+                        padding=2,
+                        bias=False)
+                else:
+                    conv = nn.Conv2d(
+                        curr_dim,
+                        curr_dim // 2,
+                        kernel_size=3,
+                        stride=1,
+                        padding=1,
+                        bias=False)
                 layers += [('up_conv_' + str(curr_dim // 2), conv)]
 
             if not self.Deterministic:

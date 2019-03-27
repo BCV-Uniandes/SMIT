@@ -42,6 +42,8 @@ def update_config(config):
     if config.upsample == 'nearest':
         update_folder(config, 'upsample_nearest')
 
+    UPDATE_FOLDER(config, 'UPCONV')
+
     if config.DELETE:
         remove_folder(config)
 
