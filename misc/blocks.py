@@ -47,15 +47,6 @@ class ResidualBlock(nn.Module):
         if AdaIn:
             norm1 = AdaptiveInstanceNorm2d(dim_out)
             norm2 = AdaptiveInstanceNorm2d(dim_out)
-
-        elif self.config.IN:
-            norm1 = nn.InstanceNorm2d(dim_out)
-            norm2 = nn.InstanceNorm2d(dim_out)
-        elif self.config.IN2:
-            norm1 = nn.InstanceNorm2d(
-                dim_out, affine=True, track_running_stats=True)
-            norm2 = nn.InstanceNorm2d(
-                dim_out, affine=True, track_running_stats=True)
         else:
             norm1 = nn.InstanceNorm2d(dim_out, affine=True)
             norm2 = nn.InstanceNorm2d(dim_out, affine=True)

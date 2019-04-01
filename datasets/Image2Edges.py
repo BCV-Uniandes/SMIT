@@ -92,7 +92,8 @@ class Image2Edges(Dataset):
             key = self.key_fn(line)
             if key not in self.selected_attrs:
                 continue
-            if self.mode == 'train' and self.all_attr == 0 and balanced[key] >= min(self.hist.values()):
+            if self.mode == 'train' and self.all_attr == 0 and balanced[
+                    key] >= min(self.hist.values()):
                 continue  # Balancing all classes to the minimum
             balanced[key] += 1
             label = []

@@ -320,13 +320,13 @@ class Train(Solver):
             self.LOSS = {}
             desc_bar = '[Iter: %d] Epoch: %d/%d' % (self.total_iter, epoch,
                                                     self.config.num_epochs)
+            epoch_verbose = (epoch % self.config.save_epoch) and epoch != 0
             self.progress_bar = tqdm(
                 enumerate(self.data_loader),
                 unit_scale=True,
                 total=len(self.data_loader),
                 desc=desc_bar,
-                disable=not self.verbose
-                or ((epoch % self.config.save_epoch != 0) and epoch != 0),
+                disable=not self.verbose or epoch_verbose,
                 ncols=5)
             for _iter, (real_x, real_c, files) in self.progress_bar:
                 self.loss = self.reset_losses()
