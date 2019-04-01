@@ -31,12 +31,11 @@ def _CLS_L2(output, target):
 
 # ==================================================================#
 # ==================================================================#
-def _GAN_LOSS(Disc, real_x, fake_x, label, is_fake=False, cross_entropy=False):
+def _GAN_LOSS(Disc, real_x, fake_x, label, cross_entropy=False):
     import torch
     import torch.nn.functional as F
-
     src_real, cls_real = Disc(real_x)
-    src_fake, cls_fake = Disc(fake_x)
+    src_fake, _ = Disc(fake_x)
 
     loss_src = 0
     loss_cls = 0

@@ -7,16 +7,59 @@ import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 from misc.utils import PRINT, to_cuda, to_data, to_var
-import torch.utils.data.distributed
-from misc.utils import _horovod
-hvd = _horovod()
+from data_loader import get_loader
 
 warnings.filterwarnings('ignore')
 
 
+def FID(path, gpu=''):
+    from misc.fid_score import calculate_fid_given_paths
+    fid_value = calculate_fid_given_paths(path, 64, gpu, 2048)
+    print('FID: ', fid_value)
+    return fid_value
+
+
+def set_score(config):
+    if config.LPIPS_REAL:
+        scores = Scores(config)
+        scores.LPIPS_REAL()
+        return True
+
+    if config.LPIPS_UNIMODAL:
+        scores = Scores(config)
+        scores.LPIPS_UNIMODAL()
+        return True
+
+    if config.LPIPS_MULTIMODAL:
+        scores = Scores(config)
+        scores.LPIPS_MULTIMODAL()
+        return True
+
+    if config.INCEPTION:
+        scores = Scores(config)
+        scores.INCEPTION()
+        return True
+
+    if config.INCEPTION_REAL:
+        scores = Scores(config)
+        scores.INCEPTION_REAL()
+        return True
+    return False
+
+
 class Scores(Solver):
-    def __init__(self, config, data_loader):
-        super(Scores, self).__init__(config, data_loader)
+    def __init__(self, config):
+
+        super(Scores, self).__init__(config)
+        self.data_loader = get_loader(
+            config.mode_data,
+            config.image_size,
+            1,
+            config.dataset_fake,
+            config.mode,
+            num_workers=config.num_workers,
+            all_attr=config.ALL_ATTR,
+            c_dim=config.c_dim)
 
     def LPIPS(self):
         from misc.utils import compute_lpips
@@ -133,7 +176,7 @@ class Scores(Solver):
 
         style0 = to_var(
             self.G.random_style(1),
-            volatile=True) if 'Stochastic' in self.config.GAN_options else None
+            volatile=True) if not self.config.DETERMINISTIC else None
         print(file_name)
         for i, (real_x, org_c, files) in tqdm(
                 enumerate(data_loader),
@@ -269,16 +312,16 @@ class Scores(Solver):
         from scipy.stats import entropy
         n_styles = 20
         net = load_inception()
-        to_cuda(net)
+        net = to_cuda(net)
         net.eval()
         self.G.eval()
         inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
-        if 'Stochastic' in self.config.GAN_options:
+        if not self.config.DETERMINISTIC:
             mode = 'SMIT'
-        elif 'Attention' in self.config.GAN_options:
-            mode = 'GANimation'
+        # elif not self.config.NO_ATTENTION:
+        #     mode = 'StarGAN'
         else:
-            mode = 'StarGAN'
+            mode = 'GANimation'
         data_loader = self.data_loader
         file_name = 'scores/Inception_{}.txt'.format(mode)
 
@@ -357,4 +400,51 @@ class Scores(Solver):
             "[TOTAL] conditional Inception Score: {:.4f} +/- {:.4f}".format(
                 np.array(total_cis).mean(),
                 np.array(total_cis).std()))
+        file_.close()
+
+    def INCEPTION_REAL(self):
+        from misc.utils import load_inception
+        from scipy.stats import entropy
+        net = load_inception()
+        net = to_cuda(net)
+        net.eval()
+        inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
+        mode = 'Real'
+        data_loader = self.data_loader
+        file_name = 'scores/Inception_{}.txt'.format(mode)
+
+        # 0:[], 1:[], 2:[]}
+        PRED_IS = {i: [] for i in range(len(data_loader.dataset.labels[0]))}
+        IS = {i: [] for i in range(len(data_loader.dataset.labels[0]))}
+
+        for i, (real_x, org_c, files) in tqdm(
+                enumerate(data_loader),
+                desc='Calculating CIS/IS - {}'.format(file_name),
+                total=len(data_loader)):
+            label = torch.max(org_c, 1)[1][0]
+            real_x = to_var((real_x + 1) / 2., volatile=True)
+            pred = to_data(
+                F.softmax(net(inception_up(real_x)), dim=1), cpu=True).numpy()
+            PRED_IS[label].append(pred)
+
+        for label in range(len(data_loader.dataset.labels[0])):
+            PRED_IS[label] = np.concatenate(PRED_IS[label], 0)
+            # prior is computed from all outputs
+            py = np.sum(PRED_IS[label], axis=0)
+            for j in range(PRED_IS[label].shape[0]):
+                pyx = PRED_IS[label][j, :]
+                IS[label].append(entropy(pyx, py))
+
+        total_is = []
+        file_ = open(file_name, 'w')
+        for label in range(len(data_loader.dataset.labels[0])):
+            _is = np.exp(np.mean(IS[label]))
+            total_is.append(_is)
+            PRINT(file_, "Label {}".format(label))
+            PRINT(file_, "Inception Score: {:.4f}".format(_is))
+        PRINT(file_, "")
+        PRINT(
+            file_, "[TOTAL] Inception Score: {:.4f} +/- {:.4f}".format(
+                np.array(total_is).mean(),
+                np.array(total_is).std()))
         file_.close()

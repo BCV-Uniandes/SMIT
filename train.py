@@ -1,3 +1,4 @@
+from mpi4py import MPI
 from solver import Solver
 import torch
 import os
@@ -10,8 +11,8 @@ from misc.utils import color, get_fake, get_labels, get_loss_value
 from misc.utils import split, TimeNow, to_var
 from misc.losses import _compute_loss_smooth, _GAN_LOSS
 import torch.utils.data.distributed
-import horovod.torch as hvd
-from mpi4py import MPI
+from misc.utils import horovod
+hvd = horovod()
 comm = MPI.COMM_WORLD
 warnings.filterwarnings('ignore')
 
@@ -19,6 +20,8 @@ warnings.filterwarnings('ignore')
 class Train(Solver):
     def __init__(self, config, data_loader):
         super(Train, self).__init__(config, data_loader)
+        self.count_seed = 0
+        self.step_seed = 4  # 1 disc - 3 gen
         self.run()
 
     # ============================================================#
@@ -57,20 +60,20 @@ class Train(Solver):
     def debug_vars(self, start):
         fixed_x = []
         fixed_label = []
-        for i, (images, labels, files) in enumerate(self.data_loader):
+        for i, (images, labels, _) in enumerate(self.data_loader):
             fixed_x.append(images)
             fixed_label.append(labels)
             if i == max(1, int(16 / self.config.batch_size)):
                 break
         fixed_x = torch.cat(fixed_x, dim=0)
         fixed_label = torch.cat(fixed_label, dim=0)
-        if not self.config.Deterministic:
-            fixed_style = self.random_style(fixed_x)
+        if not self.config.DETERMINISTIC:
+            fixed_style = self.random_style(fixed_x, seed=self.count_seed)
         else:
             fixed_style = None
 
         if start == 0:
-            if not self.config.Deterministic:
+            if not self.config.DETERMINISTIC:
                 self.generate_SMIT(
                     fixed_x,
                     self.output_sample(0, 0),
@@ -78,17 +81,18 @@ class Train(Solver):
                     label=fixed_label,
                     training=True,
                     fixed_style=fixed_style)
-            self.generate_SMIT(
-                fixed_x,
-                self.output_sample(0, 0),
-                label=fixed_label,
-                training=True)
+            if not self.config.dataset_fake == 'FFHQ':
+                self.generate_SMIT(
+                    fixed_x,
+                    self.output_sample(0, 0),
+                    label=fixed_label,
+                    training=True)
 
         return fixed_x, fixed_label, fixed_style
 
     # ============================================================#
     # ============================================================#
-    def _GAN_LOSS(self, real_x, fake_x, label, is_fake=False):
+    def _GAN_LOSS(self, real_x, fake_x, label):
         cross_entropy = self.config.dataset_fake in [
             'painters_14', 'Animals', 'Image2Weather', 'Image2Season',
             'Image2Edges', 'Yosemite', 'RafD,'
@@ -96,12 +100,7 @@ class Train(Solver):
         if cross_entropy:
             label = torch.max(label, dim=1)[1]
         return _GAN_LOSS(
-            self.D,
-            real_x,
-            fake_x,
-            label,
-            is_fake=is_fake,
-            cross_entropy=cross_entropy)
+            self.D, real_x, fake_x, label, cross_entropy=cross_entropy)
 
     # ============================================================#
     # ============================================================#
@@ -113,19 +112,24 @@ class Train(Solver):
                     key: get_loss_value(value)
                     for key, value in self.loss.items()
                 }
-                if not self.config.NO_ATTENTION:
-                    color(self.loss, 'Gatm', 'blue')
+                color(self.loss, 'Gatm', 'blue')
                 self.progress_bar.set_postfix(**self.loss)
             if (iter + 1) == len(self.data_loader):
                 self.progress_bar.set_postfix('')
 
     # ============================================================#
     # ============================================================#
-    def Decay_lr(self):
-        self.g_lr = self.g_lr / 10.
-        self.d_lr = self.d_lr / 10.
+    def Decay_lr(self, current_epoch=0):
+        self.d_lr -= (
+            self.config.d_lr /
+            float(self.config.num_epochs - self.config.num_epochs_decay))
+        self.g_lr -= (
+            self.config.g_lr /
+            float(self.config.num_epochs - self.config.num_epochs_decay))
+        # self.g_lr = self.g_lr / 10.
+        # self.d_lr = self.d_lr / 10.
         self.update_lr(self.g_lr, self.d_lr)
-        if self.verbose:
+        if self.verbose and current_epoch % self.config.save_epoch == 0:
             self.PRINT('Decay learning rate to g_lr: {}, d_lr: {}.'.format(
                 self.g_lr, self.d_lr))
 
@@ -134,9 +138,10 @@ class Train(Solver):
     def RESUME_INFO(self):
         start = int(self.config.pretrained_model.split('_')[0]) + 1
         total_iter = start * int(self.config.pretrained_model.split('_')[1])
+        self.count_seed = start * total_iter * self.step_seed
         for e in range(start):
-            if e != 0 and e % self.config.num_epochs_decay == 0:
-                self.Decay_lr()
+            if e > self.config.num_epochs_decay:
+                self.Decay_lr(e)
         return start, total_iter
 
     # ============================================================#
@@ -147,7 +152,7 @@ class Train(Solver):
             self.save(epoch, iter + 1)
 
             # Save Translation
-            if not self.config.Deterministic:
+            if not self.config.DETERMINISTIC:
                 self.generate_SMIT(
                     self.fixed_x,
                     self.output_sample(epoch, iter + 1),
@@ -155,17 +160,19 @@ class Train(Solver):
                     label=self.fixed_label,
                     training=True,
                     fixed_style=self.fixed_style)
+                if not self.config.dataset_fake == 'FFHQ':
+                    self.generate_SMIT(
+                        self.fixed_x,
+                        self.output_sample(epoch, iter + 1),
+                        Multimodal=1,
+                        label=self.fixed_label,
+                        training=True)
+            if not self.config.dataset_fake == 'FFHQ':
                 self.generate_SMIT(
                     self.fixed_x,
                     self.output_sample(epoch, iter + 1),
-                    Multimodal=1,
                     label=self.fixed_label,
                     training=True)
-            self.generate_SMIT(
-                self.fixed_x,
-                self.output_sample(epoch, iter + 1),
-                label=self.fixed_label,
-                training=True)
 
             # Debug INFO
             elapsed = time.time() - self.start_time
@@ -180,24 +187,19 @@ class Train(Solver):
 
         comm.Barrier()
         # Decay learning rate
-        if epoch != 0 and epoch % self.config.num_epochs_decay == 0:
-            self.Decay_lr()
+        if epoch > self.config.num_epochs_decay:
+            self.Decay_lr(epoch)
 
     # ============================================================#
     # ============================================================#
     def reset_losses(self):
-        # losses = ['Dsrc', 'Dcls']
-        # losses += ['Gsrc', 'Gcls', 'Grec', 'Gatm', 'Gats']
-        # if self.config.Identity:
-        #     losses += ['Gidt']
-        # losses = {key: 0 for key in losses}
         return {}
 
     # ============================================================#
     # ============================================================#
     def current_losses(self, mode, **kwargs):
         loss = 0
-        for key, value in kwargs.items():
+        for key, _ in kwargs.items():
             if mode in key:
                 loss += self.loss[key]
                 self.update_loss(key, get_loss_value(self.loss[key]))
@@ -213,37 +215,48 @@ class Train(Solver):
         else:
             G = self.G
         for p in G.generator.parameters():
-            p.requires_grad_(generator)
+            try:
+                p.requires_grad_(generator)
+            except AttributeError:
+                p.requires_grad = generator
         for p in self.D.parameters():
-            p.requires_grad_(discriminator)
+            try:
+                p.requires_grad_(discriminator)
+            except AttributeError:
+                p.requires_grad = discriminator
 
     # ============================================================#
     # ============================================================#
 
     def Dis_update(self, real_x0, real_c0, fake_c0):
         self.train_model(discriminator=True)
-        style_fake0 = to_var(self.random_style(real_x0))
+        style_fake0 = to_var(self.random_style(real_x0, seed=self.count_seed))
+        self.count_seed += 1
         fake_x0 = self.G(real_x0, fake_c0, style_fake0)[0]
         d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0, real_c0)
 
         self.loss['Dsrc'] = d_loss_src
         self.loss['Dcls'] = d_loss_cls * self.config.lambda_cls
         d_loss = self.current_losses('D', **self.loss)
+        self.reset_grad()
         d_loss.backward()
+        self.d_optimizer.step()
 
     # ============================================================#
     # ============================================================#
     def Gen_update(self, real_x1, real_c1, fake_c1):
         self.train_model(generator=True)
         criterion_l1 = torch.nn.L1Loss()
-        style_fake1 = to_var(self.random_style(real_x1))
-        style_rec1 = to_var(self.random_style(real_x1))
-        style_identity = to_var(self.random_style(real_x1))
+        style_fake1 = to_var(self.random_style(real_x1, seed=self.count_seed))
+        style_rec1 = to_var(
+            self.random_style(real_x1, seed=self.count_seed + 1))
+        style_identity = to_var(
+            self.random_style(real_x1, seed=self.count_seed + 2))
+        self.count_seed += 3
 
         fake_x1 = self.G(real_x1, fake_c1, style_fake1)
 
-        g_loss_src, g_loss_cls = self._GAN_LOSS(
-            fake_x1[0], real_x1, fake_c1, is_fake=True)
+        g_loss_src, g_loss_cls = self._GAN_LOSS(fake_x1[0], real_x1, fake_c1)
         self.loss['Gsrc'] = g_loss_src
         self.loss['Gcls'] = g_loss_cls * self.config.lambda_cls
 
@@ -253,12 +266,10 @@ class Train(Solver):
         self.loss['Grec'] = self.config.lambda_rec * g_loss_rec
 
         # ========== Attention Part ==========#
-        if not self.config.NO_ATTENTION:
-            self.loss['Gatm'] = self.config.lambda_mask * (
-                torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
-            self.loss['Gats'] = self.config.lambda_mask_smooth * (
-                _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(
-                    fake_x1[1]))
+        self.loss['Gatm'] = self.config.lambda_mask * (
+            torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
+        self.loss['Gats'] = self.config.lambda_mask_smooth * (
+            _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(fake_x1[1]))
 
         # ========== Identity Part ==========#
         if self.config.Identity:
@@ -268,7 +279,9 @@ class Train(Solver):
                 g_loss_idt
 
         g_loss = self.current_losses('G', **self.loss)
+        self.reset_grad()
         g_loss.backward()
+        self.g_optimizer.step()
 
     # ============================================================#
     # ============================================================#
@@ -307,12 +320,13 @@ class Train(Solver):
             self.LOSS = {}
             desc_bar = '[Iter: %d] Epoch: %d/%d' % (self.total_iter, epoch,
                                                     self.config.num_epochs)
+            epoch_verbose = (epoch % self.config.save_epoch) and epoch != 0
             self.progress_bar = tqdm(
                 enumerate(self.data_loader),
                 unit_scale=True,
                 total=len(self.data_loader),
                 desc=desc_bar,
-                disable=not self.verbose,
+                disable=not self.verbose or epoch_verbose,
                 ncols=5)
             for _iter, (real_x, real_c, files) in self.progress_bar:
                 self.loss = self.reset_losses()
@@ -320,7 +334,7 @@ class Train(Solver):
                 # RaGAN uses different data for Dis and Gen
                 real_x0, real_x1 = split(real_x)
                 real_c0, real_c1 = split(real_c)
-                files0, files1 = split(files)
+                # files0, files1 = split(files)
 
                 # ============================================================#
                 # ========================= DATA2VAR =========================#
@@ -329,24 +343,20 @@ class Train(Solver):
                 real_c0 = to_var(real_c0)
                 real_x1 = to_var(real_x1)
                 real_c1 = to_var(real_c1)
-                fake_c0 = get_fake(real_c0)
+                fake_c0 = get_fake(real_c0, seed=_iter)
                 fake_c0 = to_var(fake_c0.data)
-                fake_c1 = get_fake(real_c1)
+                fake_c1 = get_fake(real_c1, seed=_iter)
                 fake_c1 = to_var(fake_c1.data)
 
                 # ============================================================#
                 # ======================== Train D ===========================#
                 # ============================================================#
-                self.reset_grad()
                 self.Dis_update(real_x0, real_c0, fake_c0)
-                self.d_optimizer.step()
 
                 # ============================================================#
                 # ======================== Train G ===========================#
                 # ============================================================#
-                self.reset_grad()
                 self.Gen_update(real_x1, real_c1, fake_c1)
-                self.g_optimizer.step()
 
                 # ====================== DEBUG =====================#
                 self.INFO(epoch, _iter)

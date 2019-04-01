@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.swp
+gpu.sh
 
 data/
 no_github/
@@ -14,30 +15,17 @@ samples/
 checkpoint/
 tools/
 tools
+snapshot/
+main_*.py
 
 *.png
 *.jpg
 *.txt
-*.json
-stargan*
-
-# C extensions
-*.so
 
 *.jpg
 *.png
 *.pkl
 *.txt
-
-# Tensorflow
-events.out*
-*.index
-*.meta
-*checkpoint
-*.data-*
-
-#caffe
-*.caffemodel
 
 #pytorch
 *.pth
@@ -66,6 +54,7 @@ wheels/
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+.vscode
 
 #Py data
 *.pickle
@@ -75,10 +64,6 @@ wheels/
 *.h5
 
 .env*
-
-# Pytorch
-*pth
-*.pt
 
 # Installer logs
 pip-log.txt

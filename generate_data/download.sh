@@ -1,4 +1,3 @@
-
 # CelebA images
 if ! [ -x "$(command -v kaggle)" ]; then
   echo "Make sure you have kaggle installed (pip install kaggle) and kaggle API properly located at $HOME/.kaggle/kaggle.json."
@@ -19,3 +18,4 @@ mv $FOLDER/list_attr_celeba.csv $FOLDER/list_attr_celeba.txt #List Attributes
 unzip $FOLDER/img_align_celeba.zip -d $FOLDER
 rm $FOLDER/img_align_celeba.zip
 rm $FOLDER/*.csv
+

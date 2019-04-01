@@ -3,7 +3,9 @@ from torchvision import transforms
 from PIL import Image
 import importlib
 import torch
-import horovod.torch as hvd
+from misc.utils import horovod
+# import horovod.torch as hvd
+hvd = horovod()
 hvd.init()
 
 # ==================================================================#
@@ -66,7 +68,7 @@ def get_loader(mode_data,
         shuffling=shuffling or mode == 'train',
         verbose=mode == 'train' and hvd.rank() == 0,
         **kwargs)
-    if mode == 'train' and hvd.size() == 1:
+    if hvd.size() == 1:
         data_loader = DataLoader(
             dataset=dataset,
             batch_size=batch_size,

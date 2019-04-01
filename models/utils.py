@@ -38,7 +38,9 @@ def print_debug(feed, layers, file=None):
                         layer, ResidualBlock) or isinstance(
                             layer, LinearBlock) or isinstance(
                                 layer, Conv2dBlock) or isinstance(
-                                    layer, SpectralNormalization):
+                                    layer,
+                                    SpectralNormalization) or isinstance(
+                                        layer, nn.Upsample):
             _str = '{}, {}'.format(str(layer).split('(')[0], feed.size())
             if file is not None:
                 PRINT(file, _str)
@@ -51,7 +53,7 @@ def print_debug(feed, layers, file=None):
     return feed
 
 
-def init_weights(net, init_type="normal", gain=0.02):
+def init_weights(net, init_type="normal", gain=0.02, bias=0.0):
     def init_func(m):
         classname = m.__class__.__name__
         _conv = classname.find("Conv")
@@ -70,7 +72,7 @@ def init_weights(net, init_type="normal", gain=0.02):
                     "initialization method [%s] is not implemented" %
                     init_type)
             if hasattr(m, "bias") and m.bias is not None:
-                init.constant_(m.bias.data, 0.0)
+                init.constant_(m.bias.data, bias)
         elif classname.find("BatchNorm2d") != -1:
             init.normal_(m.weight.data, 1.0, gain)
             init.constant_(m.bias.data, 0.0)
@@ -79,6 +81,6 @@ def init_weights(net, init_type="normal", gain=0.02):
     net.apply(init_func)
 
 
-def init_net(net, init_type="normal", init_gain=0.02):
-    init_weights(net, init_type, gain=init_gain)
+def init_net(net, init_type="normal", init_gain=0.02, init_bias=0.0):
+    init_weights(net, init_type, gain=init_gain, bias=init_bias)
     return net

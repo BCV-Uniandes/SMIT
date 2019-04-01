@@ -42,7 +42,7 @@ class FFHQ(Dataset):
 
         if self.verbose:
             print('Start preprocessing %s: %s!' % (self.name, mode))
-        random.seed(1234)
+        random.seed(123)
         self.preprocess()
         if self.verbose:
             print('Finished preprocessing %s: %s (%d)!' % (self.name, mode,
@@ -104,7 +104,8 @@ class FFHQ(Dataset):
         self.labels = []
         self.metadata_path = os.path.join('data', 'FFHQ', 'images1024x1024')
         lines = self.lines[1:]
-        # if self.shuffling: random.shuffle(lines)
+        if self.shuffling:
+            random.shuffle(lines)
         for i, line in enumerate(lines):
             filename = os.path.abspath('{}/{}'.format(self.metadata_path,
                                                       line[0]))
@@ -200,8 +201,7 @@ class Test(Solver):
             f.writelines(','.join(selected_attrs) + '\n')
             for _iter, (img, _) in progress_bar:
                 files = [
-                    data.imgs[(_iter * i) + i][0]
-                    for i in range(self.config.batch_size)
+                    data.imgs[(_iter * i) + i][0] for i in range(img.size(0))
                 ]
                 # self.imshow(img)
                 img = to_var(img, volatile=True)

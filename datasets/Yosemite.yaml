@@ -2,13 +2,12 @@
 # Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
 
 # logger options
-batch_size: 24
-mode_data: 'normal'      # Either normal with augmentation or faces without augmentation. 
+mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 
 Identity: False         # With identity loss
-Deterministic: False    # Deterministic approach
-    
+
 save_epoch: 90          # 10 epochs of this dataset represents ~6000 iterations
-              # Number of domains
-c_dim: 2
+              
+c_dim: 2                # Number of domains
   
 lambda_mask: 1.0        # Lambda for attention loss
+lambda_cls: 2.0

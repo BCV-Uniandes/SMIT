@@ -4,11 +4,11 @@
 # logger options
 mode_data: 'faces'      # Either normal with augmentation or faces without augmentation. 
 Identity: False         # With identity loss
-Deterministic: False    # Deterministic approach
-    
+
 save_epoch: 10          # 10 epochs of this dataset represents ~6000 iterations
 c_dim: 17               # Number of domains
 ALL_ATTR_1: 
   c_dim: 50
   
 lambda_mask: 1.0        # Lambda for attention loss
+lambda_cls: 2.0

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from models.utils import print_debug as _print_debug
 from misc.utils import to_var
 from models.generator import Generator
 from models.domain_controller import DC
@@ -12,29 +11,22 @@ class AdaInGEN(nn.Module):
     def __init__(self, config, debug=False):
         super(AdaInGEN, self).__init__()
 
-        dc_dim = config.dc_dim
         self.config = config
         self.color_dim = config.color_dim
         self.image_size = config.image_size
         self.style_dim = config.style_dim
         self.c_dim = config.c_dim
-        self.Deterministic = config.Deterministic
-
-        def print_debug(x, v):
-            return _print_debug(x, v, file=config.log)
+        self.Deterministic = config.DETERMINISTIC
 
         self.generator = Generator(config, debug=False)
         if self.Deterministic:
             in_dim = self.c_dim
         else:
             in_dim = self.style_dim + self.c_dim
+
+        adain_params = self.get_num_adain_params(self.generator)
         self.adain_net = DC(
-            config,
-            in_dim,
-            self.get_num_adain_params(self.generator),
-            dc_dim,
-            3,
-            debug=debug)
+            config, in_dim, adain_params, train=False, debug=debug)
         if debug:
             self.debug()
 
@@ -52,11 +44,13 @@ class AdaInGEN(nn.Module):
         self.apply_style(x, c, stochastic)
         return self.generator(x)
 
-    def random_style(self, x):
+    def random_style(self, x, seed=None):
         if isinstance(x, int):
             number = x
         else:
             number = x.size(0)
+        if seed is not None:
+            torch.manual_seed(seed)
         z = torch.randn(number, self.style_dim)
         return z
 
@@ -67,6 +61,7 @@ class AdaInGEN(nn.Module):
             input_adain = label
         else:
             input_adain = torch.cat([style, label], dim=-1)
+
         adain_params = self.adain_net(input_adain)
         self.assign_adain_params(adain_params, self.generator)
 

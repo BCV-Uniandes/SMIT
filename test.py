@@ -18,11 +18,10 @@ class Test(Solver):
     # ==================================================================#
     # ==================================================================#
     def folder_fid(self, data_loader):
+        from scores import FID
         self.G.eval()
         n_rep = 5
-        opt = torch.no_grad() if get_torch_version() > 0.3 else open(
-            '/tmp/_null.txt', 'w')
-        save_folder = self.config.sample_path
+        save_folder = os.path.join(self.config.sample_path, self.resume_name())
         self.PRINT('FID Folder at "{}"..!'.format(save_folder))
         _dirs = [[os.path.join(save_folder, 'real_label0')]]
         _dirs[-1].append(os.path.join(save_folder, 'real_label1'))
@@ -32,22 +31,25 @@ class Test(Solver):
             ])
             _dirs[-1].append(
                 os.path.join(save_folder, 'fake%s_label1' % (str(i).zfill(2))))
-        for _dir in _dirs:
-            for _di in _dir:
-                os.system('rm -rf {}'.format(_di))
-                create_dir(_di)
+
+        # for _dir in _dirs:
+        #     for _di in _dir:
+        #         os.system('rm -rf {}'.format(_di))
+        #         create_dir(_di)
 
         def save_img(data, idx, pos, iter):
             path = os.path.join(_dirs[idx][pos], '{}_{}.jpg'.format(
                 idx,
                 str(iter).zfill(4)))
-            imageio.imwrite(path, (data * 255).astype(np.uint8))
+            if not os.path.isfile(path):
+                imageio.imwrite(path, (data * 255).astype(np.uint8))
 
         iter = 0
-        with opt:
+        no_grad = open('/var/tmp/null.txt',
+                       'w') if get_torch_version() < 1.0 else torch.no_grad()
+        with no_grad:
             for i, (real_x, label, _) in enumerate(data_loader):
-                for idx, (real_x0, label0) in enumerate(zip(real_x, label)):
-                    # import ipdb; ipdb.set_trace()
+                for _, (real_x0, label0) in enumerate(zip(real_x, label)):
                     real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
                     label0 = (1 - label0.repeat(n_rep, 1))**2
                     real_x0 = to_var(real_x0, volatile=True)
@@ -66,6 +68,18 @@ class Test(Solver):
                         save_img(data, i + 1, int(1 - label0[0][0]), iter)
                     iter += 1
 
+        for j in range(2):
+            fid = []
+            self.PRINT('Calculating FID - label {}'.format(j))
+            for i in range(1, n_rep + 1):
+                real_folder = os.path.join(save_folder,
+                                           'real_label{}'.format(j))
+                fake_folder = os.path.join(
+                    save_folder, 'fake{}_label{}'.format(str(i).zfill(2), j))
+                folder = [real_folder, fake_folder]
+                fid.append(FID(folder, gpu=self.config.GPU[0]))
+            self.PRINT('Mean FID: {}'.format(np.mean(fid)))
+
     # ==================================================================#
     # ==================================================================#
     def save_multimodal_output(self,
@@ -77,10 +91,10 @@ class Test(Solver):
         self.G.eval()
         self.D.eval()
         n_rep = 4
-        opt = torch.no_grad() if get_torch_version() > 0.3 else open(
-            '/tmp/_null.txt', 'w')
 
-        with opt:
+        no_grad = open('/var/tmp/null.txt',
+                       'w') if get_torch_version() < 1.0 else torch.no_grad()
+        with no_grad:
             real_x = to_var(real_x, volatile=True)
             out_label = to_var(label, volatile=True)
             target_c_list = [out_label] * 7
@@ -96,21 +110,25 @@ class Test(Solver):
                 create_dir(_save_path)
                 real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
                 fake_image_list = [
-                    color_frame(
-                        single_source(real_x0),
-                        thick=5,
-                        color='green',
-                        first=True)
+                    to_data(
+                        color_frame(
+                            single_source(real_x0),
+                            thick=5,
+                            color='green',
+                            first=True),
+                        cpu=True)
                 ]
                 fake_attn_list = [
-                    color_frame(
-                        single_source(real_x0),
-                        thick=5,
-                        color='green',
-                        first=True)
+                    to_data(
+                        color_frame(
+                            single_source(real_x0),
+                            thick=5,
+                            color='green',
+                            first=True),
+                        cpu=True)
                 ]
 
-                for n_label, _target_c in enumerate(target_c_list):
+                for _, _target_c in enumerate(target_c_list):
                     target_c = _target_c[0].repeat(n_rep, 1)
                     if not interpolation:
                         style_ = self.G.random_style(n_rep)
@@ -127,15 +145,20 @@ class Test(Solver):
                             ]))
                     style = to_var(style_, volatile=True)
                     fake_x = self.G(real_x0, target_c, stochastic=style)
-                    fake_image_list.append(fake_x[0])
-                    fake_attn_list.append(fake_x[1].repeat(1, 3, 1, 1))
+                    fake_image_list.append(to_data(fake_x[0], cpu=True))
+                    fake_attn_list.append(
+                        to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
                 self._SAVE_IMAGE(
-                    _save_path, fake_image_list, mode='style_' + chr(65 + idx))
+                    _save_path,
+                    fake_image_list,
+                    mode='style_' + chr(65 + idx),
+                    no_label=True)
                 self._SAVE_IMAGE(
                     _save_path,
                     fake_attn_list,
                     Attention=True,
-                    mode='style_' + chr(65 + idx))
+                    mode='style_' + chr(65 + idx),
+                    no_label=True)
         self.G.train()
         self.D.train()
 
@@ -154,15 +177,15 @@ class Test(Solver):
             batch_size,
             shuffling=False,
             dataset='DEMO',
-            mode='test',
-            many_faces=self.config.many_faces)
+            Detect_Face=True,
+            mode='test')
         label = self.config.DEMO_LABEL
         if self.config.DEMO_LABEL != '':
             label = torch.FloatTensor([int(i) for i in label.split(',')]).view(
                 1, -1)
         else:
             label = None
-        if self.config.Deterministic:
+        if not self.config.DETERMINISTIC:
             _debug = range(self.config.style_label_debug + 1)
             style_all = self.G.random_style(max(self.config.batch_size, 50))
         else:
@@ -170,34 +193,22 @@ class Test(Solver):
             _debug = range(1)
 
         name = TimeNow_str()
-        Output = []
-        if not self.config.many_faces:
-            for i, real_x in enumerate(data_loader):
-                save_path = os.path.join(save_folder, 'DEMO_{}_{}.jpg'.format(
-                    name, i + 1))
-                self.PRINT('Translated test images and saved into "{}"..!'.
-                           format(save_path))
-                for k in _debug:
-                    output = self.save_fake_output(
-                        real_x,
-                        save_path,
-                        gif=False,
-                        label=label,
-                        output=True,
-                        Style=k,
-                        fixed_style=style_all,
-                        TIME=not i)
-                    if self.config.many_faces:
-                        Output.append(output)
-                        break
-                    if self.config.Deterministic:
-                        output = self.save_fake_output(
-                            real_x,
-                            save_path,
-                            gif=False,
-                            label=label,
-                            output=True,
-                            Style=k)
+        for i, real_x in enumerate(data_loader):
+            save_path = os.path.join(save_folder, 'DEMO_{}_{}.jpg'.format(
+                name, i + 1))
+            self.PRINT('Translated test images and saved into "{}"..!'.format(
+                save_path))
+            for k in _debug:
+                self.generate_SMIT(
+                    real_x,
+                    save_path,
+                    label=label,
+                    Multimodal=k,
+                    fixed_style=style_all,
+                    TIME=not i)
+                if self.config.DETERMINISTIC:
+                    self.generate_SMIT(
+                        real_x, save_path, label=label, Multimodal=k)
 
     # ==================================================================#
     # ==================================================================#
@@ -224,7 +235,7 @@ class Test(Solver):
                 dataset=dataset,
                 mode='test')
 
-        if not self.config.Deterministic:
+        if not self.config.DETERMINISTIC:
             _debug = range(1, self.config.style_label_debug + 1)
             style_all = self.G.random_style(self.config.batch_size)
         else:
@@ -234,7 +245,7 @@ class Test(Solver):
         string = '{}'.format(TimeNow_str())
         if save_folder_fid:
             self.folder_fid(data_loader)
-        for i, (real_x, org_c, files) in enumerate(data_loader):
+        for i, (real_x, org_c, _) in enumerate(data_loader):
             save_path = os.path.join(
                 save_folder, '{}_{}_{}.jpg'.format(dataset, '{}', i + 1))
             name = os.path.abspath(save_path.format(string))
@@ -253,7 +264,7 @@ class Test(Solver):
             self.generate_SMIT(
                 real_x, name, label=label, fixed_style=style_all, TIME=not i)
 
-            if not self.config.Deterministic:
+            if not self.config.DETERMINISTIC:
                 for k in _debug:
                     self.generate_SMIT(
                         real_x,

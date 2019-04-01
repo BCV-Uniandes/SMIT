@@ -26,7 +26,7 @@ class BP4D(Dataset):
         self.verbose = verbose
         self.name = 'BP4D'
         file_txt = os.path.abspath(
-            os.path.join('data', 'BP4D', mode_data, mode + '.txt'))
+            os.path.join('data', 'BP4D', mode_data, 'fold_0', mode + '.txt'))
         if self.verbose:
             print("Data from: " + file_txt)
         self.lines = open(file_txt, 'r').readlines()

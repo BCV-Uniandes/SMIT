@@ -47,7 +47,7 @@ def color(dict, key, color='red'):
 def compute_lpips(img0, img1, model=None):
     # RGB image from must be [-1,1]
     if model is None:
-        from lpips_model import DistModel
+        from misc.lpips_model import DistModel
         model = DistModel()
         version = '0.0'  # Totally different values with 0.1
         model.initialize(
@@ -205,8 +205,8 @@ def denorm(x):
 
 # ============================================================#
 # ============================================================#
-def get_fake(real_c):
-    rand_idx1 = get_randperm(real_c)
+def get_fake(real_c, seed=None):
+    rand_idx1 = get_randperm(real_c, seed=seed)
     fake_c = real_c[rand_idx1]
     return fake_c
 
@@ -265,8 +265,10 @@ def get_loss_value(x):
 
 # ============================================================#
 # ============================================================#
-def get_randperm(x):
+def get_randperm(x, seed=None):
     import torch
+    if seed is not None:
+        torch.manual_seed(seed)
     if x.size(0) > 2:
         rand_idx = to_var(torch.randperm(x.size(0)))
     elif x.size(0) == 2:
@@ -287,6 +289,31 @@ def get_torch_version():
 
 # ==================================================================#
 # ==================================================================#
+
+
+def horovod():
+    try:
+        import horovod.torch as hvd
+    except ImportError:
+
+        class hvd():
+            def init(self):
+                pass
+
+            def size(self):
+                return 1
+
+            def rank(self):
+                return 0
+
+        hvd = hvd()
+    return hvd
+
+
+# ==================================================================#
+# ==================================================================#
+
+
 def imgShow(img):
     from torchvision.utils import save_image
     try:
@@ -509,17 +536,14 @@ def split(data):
     # RaGAN uses different data for Dis and Gen
     try:
 
-        def split(x, mode=0):
+        def split(x):
             if isinstance(x, list) or isinstance(x, tuple):
                 _len = len(x)
             else:
                 _len = x.size(0)
-            if mode == 0:
-                return x[:_len // 2]
-            else:
-                return x[_len // 2:]
+            return x[:_len // 2], x[_len // 2:]
 
-        return split(data, 0), split(data, 1)
+        return split(data)
 
     except ValueError:
         return data, data
@@ -531,10 +555,9 @@ def split(data):
 
 def target_debug_list(size, dim, config=None):
     import torch
-    target_c = torch.zeros(size, dim)
     target_c_list = []
     for j in range(dim):
-        target_c[:] = 0
+        target_c = torch.zeros(size, dim)
         target_c[:, j] = 1
         target_c_list.append(to_var(target_c, volatile=True))
     return target_c_list
@@ -567,7 +590,7 @@ def to_cpu(x):
 def to_cuda(x):
     import torch
     import torch.nn as nn
-    import horovod.torch as hvd
+    hvd = horovod()
 
     if get_torch_version() > 0.3:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -583,7 +606,8 @@ def to_cuda(x):
             if isinstance(x, nn.Module):
                 x.cuda()
             else:
-                return x.cuda()
+                x = x.cuda()
+            return x
         else:
             return x
 

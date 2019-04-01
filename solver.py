@@ -1,19 +1,20 @@
-import torch
-import horovod.torch as hvd
-import os
-import glob
-import warnings
-import torch.nn.functional as F
-import numpy as np
-import time
-import datetime
-from torchvision.utils import save_image
-from misc.utils import color_frame
-from misc.utils import create_dir, denorm, get_labels
-from misc.utils import Modality, PRINT, single_source, target_debug_list
-from misc.utils import to_cuda, to_data, to_var
-import torch.utils.data.distributed
 from mpi4py import MPI
+import torch.utils.data.distributed
+from misc.utils import to_cuda, to_data, to_var
+from misc.utils import Modality, PRINT, single_source, target_debug_list
+from misc.utils import create_arrow, create_dir, denorm, get_labels
+from misc.utils import color_frame, get_torch_version
+from torchvision.utils import save_image
+import datetime
+import time
+import numpy as np
+import torch.nn.functional as F
+import warnings
+import glob
+import os
+import torch
+from misc.utils import horovod
+hvd = horovod()
 comm = MPI.COMM_WORLD
 warnings.filterwarnings('ignore')
 
@@ -32,13 +33,17 @@ class Solver(object):
         # Define a generator and a discriminator
         from models import Discriminator
         from models import AdaInGEN as Generator
-
+        self.count = 0
         self.D = Discriminator(
             self.config, debug=self.config.mode == 'train' and self.verbose)
         self.D = to_cuda(self.D)
         self.G = Generator(
             self.config, debug=self.config.mode == 'train' and self.verbose)
         self.G = to_cuda(self.G)
+
+        # if self.config.dataset_fake == 'FFHQ':
+        #     self.load_init_HD()
+        # self.config.g_lr /= 10.0
 
         if self.config.mode == 'train':
             self.d_optimizer = self.set_optimizer(
@@ -49,6 +54,8 @@ class Solver(object):
         # Start with trained model
         if self.config.pretrained_model and self.verbose:
             self.load_pretrained_model()
+        elif self.config.dataset_fake == 'FFHQ':
+            self.load_init_HD()
 
         if self.config.mode == 'train' and self.verbose:
             self.print_network(self.D, 'Discriminator')
@@ -59,17 +66,24 @@ class Solver(object):
     def set_optimizer(self, model, lr, beta1=0.5, beta2=0.999):
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
             model = model.module
-        # model = model.module
-        parameters = filter(lambda p: p.requires_grad, model.parameters())
-        optimizer = torch.optim.Adam(parameters, lr, [beta1, beta2])
 
         if hvd.size() > 1:
+            self.count += 1
+            backward_passes_per_step = 1
+            optimizer = torch.optim.Adam(model.parameters(),
+                                         lr * backward_passes_per_step,
+                                         [beta1, beta2])
             optimizer = hvd.DistributedOptimizer(
-                optimizer, named_parameters=model.named_parameters())
-
+                optimizer,
+                named_parameters=model.named_parameters(),
+                backward_passes_per_step=backward_passes_per_step)
             # Horovod: broadcast parameters & optimizer state.
             hvd.broadcast_parameters(model.state_dict(), root_rank=0)
             hvd.broadcast_optimizer_state(optimizer, root_rank=0)
+
+        else:
+            optimizer = torch.optim.Adam(model.parameters(), lr,
+                                         [beta1, beta2])
         return optimizer
 
     # ============================================================#
@@ -88,22 +102,24 @@ class Solver(object):
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
             model = model.module
 
-        # model = model.module
+        submodel = []
         if name == 'Generator':
             choices = ['generator', 'adain_net']
             for m in choices:
-                submodel = getattr(model, m)
-                num_params = 0
-                for p in submodel.parameters():
-                    num_params += p.numel()
-                self.PRINT("{} number of parameters: {}".format(
-                    m.upper(), num_params))
+                submodel.append((m, getattr(model, m)))
         else:
+            submodel.append((name, model))
+
+        for name, model in submodel:
             num_params = 0
+            num_learns = 0
             for p in model.parameters():
                 num_params += p.numel()
-            self.PRINT("{} number of parameters: {}".format(
-                name.upper(), num_params))
+                if p.requires_grad:
+                    num_learns += p.numel()
+            self.PRINT(
+                "{} number of parameters (TOTAL): {}\t(LEARNABLE): {}.".format(
+                    name.upper(), num_params, num_learns))
         # self.PRINT(name)
         # self.PRINT(model)
         # self.PRINT("{} number of parameters: {}".format(name, num_params))
@@ -157,13 +173,8 @@ class Solver(object):
             self.config.model_save_path, '{}_{}.pth'.format(
                 self.config.pretrained_model, '{}'))
         self.PRINT('Model: {}'.format(self.name))
-        self.name = comm.bcast(self.name, root=0)
 
-        # name = self.name.split('_')
-        # epoch = hvd.broadcast(torch.tensor(int(name[0])),
-        #                   root_rank=0, name='epoch').item()
-        # _iter = hvd.broadcast(torch.tensor(int(name[1])),
-        #                   root_rank=0, name='_iter').item()
+        self.name = comm.bcast(self.name, root=0)
 
         def load_model(model, name='G', MultiGPU=False):
             if not MultiGPU:
@@ -186,18 +197,53 @@ class Solver(object):
                     map_location=lambda storage, loc: storage))
             self.optim_cuda(optim)
 
-        try:
-            load_model(self.G, 'G')
-            load_model(self.D, 'D')
-        except RuntimeError:
-            load_model(self.G, 'G', True)
-            load_model(self.D, 'D', True)
+        load_model(self.G, 'G')
+        load_model(self.D, 'D')
 
-        if self.config.mode == 'train':
-            load_optim(self.g_optimizer, 'G_optim')
-            load_optim(self.d_optimizer, 'D_optim')
+        # try:
+        #     load_model(self.G, 'G')
+        #     load_model(self.D, 'D')
+        # except RuntimeError:
+        #     load_model(self.G, 'G', True)
+        #     load_model(self.D, 'D', True)
+
+        # if self.config.mode == 'train':
+        #     load_optim(self.g_optimizer, 'G_optim')
+        #     load_optim(self.d_optimizer, 'D_optim')
 
         print("Success!!")
+
+    # ==================================================================#
+    # ==================================================================#
+    def load_init_HD(self):
+        model_dir = self.config.model_save_path.replace(
+            self.config.dataset_fake, 'CelebA')
+        pretrained_model = self.resume_name(model_path=model_dir)
+        self.PRINT('Resuming model (step: {})...'.format(pretrained_model))
+
+        def merge_weights(model, name='G'):
+            name = os.path.join(model_dir, '{}_{}.pth'.format(
+                pretrained_model, name))
+            self.PRINT('Model: {}'.format(name))
+            name = comm.bcast(name, root=0)
+
+            celeba_weights = torch.load(
+                name, map_location=lambda storage, loc: storage)
+            weights = model.state_dict()
+            for key in weights.keys():
+                if key in celeba_weights.keys():
+                    if weights[key].shape == celeba_weights[key].shape:
+                        # self.PRINT(
+                        #   'Copying from {0} CelebA to {0} FFHQ'.format(key))
+                        weights[key] = celeba_weights[key]
+            model.load_state_dict(weights)
+
+        merge_weights(self.G, 'G')
+        merge_weights(self.D, 'D')
+        # for key, value in self.G.named_parameters():
+        #     if key in celeba_weights.keys():
+        #         if weights[key].shape == celeba_weights[key].shape:
+        #             value.requires_grad = False
 
     # ==================================================================#
     # ==================================================================#
@@ -205,20 +251,19 @@ class Solver(object):
         for state in optimizer.state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
-                    state[k] = to_cuda(v)  # .cuda()
+                    state[k] = to_cuda(v)
 
     # ==================================================================#
     # ==================================================================#
-    def resume_name(self):
+    def resume_name(self, model_path=None):
+        if model_path is None:
+            model_path = self.config.model_save_path
         if self.config.pretrained_model in ['', None]:
             try:
                 last_file = sorted(
-                    glob.glob(
-                        os.path.join(self.config.model_save_path,
-                                     '*_G.pth')))[-1]
+                    glob.glob(os.path.join(model_path, '*_G.pth')))[-1]
             except IndexError:
-                raise IndexError("No model found at " +
-                                 self.config.model_save_path)
+                raise IndexError("No model found at " + model_path)
             last_name = '_'.join(os.path.basename(last_file).split('_')[:2])
         else:
             last_name = self.config.pretrained_model
@@ -245,8 +290,9 @@ class Solver(object):
             Log += ' [*MultiDisc={}]'.format(self.config.MultiDis)
         if self.config.Identity:
             Log += ' [*Identity]'
-        if self.config.Deterministic:
-            Log += ' [*Deterministic]'
+        if self.config.DETERMINISTIC:
+            _str = colored('Deterministic', 'green')
+            Log += ' [*{}]'.format(_str)
         dataset_string = colored(self.config.dataset_fake, 'red')
         Log += ' [*{}]'.format(dataset_string)
         self.PRINT(Log)
@@ -281,12 +327,12 @@ class Solver(object):
 
     # ============================================================#
     # ============================================================#
-    def random_style(self, data):
+    def random_style(self, data, seed=None):
         # return self.G.module.random_style(data)
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
-            return self.G.module.random_style(data)
+            return self.G.module.random_style(data, seed=seed)
         else:
-            return self.G.random_style(data)
+            return self.G.random_style(data, seed=seed)
 
     # ==================================================================#
     # ==================================================================#
@@ -304,8 +350,12 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
-    def _SAVE_IMAGE(self, save_path, fake_list, Attention=False, mode='fake'):
-        # fake_images = to_data(torch.cat(fake_list, dim=3), cpu=True)
+    def _SAVE_IMAGE(self,
+                    save_path,
+                    fake_list,
+                    Attention=False,
+                    mode='fake',
+                    no_label=False):
         fake_images = torch.cat(fake_list, dim=3)
         if 'fake' not in os.path.basename(save_path):
             save_path = save_path.replace('.jpg', '_fake.jpg')
@@ -315,18 +365,20 @@ class Solver(object):
             fake_images = denorm(fake_images)
 
         save_path = save_path.replace('fake', mode)
-        fake_images = torch.cat((self.get_labels(), fake_images), dim=0)
+        if not no_label:
+            fake_images = torch.cat((self.get_labels(), fake_images), dim=0)
         save_image(fake_images, save_path, nrow=1, padding=0)
+        if no_label:
+            create_arrow(
+                save_path,
+                0,
+                image_size=self.config.image_size,
+                horizontal=True)
         return save_path
 
     # ==================================================================#
     # ==================================================================#
     def target_multiAttr(self, target, index):
-        # if self.config.dataset_fake == 'CelebA' and \
-        #         self.config.c_dim == 10 and \
-        #         k >= 3 and k <= 6:
-        #     target_c[:, 2:5] = 0
-        #     target_c[:, k - 1] = 1
         if self.config.dataset_fake == 'CelebA':
             all_attr = self.data_loader.dataset.selected_attrs
             attr2idx = self.data_loader.dataset.attr2idx
@@ -399,28 +451,28 @@ class Solver(object):
         modal = 'Multimodal' if Multimodal else 'Unimodal'
         Output = []
         flag_time = True
-
-        with torch.no_grad():
+        no_grad = open('/var/tmp/null.txt',
+                       'w') if get_torch_version() < 1.0 else torch.no_grad()
+        with no_grad:
             batch = self.get_batch_inference(batch, Multimodal)
-            label = self.get_batch_inference(label, Multimodal)
+            _label = self.get_batch_inference(label, Multimodal)
             for idx, real_x in enumerate(batch):
                 if training and Multimodal and \
                         idx == self.config.style_train_debug:
                     break
                 real_x = to_var(real_x, volatile=True)
+                label = _label[idx]
                 target_list = target_debug_list(
                     real_x.size(0), self.config.c_dim, config=self.config)
 
                 # Start translations
                 fake_image_list, fake_attn_list = self.Create_Visual_List(
                     real_x)
-
                 if self.config.dataset_fake in self.MultiLabel_Datasets \
                         and label is None:
                     out_label = self._CLS(real_x)
                 elif label is not None:
-
-                    out_label = to_var(label[idx].squeeze(), volatile=True)
+                    out_label = to_var(label.squeeze(), volatile=True)
                 else:
                     out_label = torch.zeros(real_x.size(0), self.config.c_dim)
                     out_label = to_var(out_label, volatile=True)
@@ -446,9 +498,8 @@ class Solver(object):
                         flag_time = False
 
                     fake_image_list.append(to_data(fake_x[0], cpu=True))
-                    if not self.config.NO_ATTENTION:
-                        fake_attn_list.append(
-                            to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
+                    fake_attn_list.append(
+                        to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
 
                 # Create Folder
                 if training:
@@ -466,13 +517,9 @@ class Solver(object):
                 mode = 'fake' if not Multimodal else 'style_' + chr(65 + idx)
                 Output.extend(
                     self._SAVE_IMAGE(_save_path, fake_image_list, mode=mode))
-                if not self.config.NO_ATTENTION:
-                    Output.extend(
-                        self._SAVE_IMAGE(
-                            _save_path,
-                            fake_attn_list,
-                            Attention=True,
-                            mode=mode))
+                Output.extend(
+                    self._SAVE_IMAGE(
+                        _save_path, fake_attn_list, Attention=True, mode=mode))
 
         self.G.train()
         self.D.train()

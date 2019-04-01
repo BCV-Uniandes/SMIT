@@ -17,18 +17,13 @@ class MultiDiscriminator(nn.Module):
 
         self.image_size = config.image_size
         conv_dim = config.d_conv_dim
-        conv_dim = conv_dim if config.image_size <= 256 else conv_dim // 2
-        conv_dim = conv_dim if config.image_size <= 512 else conv_dim // 2
-        self.conv_dim = conv_dim
+        self.conv_dim = conv_dim  # if self.image_size == 256 else conv_dim//2
 
         self.repeat_num = config.d_repeat_num
         self.c_dim = config.c_dim
         self.color_dim = config.color_dim
         self.config = config
         self.Norm = get_SN(True)
-
-        def print_debug(x, v):
-            return _print_debug(x, v, file=config.log)
 
         self.downsample = nn.AvgPool2d(
             3, stride=2, padding=[1, 1], count_include_pad=False)
@@ -42,23 +37,31 @@ class MultiDiscriminator(nn.Module):
             self.cnns_aux.append(cnns_aux)
 
         if debug:
-            feed = to_var(
-                torch.ones(1, self.color_dim, self.image_size,
-                           self.image_size),
-                volatile=True,
-                no_cuda=True)
-            modelList = zip(self.cnns_main, self.cnns_src, self.cnns_aux)
-            for idx, outs in enumerate(modelList):
-                PRINT(config.log, '-- MultiDiscriminator ({}):'.format(idx))
-                features = print_debug(feed, outs[-3])
-                print_debug(features, outs[-2])
-                print_debug(features, outs[-1]).view(feed.size(0), -1)
-                feed = self.downsample(feed)
+            self.debug()
+
+    def debug(self):
+        feed = to_var(
+            torch.ones(1, self.color_dim, self.image_size, self.image_size),
+            volatile=True,
+            no_cuda=True)
+        modelList = zip(self.cnns_main, self.cnns_src, self.cnns_aux)
+        for idx, outs in enumerate(modelList):
+            PRINT(self.config.log, '-- MultiDiscriminator ({}):'.format(idx))
+            features = self.print_debug(feed, outs[-3])
+            self.print_debug(features, outs[-2])
+            self.print_debug(features, outs[-1]).view(feed.size(0), -1)
+            feed = self.downsample(feed)
+
+    def print_debug(self, x, v):
+        return _print_debug(x, v, file=self.config.log)
 
     def _make_net(self, idx=0):
-        image_size = self.image_size / (2**(idx))
+        # image_size = self.image_size / (2**(idx))
+        image_size = 256 / (2**(idx))
         self.repeat_num = int(math.log(image_size, 2) - 1)
         k_size = int(image_size / np.power(2, self.repeat_num))
+        if self.image_size == 1024:
+            k_size *= 4
         layers = []
         conv = self.Norm(
             nn.Conv2d(
@@ -85,7 +88,6 @@ class MultiDiscriminator(nn.Module):
 
         src_conv = nn.Conv2d(
             curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
-
         src = nn.Sequential(OrderedDict([('src', src_conv)]))
 
         aux_conv = nn.Conv2d(
@@ -104,7 +106,5 @@ class MultiDiscriminator(nn.Module):
             _aux = outs[2](main).view(main.size(0), -1)
             outs_src.append(_src)
             outs_aux.append(_aux)
-
             x = self.downsample(x)
-
         return outs_src, outs_aux,
