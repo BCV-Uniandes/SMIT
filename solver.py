@@ -41,9 +41,9 @@ class Solver(object):
             self.config, debug=self.config.mode == 'train' and self.verbose)
         self.G = to_cuda(self.G)
 
-        if self.config.dataset_fake == 'FFHQ':
-            self.load_init_HD()
-            self.config.g_lr /= 10.0
+        # if self.config.dataset_fake == 'FFHQ':
+        #     self.load_init_HD()
+        # self.config.g_lr /= 10.0
 
         if self.config.mode == 'train':
             self.d_optimizer = self.set_optimizer(
@@ -54,6 +54,8 @@ class Solver(object):
         # Start with trained model
         if self.config.pretrained_model and self.verbose:
             self.load_pretrained_model()
+        elif self.config.dataset_fake == 'FFHQ':
+            self.load_init_HD()
 
         if self.config.mode == 'train' and self.verbose:
             self.print_network(self.D, 'Discriminator')
@@ -67,10 +69,7 @@ class Solver(object):
 
         if hvd.size() > 1:
             self.count += 1
-            if self.config.TRAIN_BIAS and self.count == 2:
-                backward_passes_per_step = 2
-            else:
-                backward_passes_per_step = 1
+            backward_passes_per_step = 1
             optimizer = torch.optim.Adam(model.parameters(),
                                          lr * backward_passes_per_step,
                                          [beta1, beta2])

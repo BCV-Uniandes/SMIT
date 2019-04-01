@@ -11,7 +11,6 @@ class AdaInGEN(nn.Module):
     def __init__(self, config, debug=False):
         super(AdaInGEN, self).__init__()
 
-        dc_dim = config.dc_dim
         self.config = config
         self.color_dim = config.color_dim
         self.image_size = config.image_size
@@ -27,7 +26,7 @@ class AdaInGEN(nn.Module):
 
         adain_params = self.get_num_adain_params(self.generator)
         self.adain_net = DC(
-            config, in_dim, adain_params, dc_dim, 3, train=False, debug=debug)
+            config, in_dim, adain_params, train=False, debug=debug)
         if debug:
             self.debug()
 

@@ -4,10 +4,11 @@
 # logger options
 mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 
 Identity: True         # With identity loss
-    
+
 save_epoch: 20          # 30 epochs of this dataset represents ~6000 iterations
 num_epochs: 40
 num_epochs_decay: 20
 c_dim: 8                # Number of domains
   
 lambda_mask: 1.0        # Lambda for attention loss
+lambda_cls: 2.0

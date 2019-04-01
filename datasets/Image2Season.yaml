@@ -9,3 +9,4 @@ save_epoch: 30          # 30 epochs of this dataset represents ~6000 iterations
 c_dim: 4                # Number of domains
   
 lambda_mask: 1.0        # Lambda for attention loss
+lambda_cls: 2.0

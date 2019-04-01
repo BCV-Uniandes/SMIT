@@ -11,7 +11,6 @@ from collections import OrderedDict
 class Generator(nn.Module):
     def __init__(self, config, debug=False, **kwargs):
         super(Generator, self).__init__()
-        layers = []
         repeat_num = config.g_repeat_num
         self.config = config
         self.image_size = config.image_size
@@ -19,19 +18,9 @@ class Generator(nn.Module):
         self.color_dim = config.color_dim
         self.style_dim = config.style_dim
         self.Deterministic = config.DETERMINISTIC
-        mode_upsample = self.config.upsample
-
-        layers = []
 
         conv_repeat = 3
-
         conv_dim = config.g_conv_dim
-        layers += [] if config.image_size <= 512 else [
-            ('down_nn_512', nn.Upsample(scale_factor=0.5, mode='bilinear'))
-        ]
-        layers += [] if config.image_size <= 256 else [
-            ('down_nn_256', nn.Upsample(scale_factor=0.5, mode='bilinear'))
-        ]
         conv = nn.Conv2d(
             self.color_dim,
             conv_dim,
@@ -39,6 +28,7 @@ class Generator(nn.Module):
             stride=1,
             padding=3,
             bias=False)
+        layers = []
         layers += [('down_conv_' + str(conv_dim), conv)]
         IN = nn.InstanceNorm2d(conv_dim, affine=True)
         layers += [('down_norm_' + str(conv_dim), IN)]
@@ -47,66 +37,48 @@ class Generator(nn.Module):
         # Down-Sampling
         curr_dim = conv_dim
         for i in range(conv_repeat):
+            curr_dim_out = curr_dim * 2
             conv = nn.Conv2d(
                 curr_dim,
-                curr_dim * 2,
+                curr_dim_out,
                 kernel_size=4,
                 stride=2,
                 padding=1,
                 bias=False)
-            layers += [('down_conv_' + str(curr_dim * 2), conv)]
-            IN = nn.InstanceNorm2d(curr_dim * 2, affine=True)
-            layers += [('down_norm_' + str(curr_dim * 2), IN)]
-            layers += [('down_relu_' + str(curr_dim * 2),
+            layers += [('down_conv_' + str(curr_dim_out), conv)]
+            IN = nn.InstanceNorm2d(curr_dim_out, affine=True)
+            layers += [('down_norm_' + str(curr_dim_out), IN)]
+            layers += [('down_relu_' + str(curr_dim_out),
                         nn.ReLU(inplace=True))]
-            curr_dim = curr_dim * 2
+            curr_dim = curr_dim_out
 
         # Bottleneck
         for i in range(repeat_num):
             RB = ResidualBlock(dim_in=curr_dim, dim_out=curr_dim, AdaIn=True)
             layers += [('res_{}_{}'.format(curr_dim, i), RB)]
 
-        # # Up-Sampling
+        # Up-Sampling
         for i in range(conv_repeat):
-            if self.config.DECONV:
-                conv = nn.ConvTranspose2d(
-                    curr_dim,
-                    curr_dim // 2,
-                    kernel_size=4,
-                    stride=2,
-                    padding=1,
-                    bias=False)
-                layers += [('up_conv_' + str(curr_dim // 2), conv)]
-            else:
-                up = nn.Upsample(scale_factor=2, mode=mode_upsample)
-                layers += [('up_nn_' + str(curr_dim), up)]
-                if self.config.UPCONV:
-                    conv = nn.Conv2d(
-                        curr_dim,
-                        curr_dim // 2,
-                        kernel_size=5,
-                        stride=1,
-                        padding=2,
-                        bias=False)
-                else:
-                    conv = nn.Conv2d(
-                        curr_dim,
-                        curr_dim // 2,
-                        kernel_size=3,
-                        stride=1,
-                        padding=1,
-                        bias=False)
-                layers += [('up_conv_' + str(curr_dim // 2), conv)]
+            curr_dim_out = curr_dim // 2
+            up = nn.Upsample(scale_factor=2, mode='nearest')
+            layers += [('up_nn_' + str(curr_dim_out), up)]
+            conv = nn.Conv2d(
+                curr_dim,
+                curr_dim_out,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                bias=False)
+            layers += [('up_conv_' + str(curr_dim_out), conv)]
 
             if not self.Deterministic:
-                norm = LayerNorm(curr_dim // 2)
+                norm = LayerNorm(curr_dim_out)
             else:
-                norm = nn.InstanceNorm2d(curr_dim // 2, affine=True)
+                norm = nn.InstanceNorm2d(curr_dim_out, affine=True)
 
-            layers += [('up_norm_' + str(curr_dim // 2), norm)]
-            layers += [('up_relu_' + str(curr_dim // 2),
-                        nn.ReLU(inplace=True))]
-            curr_dim = curr_dim // 2
+            layers += [('up_norm_' + str(curr_dim_out), norm)]
+            layers += [('up_relu_' + str(curr_dim_out), nn.ReLU(inplace=True))]
+            curr_dim = curr_dim_out
 
         self.main = nn.Sequential(OrderedDict(layers))
 
@@ -118,24 +90,12 @@ class Generator(nn.Module):
             padding=3,
             bias=False)
         layers = [('fake', fake_conv)]
-        layers += [] if config.image_size <= 256 else [
-            ('fake_up_nn_512', nn.Upsample(scale_factor=2, mode='bilinear'))
-        ]
-        layers += [] if config.image_size <= 512 else [
-            ('fake_up_nn_1024', nn.Upsample(scale_factor=2, mode='bilinear'))
-        ]
         layers += [('tanh', nn.Tanh())]
         self.fake = nn.Sequential(OrderedDict(layers))
 
         attn_conv = nn.Conv2d(
             curr_dim, 1, kernel_size=7, stride=1, padding=3, bias=False)
         layers = [('attn', attn_conv)]
-        layers += [] if config.image_size <= 256 else [
-            ('attn_up_nn_512', nn.Upsample(scale_factor=2, mode='bilinear'))
-        ]
-        layers += [] if config.image_size <= 512 else [
-            ('attn_up_nn_1024', nn.Upsample(scale_factor=2, mode='bilinear'))
-        ]
         layers += [('sigmoid', nn.Sigmoid())]
         self.attn = nn.Sequential(OrderedDict(layers))
 

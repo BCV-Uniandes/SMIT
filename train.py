@@ -119,17 +119,17 @@ class Train(Solver):
 
     # ============================================================#
     # ============================================================#
-    def Decay_lr(self):
+    def Decay_lr(self, current_epoch=0):
         self.d_lr -= (
             self.config.d_lr /
             float(self.config.num_epochs - self.config.num_epochs_decay))
         self.g_lr -= (
-            self.config.d_lr /
+            self.config.g_lr /
             float(self.config.num_epochs - self.config.num_epochs_decay))
         # self.g_lr = self.g_lr / 10.
         # self.d_lr = self.d_lr / 10.
         self.update_lr(self.g_lr, self.d_lr)
-        if self.verbose:
+        if self.verbose and current_epoch % self.config.save_epoch == 0:
             self.PRINT('Decay learning rate to g_lr: {}, d_lr: {}.'.format(
                 self.g_lr, self.d_lr))
 
@@ -141,7 +141,7 @@ class Train(Solver):
         self.count_seed = start * total_iter * self.step_seed
         for e in range(start):
             if e > self.config.num_epochs_decay:
-                self.Decay_lr()
+                self.Decay_lr(e)
         return start, total_iter
 
     # ============================================================#
@@ -188,7 +188,7 @@ class Train(Solver):
         comm.Barrier()
         # Decay learning rate
         if epoch > self.config.num_epochs_decay:
-            self.Decay_lr()
+            self.Decay_lr(epoch)
 
     # ============================================================#
     # ============================================================#
@@ -229,7 +229,7 @@ class Train(Solver):
     # ============================================================#
 
     def Dis_update(self, real_x0, real_c0, fake_c0):
-        # self.train_model(discriminator=True)
+        self.train_model(discriminator=True)
         style_fake0 = to_var(self.random_style(real_x0, seed=self.count_seed))
         self.count_seed += 1
         fake_x0 = self.G(real_x0, fake_c0, style_fake0)[0]
@@ -245,7 +245,7 @@ class Train(Solver):
     # ============================================================#
     # ============================================================#
     def Gen_update(self, real_x1, real_c1, fake_c1):
-        # self.train_model(generator=True)
+        self.train_model(generator=True)
         criterion_l1 = torch.nn.L1Loss()
         style_fake1 = to_var(self.random_style(real_x1, seed=self.count_seed))
         style_rec1 = to_var(

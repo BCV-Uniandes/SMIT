@@ -20,15 +20,14 @@ def base_parser():
         '--mode', type=str, default='train', choices=['train', 'val', 'test'])
     parser.add_argument('--color_dim', type=int, default=3)
     parser.add_argument('--image_size', type=int, default=256)
-    parser.add_argument('--batch_size', type=int, default=22)
+    parser.add_argument('--batch_size', type=int, default=20)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--num_epochs', type=int, default=50)
     parser.add_argument('--num_epochs_decay', type=int, default=20)
-    parser.add_argument(
-        '--save_epoch', type=int, default=1)  # Save samples how many epochs
-    parser.add_argument(
-        '--model_epoch', type=int,
-        default=5)  # Save models and weights every how many epochs
+    parser.add_argument('--save_epoch', type=int, default=1)
+    # Save samples how many epochs
+    parser.add_argument('--model_epoch', type=int, default=5)
+    # Save models and weights every how many epochs
     parser.add_argument('--beta1', type=float, default=0.5)
     parser.add_argument('--beta2', type=float, default=0.999)
     parser.add_argument('--pretrained_model', type=str, default=None)
@@ -52,23 +51,13 @@ def base_parser():
     parser.add_argument('--d_repeat_num', type=int, default=6)
     parser.add_argument('--g_lr', type=float, default=0.0001)
     parser.add_argument('--d_lr', type=float, default=0.0001)
-    parser.add_argument('--lambda_cls', type=float, default=2.0)
+    parser.add_argument('--lambda_cls', type=float, default=1.0)
     parser.add_argument('--lambda_rec', type=float, default=10.0)
     parser.add_argument('--lambda_idt', type=float, default=10.0)
     parser.add_argument('--lambda_mask', type=float, default=0.1)
     parser.add_argument('--lambda_mask_smooth', type=float, default=0.00001)
 
     parser.add_argument('--style_dim', type=int, default=20, choices=[20])
-    parser.add_argument('--dc_dim', type=int, default=256, choices=[256])
-
-    parser.add_argument(
-        '--upsample',
-        type=str,
-        default='bilinear',
-        choices=['bilinear', 'nearest'])
-    parser.add_argument('--DECONV', action='store_true', default=False)
-    parser.add_argument('--UPCONV', action='store_true', default=False)
-    parser.add_argument('--INIT_DC', action='store_true', default=False)
     parser.add_argument('--DETERMINISTIC', action='store_true', default=False)
 
     # Misc

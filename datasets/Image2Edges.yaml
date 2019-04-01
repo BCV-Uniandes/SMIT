@@ -19,3 +19,4 @@ ALL_ATTR_2:
   save_epoch: 1
   
 lambda_mask: 1.0        # Lambda for attention loss
+lambda_cls: 2.0

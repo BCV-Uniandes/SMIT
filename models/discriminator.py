@@ -17,7 +17,7 @@ class MultiDiscriminator(nn.Module):
 
         self.image_size = config.image_size
         conv_dim = config.d_conv_dim
-        self.conv_dim = conv_dim
+        self.conv_dim = conv_dim  # if self.image_size == 256 else conv_dim//2
 
         self.repeat_num = config.d_repeat_num
         self.c_dim = config.c_dim

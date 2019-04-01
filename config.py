@@ -31,18 +31,6 @@ def update_config(config):
     config.batch_size *= 2  # RaGAN
     config.num_epochs *= config.save_epoch
     config.num_epochs_decay *= config.save_epoch
-    UPDATE_FOLDER(config, 'DECONV')
-    UPDATE_FOLDER(config, 'INIT_DC')
-    if config.lambda_cls != 1.0:
-        update_folder(config, 'lambda_cls' + str(config.lambda_cls))
-
-    if config.seed != 10:
-        update_folder(config, 'seed' + str(config.seed))
-
-    if config.upsample == 'nearest':
-        update_folder(config, 'upsample_nearest')
-
-    UPDATE_FOLDER(config, 'UPCONV')
 
     if config.DELETE:
         remove_folder(config)
