@@ -8,7 +8,7 @@ This repository provides a PyTorch implementation of [SMIT](https://arxiv.org/ab
 
 ## Paper
 [SMIT: Stochastic Multi-Label Image-to-image Translation ](https://arxiv.org/abs/1812.03704) <br/>
-[Andrés Romero](https://afromero.co/en)<sup> 1,2</sup>, [Pablo Arbelaez](https://scholar.google.com.co/citations?user=k0nZO90AAAAJ&hl=en)<sup>1</sup>, [Luc Van Gool](https://scholar.google.com/citations?user=TwMib_QAAAAJ&hl=en)<sup> 2</sup>, [Radu Timofte](https://scholar.google.com/citations?user=u3MwH5kAAAAJ&hl=en)<sup> 2</sup> <br/>
+[Andrés Romero](https://afromero.co/en)<sup> 1</sup>, [Pablo Arbelaez](https://scholar.google.com.co/citations?user=k0nZO90AAAAJ&hl=en)<sup>1</sup>, [Luc Van Gool](https://scholar.google.com/citations?user=TwMib_QAAAAJ&hl=en)<sup> 2</sup>, [Radu Timofte](https://scholar.google.com/citations?user=u3MwH5kAAAAJ&hl=en)<sup> 2</sup> <br/>
 <sup>1 </sup>Biomedical Computer Vision ([BCV](https://biomedicalcomputervision.uniandes.edu.co/)) Lab, Universidad de Los Andes. <br/>
 <sup>2 </sup>Computer Vision Lab ([CVL](https://www.vision.ee.ethz.ch/en/)), ETH Zürich. <br/>
 
@@ -16,11 +16,11 @@ This repository provides a PyTorch implementation of [SMIT](https://arxiv.org/ab
 
 ## Citation
 ```
-@article{romero2018smit,
+@article{romero2019smit,
   title={SMIT: Stochastic Multi-Label Image-to-Image Translation},
   author={Romero, Andr{\'e}s and Arbel{\'a}ez, Pablo and Van Gool, Luc and Timofte, Radu},
   journal={arXiv preprint arXiv:1812.03704},
-  year={2018}
+  year={2019}
 }
 ```
 
@@ -50,13 +50,19 @@ $ bash generate_data/download.sh
 ```bash
 ./main.py --GPU=$gpu_id --dataset_fake=CelebA
 ```
-Each dataset has a `datasets/<dataset>.py` and a `datasets/<dataset>.yaml` files. All models and figures will be stored at `snapshot/models/$dataset_fake/<epoch>_<iter>.pth` and `snapshot/samples/$dataset_fake/<epoch>_<iter>.jpg`, respectivelly.
+Each dataset must has `datasets/<dataset>.py` and `datasets/<dataset>.yaml` files. All models and figures will be stored at `snapshot/models/$dataset_fake/<epoch>_<iter>.pth` and `snapshot/samples/$dataset_fake/<epoch>_<iter>.jpg`, respectivelly.
 
 ### Test command:
 ```bash
 ./main.py --GPU=$gpu_id --dataset_fake=CelebA --mode=test
 ```
 SMIT will expect the `.pth` weights are stored at `snapshot/models/$dataset_fake/`. If there are several models, it will take the last alphabetical one. 
+
+### Multi-GPU
+For multiple GPUs we use [Horovod](https://github.com/horovod/horovod). Example for 4 GPUs:
+```bash
+mpirun -n 4 ./main.py --dataset_fake=CelebA
+```
 
 <br/>
 
