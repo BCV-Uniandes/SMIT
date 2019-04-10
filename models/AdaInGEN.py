@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 from misc.utils import to_var
-from models.generator import Generator
-from models.domain_controller import DC
+from models.domain_embedding import DE
 
 
 # ==================================================================#
@@ -17,7 +16,10 @@ class AdaInGEN(nn.Module):
         self.style_dim = config.style_dim
         self.c_dim = config.c_dim
         self.Deterministic = config.DETERMINISTIC
-
+        if self.image_size == 256:
+            from models.generator import Generator
+        else:
+            from models.generator_HD import Generator
         self.generator = Generator(config, debug=False)
         if self.Deterministic:
             in_dim = self.c_dim
@@ -25,7 +27,7 @@ class AdaInGEN(nn.Module):
             in_dim = self.style_dim + self.c_dim
 
         adain_params = self.get_num_adain_params(self.generator)
-        self.adain_net = DC(
+        self.adain_net = DE(
             config, in_dim, adain_params, train=False, debug=debug)
         if debug:
             self.debug()

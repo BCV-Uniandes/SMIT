@@ -91,7 +91,7 @@ class Test(Solver):
         self.G.eval()
         self.D.eval()
         n_rep = 4
-
+        no_label = self.config.dataset_fake in self.Binary_Datasets
         no_grad = open('/var/tmp/null.txt',
                        'w') if get_torch_version() < 1.0 else torch.no_grad()
         with no_grad:
@@ -108,7 +108,7 @@ class Test(Solver):
                         _name,
                         str(idx).zfill(4)))
                 create_dir(_save_path)
-                real_x0 = real_x0.repeat(n_rep, 1, 1, 1)  # .unsqueeze(0)
+                real_x0 = real_x0.repeat(n_rep, 1, 1, 1)
                 fake_image_list = [
                     to_data(
                         color_frame(
@@ -152,13 +152,15 @@ class Test(Solver):
                     _save_path,
                     fake_image_list,
                     mode='style_' + chr(65 + idx),
-                    no_label=True)
+                    no_label=no_label,
+                    circle=True)
                 self._SAVE_IMAGE(
                     _save_path,
                     fake_attn_list,
                     Attention=True,
                     mode='style_' + chr(65 + idx),
-                    no_label=True)
+                    no_label=no_label,
+                    circle=True)
         self.G.train()
         self.D.train()
 
@@ -171,6 +173,7 @@ class Test(Solver):
                                    '{}_test'.format(last_name))
         create_dir(save_folder)
         batch_size = 1
+        no_label = self.config.dataset_fake in self.Binary_Datasets
         data_loader = get_loader(
             path,
             self.config.image_size,
@@ -205,7 +208,16 @@ class Test(Solver):
                     label=label,
                     Multimodal=k,
                     fixed_style=style_all,
-                    TIME=not i)
+                    TIME=not i,
+                    no_label=no_label,
+                    circle=True)
+                self.generate_SMIT(
+                    real_x,
+                    save_path,
+                    label=label,
+                    Multimodal=k,
+                    no_label=no_label,
+                    circle=True)
                 if self.config.DETERMINISTIC:
                     self.generate_SMIT(
                         real_x, save_path, label=label, Multimodal=k)

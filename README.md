@@ -14,6 +14,8 @@ This repository provides a PyTorch implementation of [SMIT](https://arxiv.org/ab
 
 <br/>
 
+<p align="center"><img width="25%" src="Figures/andres.jpg" /><img width="25%" src="Figures/pablo.jpg" /><img width="25%" src="Figures/luc.jpg" /><img width="25%" src="Figures/radu.jpg" /></p>
+
 ## Citation
 ```
 @article{romero2019smit,

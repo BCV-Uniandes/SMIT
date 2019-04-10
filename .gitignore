@@ -6,6 +6,7 @@ __pycache__/
 gpu.sh
 
 data/
+datos/
 no_github/
 DFace/
 
@@ -21,6 +22,8 @@ main_*.py
 *.png
 *.jpg
 *.txt
+
+models/generator_HD.py
 
 *.jpg
 *.png

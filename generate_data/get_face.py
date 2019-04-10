@@ -16,7 +16,7 @@ class Face():
 
     def get_face_from_file(self, org_file, margin=5.):
         import imageio
-        img = imageio.imread(org_file)
+        img = imageio.imread(org_file, pilmode="RGB")
         try:
             bbox = map(int,
                        self.detector.detect_face(img[:, :, ::-1])[0][0][:-1])
@@ -43,7 +43,7 @@ class Face():
 
     def get_all_faces_from_file(self, org_file, margin=5.):
         import imageio
-        img = imageio.imread(org_file)
+        img = imageio.imread(org_file, pilmode="RGB")
         bboxes = [
             _bbox[:-1]
             for _bbox in self.detector.detect_face(img[:, :, ::-1])[0]

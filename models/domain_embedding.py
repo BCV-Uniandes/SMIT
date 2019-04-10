@@ -8,11 +8,11 @@ from collections import OrderedDict
 # ==================================================================#
 
 
-class DC(nn.Module):
+class DE(nn.Module):
     def __init__(self, config, input_dim, output_dim, train=False,
                  debug=False):
 
-        super(DC, self).__init__()
+        super(DE, self).__init__()
         self.config = config
         self.input_dim = input_dim
         self.comment = 'Learn' if train else 'Fixed'
