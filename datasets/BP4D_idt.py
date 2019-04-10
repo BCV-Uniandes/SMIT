@@ -5,11 +5,11 @@ from torch.utils.data import Dataset
 from PIL import Image
 
 # ==================================================================#
-# == BP4D
+# == BP4D Identity
 # ==================================================================#
 
 
-class BP4D(Dataset):
+class BP4D_idt(Dataset):
     def __init__(self,
                  image_size,
                  mode_data,
@@ -26,7 +26,7 @@ class BP4D(Dataset):
         self.verbose = verbose
         self.name = 'BP4D'
         file_txt = os.path.abspath(
-            os.path.join('data', 'BP4D', mode_data, 'fold_0', mode + '.txt'))
+            os.path.join('data', 'BP4D', mode_data, 'data.txt'))
         if self.verbose:
             print("Data from: " + file_txt)
         self.lines = open(file_txt, 'r').readlines()
@@ -42,6 +42,7 @@ class BP4D(Dataset):
     def preprocess(self):
         self.filenames = []
         self.labels = []
+        self.selected_attrs = []
         lines = [i.strip() for i in self.lines]
         random.shuffle(lines)
         mode_size = 'Sequences_400' if self.image_size == 256 else 'Sequences'
@@ -52,11 +53,18 @@ class BP4D(Dataset):
                 filename = filename.replace('Faces', mode_size)
             if not os.path.isfile(filename) or os.stat(filename).st_size == 0:
                 continue
-            values = splits[1:]
-            label = []
-            for value in values:
-                label.append(int(value))
             self.filenames.append(filename)
+            attr = filename.split('/')[-3]
+            self.selected_attrs.append(attr)
+        self.selected_attrs = sorted(list(set(self.selected_attrs)))
+        for line in self.filenames:
+            label = []
+            attr = line.split('/')[-3]
+            for _attr in self.selected_attrs:
+                if _attr == attr:
+                    label.append(1)
+                else:
+                    label.append(0)            
             self.labels.append(label)
 
     def get_data(self):

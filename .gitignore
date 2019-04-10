@@ -6,6 +6,7 @@ __pycache__/
 gpu.sh
 
 data/
+datos/
 no_github/
 DFace/
 

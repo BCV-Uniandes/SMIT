@@ -2,8 +2,8 @@ from mpi4py import MPI
 import torch.utils.data.distributed
 from misc.utils import to_cuda, to_data, to_var
 from misc.utils import Modality, PRINT, single_source, target_debug_list
-from misc.utils import create_arrow, create_dir, denorm, get_labels
-from misc.utils import color_frame, get_torch_version
+from misc.utils import create_arrow, create_circle, create_dir, denorm
+from misc.utils import color_frame, get_labels, get_torch_version
 from torchvision.utils import save_image
 import datetime
 import time
@@ -41,10 +41,6 @@ class Solver(object):
             self.config, debug=self.config.mode == 'train' and self.verbose)
         self.G = to_cuda(self.G)
 
-        # if self.config.dataset_fake == 'FFHQ':
-        #     self.load_init_HD()
-        # self.config.g_lr /= 10.0
-
         if self.config.mode == 'train':
             self.d_optimizer = self.set_optimizer(
                 self.D, self.config.d_lr, self.config.beta1, self.config.beta2)
@@ -54,7 +50,7 @@ class Solver(object):
         # Start with trained model
         if self.config.pretrained_model and self.verbose:
             self.load_pretrained_model()
-        elif self.config.dataset_fake == 'FFHQ':
+        elif self.config.image_size != 256:
             self.load_init_HD()
 
         if self.config.mode == 'train' and self.verbose:
@@ -66,24 +62,15 @@ class Solver(object):
     def set_optimizer(self, model, lr, beta1=0.5, beta2=0.999):
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
             model = model.module
+        optimizer = torch.optim.Adam(model.parameters(), lr, [beta1, beta2])
 
         if hvd.size() > 1:
-            self.count += 1
-            backward_passes_per_step = 1
-            optimizer = torch.optim.Adam(model.parameters(),
-                                         lr * backward_passes_per_step,
-                                         [beta1, beta2])
             optimizer = hvd.DistributedOptimizer(
-                optimizer,
-                named_parameters=model.named_parameters(),
-                backward_passes_per_step=backward_passes_per_step)
+                optimizer, named_parameters=model.named_parameters())
             # Horovod: broadcast parameters & optimizer state.
             hvd.broadcast_parameters(model.state_dict(), root_rank=0)
             hvd.broadcast_optimizer_state(optimizer, root_rank=0)
 
-        else:
-            optimizer = torch.optim.Adam(model.parameters(), lr,
-                                         [beta1, beta2])
         return optimizer
 
     # ============================================================#
@@ -122,8 +109,6 @@ class Solver(object):
                     name.upper(), num_params, num_learns))
         # self.PRINT(name)
         # self.PRINT(model)
-        # self.PRINT("{} number of parameters: {}".format(name, num_params))
-        # self.display_net(name)
 
     # ============================================================#
     # ============================================================#
@@ -176,52 +161,40 @@ class Solver(object):
 
         self.name = comm.bcast(self.name, root=0)
 
-        def load_model(model, name='G', MultiGPU=False):
-            if not MultiGPU:
-                model.load_state_dict(
-                    torch.load(
-                        self.name.format(name),
-                        map_location=lambda storage, loc: storage))
-            else:
-                weights = torch.load(
-                    self.name.format(name),
-                    map_location=lambda storage, loc: storage)
-
-                weights = {'module.' + k: v for k, v in weights.items()}
-                model.load_state_dict(weights)
-
-        def load_optim(optim, name='G_optim'):
-            optim.load_state_dict(
+        def load(model, name='G'):
+            model.load_state_dict(
                 torch.load(
                     self.name.format(name),
                     map_location=lambda storage, loc: storage))
+
+        def load_optim(optim, name='G_optim'):
+            load(optim)
             self.optim_cuda(optim)
 
-        load_model(self.G, 'G')
-        load_model(self.D, 'D')
-
-        # try:
-        #     load_model(self.G, 'G')
-        #     load_model(self.D, 'D')
-        # except RuntimeError:
-        #     load_model(self.G, 'G', True)
-        #     load_model(self.D, 'D', True)
-
-        # if self.config.mode == 'train':
-        #     load_optim(self.g_optimizer, 'G_optim')
-        #     load_optim(self.d_optimizer, 'D_optim')
+        load(self.G, 'G')
+        load(self.D, 'D')
 
         print("Success!!")
 
     # ==================================================================#
     # ==================================================================#
     def load_init_HD(self):
-        model_dir = self.config.model_save_path.replace(
-            self.config.dataset_fake, 'CelebA')
+        if 'BP4D' not in self.config.dataset_fake:
+            model_dir = self.config.model_save_path.replace(
+                self.config.dataset_fake, 'CelebA')
+        else:
+            model_dir = self.config.model_save_path
+        if self.config.image_size == 512:
+            _replace = ''
+        else:
+            _replace = '/image_size_' + str(self.config.image_size // 2)
+        model_dir = model_dir.replace(
+            '/image_size_' + str(self.config.image_size), _replace)
         pretrained_model = self.resume_name(model_path=model_dir)
         self.PRINT('Resuming model (step: {})...'.format(pretrained_model))
 
         def merge_weights(model, name='G'):
+            # from termcolor import colored
             name = os.path.join(model_dir, '{}_{}.pth'.format(
                 pretrained_model, name))
             self.PRINT('Model: {}'.format(name))
@@ -233,9 +206,16 @@ class Solver(object):
             for key in weights.keys():
                 if key in celeba_weights.keys():
                     if weights[key].shape == celeba_weights[key].shape:
-                        # self.PRINT(
-                        #   'Copying from {0} CelebA to {0} FFHQ'.format(key))
                         weights[key] = celeba_weights[key]
+                #         self.PRINT(
+                #           'Copying from {0} CelebA to {0} FFHQ'.format(key))
+                #     else:
+                #         self.PRINT(
+                #           '{0} Copying from {1} CelebA to {1} FFHQ'.format(
+                #            colored('NOT', 'red'), key))
+                # else:
+                #     self.PRINT(
+                #       '{0} {1}'.format(colored('IGNORING', 'red'), key))
             model.load_state_dict(weights)
 
         merge_weights(self.G, 'G')
@@ -355,6 +335,8 @@ class Solver(object):
                     fake_list,
                     Attention=False,
                     mode='fake',
+                    circle=False,
+                    arrow=False,
                     no_label=False):
         fake_images = torch.cat(fake_list, dim=3)
         if 'fake' not in os.path.basename(save_path):
@@ -365,15 +347,17 @@ class Solver(object):
             fake_images = denorm(fake_images)
 
         save_path = save_path.replace('fake', mode)
+        if circle:
+            fake_images = create_circle(fake_images, self.config.image_size)
         if not no_label:
             fake_images = torch.cat((self.get_labels(), fake_images), dim=0)
         save_image(fake_images, save_path, nrow=1, padding=0)
-        if no_label:
+        if arrow or no_label:
             create_arrow(
                 save_path,
                 0,
                 image_size=self.config.image_size,
-                horizontal=True)
+                horizontal=no_label)
         return save_path
 
     # ==================================================================#
@@ -423,6 +407,12 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
+    @property
+    def Binary_Datasets(self):
+        return ['Image2Edges', 'Yosemite']
+
+    # ==================================================================#
+    # ==================================================================#
 
     def get_batch_inference(self, batch, Multimodal):
         if Multimodal:
@@ -445,7 +435,8 @@ class Solver(object):
                       output=False,
                       training=False,
                       fixed_style=None,
-                      TIME=False):
+                      TIME=False,
+                      **kwargs):
         self.G.eval()
         self.D.eval()
         modal = 'Multimodal' if Multimodal else 'Unimodal'
@@ -516,10 +507,15 @@ class Solver(object):
 
                 mode = 'fake' if not Multimodal else 'style_' + chr(65 + idx)
                 Output.extend(
-                    self._SAVE_IMAGE(_save_path, fake_image_list, mode=mode))
+                    self._SAVE_IMAGE(
+                        _save_path, fake_image_list, mode=mode, **kwargs))
                 Output.extend(
                     self._SAVE_IMAGE(
-                        _save_path, fake_attn_list, Attention=True, mode=mode))
+                        _save_path,
+                        fake_attn_list,
+                        Attention=True,
+                        mode=mode,
+                        **kwargs))
 
         self.G.train()
         self.D.train()

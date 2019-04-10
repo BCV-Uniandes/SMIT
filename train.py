@@ -81,7 +81,7 @@ class Train(Solver):
                     label=fixed_label,
                     training=True,
                     fixed_style=fixed_style)
-            if not self.config.dataset_fake == 'FFHQ':
+            if self.config.image_size == 256:
                 self.generate_SMIT(
                     fixed_x,
                     self.output_sample(0, 0),
@@ -95,7 +95,7 @@ class Train(Solver):
     def _GAN_LOSS(self, real_x, fake_x, label):
         cross_entropy = self.config.dataset_fake in [
             'painters_14', 'Animals', 'Image2Weather', 'Image2Season',
-            'Image2Edges', 'Yosemite', 'RafD,'
+            'Image2Edges', 'Yosemite', 'RafD', 'BP4D_idt'
         ]
         if cross_entropy:
             label = torch.max(label, dim=1)[1]
@@ -126,8 +126,6 @@ class Train(Solver):
         self.g_lr -= (
             self.config.g_lr /
             float(self.config.num_epochs - self.config.num_epochs_decay))
-        # self.g_lr = self.g_lr / 10.
-        # self.d_lr = self.d_lr / 10.
         self.update_lr(self.g_lr, self.d_lr)
         if self.verbose and current_epoch % self.config.save_epoch == 0:
             self.PRINT('Decay learning rate to g_lr: {}, d_lr: {}.'.format(
@@ -136,6 +134,8 @@ class Train(Solver):
     # ============================================================#
     # ============================================================#
     def RESUME_INFO(self):
+        if not self.config.pretrained_model:
+            return 0, 0
         start = int(self.config.pretrained_model.split('_')[0]) + 1
         total_iter = start * int(self.config.pretrained_model.split('_')[1])
         self.count_seed = start * total_iter * self.step_seed
@@ -160,14 +160,14 @@ class Train(Solver):
                     label=self.fixed_label,
                     training=True,
                     fixed_style=self.fixed_style)
-                if not self.config.dataset_fake == 'FFHQ':
+                if self.config.image_size == 256:
                     self.generate_SMIT(
                         self.fixed_x,
                         self.output_sample(epoch, iter + 1),
                         Multimodal=1,
                         label=self.fixed_label,
                         training=True)
-            if not self.config.dataset_fake == 'FFHQ':
+            if self.config.image_size == 256:
                 self.generate_SMIT(
                     self.fixed_x,
                     self.output_sample(epoch, iter + 1),
@@ -207,9 +207,15 @@ class Train(Solver):
 
     # ============================================================#
     # ============================================================#
+    def to_var(self, *args):
+        vars = []
+        for arg in args:
+            vars.append(to_var(arg))
+        return vars
+
+    # ============================================================#
+    # ============================================================#
     def train_model(self, generator=False, discriminator=False):
-        # if hvd.size() > 1:
-        # G = self.G.module
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
             G = self.G.module
         else:
@@ -228,12 +234,13 @@ class Train(Solver):
     # ============================================================#
     # ============================================================#
 
-    def Dis_update(self, real_x0, real_c0, fake_c0):
+    def Dis_update(self, real_x, real_c, fake_c):
         self.train_model(discriminator=True)
-        style_fake0 = to_var(self.random_style(real_x0, seed=self.count_seed))
+        real_x, real_c, fake_c = self.to_var(real_x, real_c, fake_c)
+        style_fake = to_var(self.random_style(real_x, seed=self.count_seed))
         self.count_seed += 1
-        fake_x0 = self.G(real_x0, fake_c0, style_fake0)[0]
-        d_loss_src, d_loss_cls = self._GAN_LOSS(real_x0, fake_x0, real_c0)
+        fake_x = self.G(real_x, fake_c, style_fake)[0]
+        d_loss_src, d_loss_cls = self._GAN_LOSS(real_x, fake_x, real_c)
 
         self.loss['Dsrc'] = d_loss_src
         self.loss['Dcls'] = d_loss_cls * self.config.lambda_cls
@@ -244,37 +251,37 @@ class Train(Solver):
 
     # ============================================================#
     # ============================================================#
-    def Gen_update(self, real_x1, real_c1, fake_c1):
+    def Gen_update(self, real_x, real_c, fake_c):
         self.train_model(generator=True)
+        real_x, real_c, fake_c = self.to_var(real_x, real_c, fake_c)
         criterion_l1 = torch.nn.L1Loss()
-        style_fake1 = to_var(self.random_style(real_x1, seed=self.count_seed))
-        style_rec1 = to_var(
-            self.random_style(real_x1, seed=self.count_seed + 1))
+        style_fake = to_var(self.random_style(real_x, seed=self.count_seed))
+        style_rec = to_var(self.random_style(real_x, seed=self.count_seed + 1))
         style_identity = to_var(
-            self.random_style(real_x1, seed=self.count_seed + 2))
+            self.random_style(real_x, seed=self.count_seed + 2))
         self.count_seed += 3
 
-        fake_x1 = self.G(real_x1, fake_c1, style_fake1)
+        fake_x = self.G(real_x, fake_c, style_fake)
 
-        g_loss_src, g_loss_cls = self._GAN_LOSS(fake_x1[0], real_x1, fake_c1)
+        g_loss_src, g_loss_cls = self._GAN_LOSS(fake_x[0], real_x, fake_c)
         self.loss['Gsrc'] = g_loss_src
         self.loss['Gcls'] = g_loss_cls * self.config.lambda_cls
 
         # REC LOSS
-        rec_x1 = self.G(fake_x1[0], real_c1, style_rec1)
-        g_loss_rec = criterion_l1(rec_x1[0], real_x1)
+        rec_x = self.G(fake_x[0], real_c, style_rec)
+        g_loss_rec = criterion_l1(rec_x[0], real_x)
         self.loss['Grec'] = self.config.lambda_rec * g_loss_rec
 
         # ========== Attention Part ==========#
         self.loss['Gatm'] = self.config.lambda_mask * (
-            torch.mean(rec_x1[1]) + torch.mean(fake_x1[1]))
+            torch.mean(rec_x[1]) + torch.mean(fake_x[1]))
         self.loss['Gats'] = self.config.lambda_mask_smooth * (
-            _compute_loss_smooth(rec_x1[1]) + _compute_loss_smooth(fake_x1[1]))
+            _compute_loss_smooth(rec_x[1]) + _compute_loss_smooth(fake_x[1]))
 
         # ========== Identity Part ==========#
         if self.config.Identity:
-            idt_x1 = self.G(real_x1, real_c1, style_identity)[0]
-            g_loss_idt = criterion_l1(idt_x1, real_x1)
+            idt_x = self.G(real_x, real_c, style_identity)[0]
+            g_loss_idt = criterion_l1(idt_x, real_x)
             self.loss['Gidt'] = self.config.lambda_idt * \
                 g_loss_idt
 
@@ -294,11 +301,7 @@ class Train(Solver):
             self.d_optimizer.param_groups[0]['lr']))
 
         # Start with trained info if exists
-        if self.config.pretrained_model:
-            start, self.total_iter = self.RESUME_INFO()
-        else:
-            start = 0
-            self.total_iter = 0
+        start, self.total_iter = self.RESUME_INFO()
 
         # Fixed inputs, target domain labels, and style for debugging
         self.fixed_x, self.fixed_label, self.fixed_style = self.debug_vars(
@@ -334,19 +337,10 @@ class Train(Solver):
                 # RaGAN uses different data for Dis and Gen
                 real_x0, real_x1 = split(real_x)
                 real_c0, real_c1 = split(real_c)
+                fake_c = get_fake(real_c, seed=_iter)
+                fake_c0, fake_c1 = split(fake_c)
                 # files0, files1 = split(files)
-
-                # ============================================================#
-                # ========================= DATA2VAR =========================#
-                # ============================================================#
-                real_x0 = to_var(real_x0)
-                real_c0 = to_var(real_c0)
-                real_x1 = to_var(real_x1)
-                real_c1 = to_var(real_c1)
-                fake_c0 = get_fake(real_c0, seed=_iter)
-                fake_c0 = to_var(fake_c0.data)
-                fake_c1 = get_fake(real_c1, seed=_iter)
-                fake_c1 = to_var(fake_c1.data)
+                # import ipdb; ipdb.set_trace()
 
                 # ============================================================#
                 # ======================== Train D ===========================#

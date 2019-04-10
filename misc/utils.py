@@ -176,14 +176,18 @@ def create_arrow(img_path, style, image_size=256, horizontal=False):
 
 # ==================================================================#
 # ==================================================================#
-def create_circle(size=256):
+def create_circle(image, size=256):
     import numpy as np
+    import torch
     xx, yy = np.mgrid[:size, :size]
     # circles contains the squared distance to the (size, size) point
     # we are just using the circle equation learnt at school
     circle = (xx - size / 2)**2 + (yy - size / 2)**2
     bin_circle = (circle <= (size / 2)**2) * 1.
-    return bin_circle
+    bin_circle = torch.from_numpy(bin_circle).float()
+    bin_circle = bin_circle.repeat(1, image.size(1), 1, image.size(-1) // size)
+    image = (image * bin_circle) + (1 - bin_circle).clamp_(min=0, max=1)
+    return image
 
 
 # ==================================================================#
@@ -537,7 +541,7 @@ def split(data):
     try:
 
         def split(x):
-            if isinstance(x, list) or isinstance(x, tuple):
+            if isinstance(x, (list, tuple)):
                 _len = len(x)
             else:
                 _len = x.size(0)

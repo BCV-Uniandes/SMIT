@@ -104,8 +104,8 @@ class FFHQ(Dataset):
         self.labels = []
         self.metadata_path = os.path.join('data', 'FFHQ', 'images1024x1024')
         lines = self.lines[1:]
-        if self.shuffling:
-            random.shuffle(lines)
+        # if self.shuffling:
+        #     random.shuffle(lines)
         for i, line in enumerate(lines):
             filename = os.path.abspath('{}/{}'.format(self.metadata_path,
                                                       line[0]))
