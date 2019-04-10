@@ -23,7 +23,7 @@ main_*.py
 *.jpg
 *.txt
 
-models/generator_HD
+models/generator_HD.py
 
 *.jpg
 *.png
