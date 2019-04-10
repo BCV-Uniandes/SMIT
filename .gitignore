@@ -23,6 +23,8 @@ main_*.py
 *.jpg
 *.txt
 
+models/generator_HD
+
 *.jpg
 *.png
 *.pkl

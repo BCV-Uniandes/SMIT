@@ -64,7 +64,7 @@ class BP4D_idt(Dataset):
                 if _attr == attr:
                     label.append(1)
                 else:
-                    label.append(0)            
+                    label.append(0)
             self.labels.append(label)
 
     def get_data(self):
