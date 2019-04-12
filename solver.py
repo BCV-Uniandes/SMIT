@@ -131,9 +131,7 @@ class Solver(object):
     def save(self, Epoch, iter):
         name = self.output_model(Epoch, iter)
         torch.save(self.G.state_dict(), name.format('G'))
-        torch.save(self.g_optimizer.state_dict(), name.format('G_optim'))
         torch.save(self.D.state_dict(), name.format('D'))
-        torch.save(self.d_optimizer.state_dict(), name.format('D_optim'))
 
         def remove(name_1, mode):
             if os.path.isfile(name_1.format(mode)):
@@ -146,7 +144,7 @@ class Solver(object):
                 name_1 = os.path.join(
                     self.config.model_save_path, '{}_{}_{}.pth'.format(
                         str(_epoch).zfill(4), iter, '{}'))
-                for mode in ['G', 'G_optim', 'D', 'D_optim']:
+                for mode in ['G', 'D']:
                     remove(name_1, mode)
 
     # ==================================================================#
@@ -166,10 +164,6 @@ class Solver(object):
                 torch.load(
                     self.name.format(name),
                     map_location=lambda storage, loc: storage))
-
-        def load_optim(optim, name='G_optim'):
-            load(optim)
-            self.optim_cuda(optim)
 
         load(self.G, 'G')
         load(self.D, 'D')
@@ -270,9 +264,6 @@ class Solver(object):
             Log += ' [*MultiDisc={}]'.format(self.config.MultiDis)
         if self.config.Identity:
             Log += ' [*Identity]'
-        if self.config.DETERMINISTIC:
-            _str = colored('Deterministic', 'green')
-            Log += ' [*{}]'.format(_str)
         dataset_string = colored(self.config.dataset_fake, 'red')
         Log += ' [*{}]'.format(dataset_string)
         self.PRINT(Log)
@@ -308,7 +299,6 @@ class Solver(object):
     # ============================================================#
     # ============================================================#
     def random_style(self, data, seed=None):
-        # return self.G.module.random_style(data)
         if torch.cuda.device_count() > 1 and hvd.size() == 1:
             return self.G.module.random_style(data, seed=seed)
         else:

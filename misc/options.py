@@ -56,9 +56,7 @@ def base_parser():
     parser.add_argument('--lambda_idt', type=float, default=10.0)
     parser.add_argument('--lambda_mask', type=float, default=0.1)
     parser.add_argument('--lambda_mask_smooth', type=float, default=0.00001)
-
     parser.add_argument('--style_dim', type=int, default=20, choices=[20])
-    parser.add_argument('--DETERMINISTIC', action='store_true', default=False)
 
     # Misc
     parser.add_argument('--DELETE', action='store_true', default=False)

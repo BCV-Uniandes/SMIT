@@ -4,7 +4,6 @@ from PIL import Image
 import importlib
 import torch
 from misc.utils import horovod
-# import horovod.torch as hvd
 hvd = horovod()
 hvd.init()
 

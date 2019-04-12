@@ -67,20 +67,16 @@ class Train(Solver):
                 break
         fixed_x = torch.cat(fixed_x, dim=0)
         fixed_label = torch.cat(fixed_label, dim=0)
-        if not self.config.DETERMINISTIC:
-            fixed_style = self.random_style(fixed_x, seed=self.count_seed)
-        else:
-            fixed_style = None
+        fixed_style = self.random_style(fixed_x, seed=self.count_seed)
 
         if start == 0:
-            if not self.config.DETERMINISTIC:
-                self.generate_SMIT(
-                    fixed_x,
-                    self.output_sample(0, 0),
-                    Multimodal=1,
-                    label=fixed_label,
-                    training=True,
-                    fixed_style=fixed_style)
+            self.generate_SMIT(
+                fixed_x,
+                self.output_sample(0, 0),
+                Multimodal=1,
+                label=fixed_label,
+                training=True,
+                fixed_style=fixed_style)
             if self.config.image_size == 256:
                 self.generate_SMIT(
                     fixed_x,
@@ -152,21 +148,20 @@ class Train(Solver):
             self.save(epoch, iter + 1)
 
             # Save Translation
-            if not self.config.DETERMINISTIC:
+            self.generate_SMIT(
+                self.fixed_x,
+                self.output_sample(epoch, iter + 1),
+                Multimodal=1,
+                label=self.fixed_label,
+                training=True,
+                fixed_style=self.fixed_style)
+            if self.config.image_size == 256:
                 self.generate_SMIT(
                     self.fixed_x,
                     self.output_sample(epoch, iter + 1),
                     Multimodal=1,
                     label=self.fixed_label,
-                    training=True,
-                    fixed_style=self.fixed_style)
-                if self.config.image_size == 256:
-                    self.generate_SMIT(
-                        self.fixed_x,
-                        self.output_sample(epoch, iter + 1),
-                        Multimodal=1,
-                        label=self.fixed_label,
-                        training=True)
+                    training=True)
             if self.config.image_size == 256:
                 self.generate_SMIT(
                     self.fixed_x,
