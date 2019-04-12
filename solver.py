@@ -50,8 +50,6 @@ class Solver(object):
         # Start with trained model
         if self.config.pretrained_model and self.verbose:
             self.load_pretrained_model()
-        elif self.config.image_size != 256:
-            self.load_init_HD()
 
         if self.config.mode == 'train' and self.verbose:
             self.print_network(self.D, 'Discriminator')
@@ -169,63 +167,6 @@ class Solver(object):
         load(self.D, 'D')
 
         print("Success!!")
-
-    # ==================================================================#
-    # ==================================================================#
-    def load_init_HD(self):
-        if 'BP4D' not in self.config.dataset_fake:
-            model_dir = self.config.model_save_path.replace(
-                self.config.dataset_fake, 'CelebA')
-        else:
-            model_dir = self.config.model_save_path
-        if self.config.image_size == 512:
-            _replace = ''
-        else:
-            _replace = '/image_size_' + str(self.config.image_size // 2)
-        model_dir = model_dir.replace(
-            '/image_size_' + str(self.config.image_size), _replace)
-        pretrained_model = self.resume_name(model_path=model_dir)
-        self.PRINT('Resuming model (step: {})...'.format(pretrained_model))
-
-        def merge_weights(model, name='G'):
-            # from termcolor import colored
-            name = os.path.join(model_dir, '{}_{}.pth'.format(
-                pretrained_model, name))
-            self.PRINT('Model: {}'.format(name))
-            name = comm.bcast(name, root=0)
-
-            celeba_weights = torch.load(
-                name, map_location=lambda storage, loc: storage)
-            weights = model.state_dict()
-            for key in weights.keys():
-                if key in celeba_weights.keys():
-                    if weights[key].shape == celeba_weights[key].shape:
-                        weights[key] = celeba_weights[key]
-                #         self.PRINT(
-                #           'Copying from {0} CelebA to {0} FFHQ'.format(key))
-                #     else:
-                #         self.PRINT(
-                #           '{0} Copying from {1} CelebA to {1} FFHQ'.format(
-                #            colored('NOT', 'red'), key))
-                # else:
-                #     self.PRINT(
-                #       '{0} {1}'.format(colored('IGNORING', 'red'), key))
-            model.load_state_dict(weights)
-
-        merge_weights(self.G, 'G')
-        merge_weights(self.D, 'D')
-        # for key, value in self.G.named_parameters():
-        #     if key in celeba_weights.keys():
-        #         if weights[key].shape == celeba_weights[key].shape:
-        #             value.requires_grad = False
-
-    # ==================================================================#
-    # ==================================================================#
-    def optim_cuda(self, optimizer):
-        for state in optimizer.state.values():
-            for k, v in state.items():
-                if isinstance(v, torch.Tensor):
-                    state[k] = to_cuda(v)
 
     # ==================================================================#
     # ==================================================================#
