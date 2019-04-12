@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 from misc.utils import to_var
 from models.domain_embedding import DE
-
+from models.generator import Generator
 
 # ==================================================================#
 # ==================================================================#
+
+
 class AdaInGEN(nn.Module):
     def __init__(self, config, debug=False):
         super(AdaInGEN, self).__init__()
@@ -15,16 +17,8 @@ class AdaInGEN(nn.Module):
         self.image_size = config.image_size
         self.style_dim = config.style_dim
         self.c_dim = config.c_dim
-        self.Deterministic = config.DETERMINISTIC
-        if self.image_size == 256:
-            from models.generator import Generator
-        else:
-            from models.generator_HD import Generator
         self.generator = Generator(config, debug=False)
-        if self.Deterministic:
-            in_dim = self.c_dim
-        else:
-            in_dim = self.style_dim + self.c_dim
+        in_dim = self.style_dim + self.c_dim
 
         adain_params = self.get_num_adain_params(self.generator)
         self.adain_net = DE(
@@ -59,10 +53,7 @@ class AdaInGEN(nn.Module):
     def apply_style(self, image, label, style):
         label = label.view(label.size(0), -1)
         style = style.view(style.size(0), -1)
-        if self.Deterministic:
-            input_adain = label
-        else:
-            input_adain = torch.cat([style, label], dim=-1)
+        input_adain = torch.cat([style, label], dim=-1)
 
         adain_params = self.adain_net(input_adain)
         self.assign_adain_params(adain_params, self.generator)

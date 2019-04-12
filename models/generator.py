@@ -17,7 +17,6 @@ class Generator(nn.Module):
         self.c_dim = config.c_dim
         self.color_dim = config.color_dim
         self.style_dim = config.style_dim
-        self.Deterministic = config.DETERMINISTIC
 
         conv_repeat = 3
         conv_dim = config.g_conv_dim
@@ -71,11 +70,7 @@ class Generator(nn.Module):
                 bias=False)
             layers += [('up_conv_' + str(curr_dim_out), conv)]
 
-            if not self.Deterministic:
-                norm = LayerNorm(curr_dim_out)
-            else:
-                norm = nn.InstanceNorm2d(curr_dim_out, affine=True)
-
+            norm = LayerNorm(curr_dim_out)
             layers += [('up_norm_' + str(curr_dim_out), norm)]
             layers += [('up_relu_' + str(curr_dim_out), nn.ReLU(inplace=True))]
             curr_dim = curr_dim_out
@@ -99,7 +94,7 @@ class Generator(nn.Module):
         layers += [('sigmoid', nn.Sigmoid())]
         self.attn = nn.Sequential(OrderedDict(layers))
 
-        if debug and self.Deterministic:
+        if debug:
             self.debug()
 
     def print_debug(self, x, v):

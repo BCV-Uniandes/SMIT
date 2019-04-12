@@ -188,12 +188,8 @@ class Test(Solver):
                 1, -1)
         else:
             label = None
-        if not self.config.DETERMINISTIC:
-            _debug = range(self.config.style_label_debug + 1)
-            style_all = self.G.random_style(max(self.config.batch_size, 50))
-        else:
-            style_all = None
-            _debug = range(1)
+        _debug = range(self.config.style_label_debug + 1)
+        style_all = self.G.random_style(max(self.config.batch_size, 50))
 
         name = TimeNow_str()
         for i, real_x in enumerate(data_loader):
@@ -218,9 +214,6 @@ class Test(Solver):
                     Multimodal=k,
                     no_label=no_label,
                     circle=True)
-                if self.config.DETERMINISTIC:
-                    self.generate_SMIT(
-                        real_x, save_path, label=label, Multimodal=k)
 
     # ==================================================================#
     # ==================================================================#

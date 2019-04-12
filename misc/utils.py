@@ -210,8 +210,8 @@ def denorm(x):
 # ============================================================#
 # ============================================================#
 def get_fake(real_c, seed=None):
-    rand_idx1 = get_randperm(real_c, seed=seed)
-    fake_c = real_c[rand_idx1]
+    rand_idx = get_randperm(real_c, seed=seed)
+    fake_c = real_c[rand_idx]
     return fake_c
 
 
@@ -284,8 +284,6 @@ def get_randperm(x, seed=None):
 
 # ==================================================================#
 # ==================================================================#
-
-
 def get_torch_version():
     import torch
     return float('.'.join(torch.__version__.split('.')[:2]))
@@ -293,8 +291,6 @@ def get_torch_version():
 
 # ==================================================================#
 # ==================================================================#
-
-
 def horovod():
     try:
         import horovod.torch as hvd
@@ -316,8 +312,6 @@ def horovod():
 
 # ==================================================================#
 # ==================================================================#
-
-
 def imgShow(img):
     from torchvision.utils import save_image
     try:
@@ -402,8 +396,6 @@ def Modality(target, style, Multimodality):
 
 # ==================================================================#
 # ==================================================================#
-
-
 def one_hot(labels, dim):
     """Convert label indices to one-hot vector"""
     import torch
@@ -555,8 +547,6 @@ def split(data):
 
 # ==================================================================#
 # ==================================================================#
-
-
 def target_debug_list(size, dim, config=None):
     import torch
     target_c_list = []

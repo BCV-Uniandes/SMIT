@@ -58,7 +58,6 @@ def main(config):
 
 
 if __name__ == '__main__':
-
     from misc.options import base_parser
     config = base_parser()
 

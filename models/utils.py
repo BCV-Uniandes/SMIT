@@ -1,7 +1,6 @@
 import torch.nn as nn
 from models.spectral import SpectralNorm as SpectralNormalization
-from models.GroupNorm import GroupNorm
-from misc.blocks import ResidualBlock, LinearBlock, Conv2dBlock
+from misc.blocks import ResidualBlock
 from misc.utils import PRINT
 from torch.nn import init
 
@@ -9,13 +8,6 @@ from torch.nn import init
 def get_SN(bool):
     if bool:
         return SpectralNormalization
-    else:
-        return lambda x: x
-
-
-def get_GN(bool):
-    if bool:
-        return GroupNorm
     else:
         return lambda x: x
 
@@ -36,11 +28,8 @@ def print_debug(feed, layers, file=None):
                 layer, nn.ConvTranspose2d) or isinstance(
                     layer, nn.Linear) or isinstance(
                         layer, ResidualBlock) or isinstance(
-                            layer, LinearBlock) or isinstance(
-                                layer, Conv2dBlock) or isinstance(
-                                    layer,
-                                    SpectralNormalization) or isinstance(
-                                        layer, nn.Upsample):
+                            layer, SpectralNormalization) or isinstance(
+                                layer, nn.Upsample):
             _str = '{}, {}'.format(str(layer).split('(')[0], feed.size())
             if file is not None:
                 PRINT(file, _str)
