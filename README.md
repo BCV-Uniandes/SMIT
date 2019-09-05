@@ -1,4 +1,4 @@
-[![Build Status](http://marr.uniandes.edu.co/api/badges/BCV-Uniandes/SMIT/status.svg)](http://marr.uniandes.edu.co/BCV-Uniandes/SMIT)
+[![Build Status](https://dev.azure.com/bcv-uniandes/Biomedical%20Computer%20Vision/_apis/build/status/BCV-Uniandes.SMIT?branchName=master)](https://dev.azure.com/bcv-uniandes/Biomedical%20Computer%20Vision/_build/latest?definitionId=4&branchName=master)
 
 # **SMIT**: Stochastic Multi-Label Image-to-image Translation 
 
