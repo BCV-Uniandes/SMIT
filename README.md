@@ -60,9 +60,10 @@ SMIT will expect the `.pth` weights are stored at `snapshot/models/$dataset_fake
 ```bash
 ./main.py --GPU=$gpu_id --dataset_fake=CelebA --mode=test --DEMO_PATH=location/image_jpg/or/location/dir
 ```
-DEMO performs transformation per attribute, that is swapping attributes with respect to the original input as in the images below. Therefore, *--DEMO_LABEL* is provided for the real attribute if *DEMO_PATH* is an image (If it is not provides, the discriminator acts as classifier for the real attributes).
+DEMO performs transformation per attribute, that is swapping attributes with respect to the original input as in the images below. Therefore, *--DEMO_LABEL* is provided for the real attribute if *DEMO_PATH* is an image (If it is not provided, the discriminator acts as classifier for the real attributes).
 
-### [Pretrained models](marr.uniandes.edu.co/weights/SMIT)
+### [Pretrained models](http://marr.uniandes.edu.co/weights/SMIT)
+Models trained using Pytorch 1.0.
 
 ### Multi-GPU
 For multiple GPUs we use [Horovod](https://github.com/horovod/horovod). Example for training with 4 GPUs:
