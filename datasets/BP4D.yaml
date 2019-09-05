@@ -5,8 +5,8 @@
 mode_data: 'normal'     # Either normal with augmentation or faces without augmentation. 
 Identity: False         # With identity loss
 
-save_epoch: 2       
+save_epoch: 1
 
 c_dim: 12               # Number of domains
 
-lambda_mask: 0.1        # Lambda for attention loss
+lambda_mask: 1.0        # Lambda for attention loss
