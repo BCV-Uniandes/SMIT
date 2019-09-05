@@ -240,12 +240,8 @@ class Test(Solver):
                 dataset=dataset,
                 mode='test')
 
-        if not self.config.DETERMINISTIC:
-            _debug = range(1, self.config.style_label_debug + 1)
-            style_all = self.G.random_style(self.config.batch_size)
-        else:
-            style_all = None
-            _debug = range(1)
+        _debug = range(1, self.config.style_label_debug + 1)
+        style_all = self.G.random_style(self.config.batch_size)
 
         string = '{}'.format(TimeNow_str())
         if save_folder_fid:
@@ -269,17 +265,16 @@ class Test(Solver):
             self.generate_SMIT(
                 real_x, name, label=label, fixed_style=style_all, TIME=not i)
 
-            if not self.config.DETERMINISTIC:
-                for k in _debug:
-                    self.generate_SMIT(
-                        real_x,
-                        name,
-                        label=label,
-                        Multimodal=k,
-                        TIME=not i and k == 1)
-                    self.generate_SMIT(
-                        real_x,
-                        name,
-                        label=label,
-                        Multimodal=k,
-                        fixed_style=style_all)
+            for k in _debug:
+                self.generate_SMIT(
+                    real_x,
+                    name,
+                    label=label,
+                    Multimodal=k,
+                    TIME=not i and k == 1)
+                self.generate_SMIT(
+                    real_x,
+                    name,
+                    label=label,
+                    Multimodal=k,
+                    fixed_style=style_all)

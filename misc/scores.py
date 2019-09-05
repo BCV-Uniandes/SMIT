@@ -176,7 +176,7 @@ class Scores(Solver):
 
         style0 = to_var(
             self.G.random_style(1),
-            volatile=True) if not self.config.DETERMINISTIC else None
+            volatile=True)
         print(file_name)
         for i, (real_x, org_c, files) in tqdm(
                 enumerate(data_loader),
@@ -275,10 +275,8 @@ class Scores(Solver):
                     real_x.repeat(n_images, 1, 1, 1), volatile=True)
                 target_c = to_var(target_c, volatile=True)
                 style = to_var(self.G.random_style(n_images), volatile=True)
-                # ipdb.set_trace()
                 fake_x = self.G(real_x_var, target_c, stochastic=style)[0].data
                 fake_x = [f.unsqueeze(0) for f in fake_x]
-                # ipdb.set_trace()
                 _DISTANCE = []
                 for ii, fake0 in enumerate(fake_x):
                     for jj, fake1 in enumerate(fake_x):
@@ -316,12 +314,7 @@ class Scores(Solver):
         net.eval()
         self.G.eval()
         inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
-        if not self.config.DETERMINISTIC:
-            mode = 'SMIT'
-        # elif not self.config.NO_ATTENTION:
-        #     mode = 'StarGAN'
-        else:
-            mode = 'GANimation'
+        mode = 'SMIT'
         data_loader = self.data_loader
         file_name = 'scores/Inception_{}.txt'.format(mode)
 
@@ -413,7 +406,6 @@ class Scores(Solver):
         data_loader = self.data_loader
         file_name = 'scores/Inception_{}.txt'.format(mode)
 
-        # 0:[], 1:[], 2:[]}
         PRED_IS = {i: [] for i in range(len(data_loader.dataset.labels[0]))}
         IS = {i: [] for i in range(len(data_loader.dataset.labels[0]))}
 
@@ -425,7 +417,7 @@ class Scores(Solver):
             real_x = to_var((real_x + 1) / 2., volatile=True)
             pred = to_data(
                 F.softmax(net(inception_up(real_x)), dim=1), cpu=True).numpy()
-            PRED_IS[label].append(pred)
+            PRED_IS[int(label)].append(pred)
 
         for label in range(len(data_loader.dataset.labels[0])):
             PRED_IS[label] = np.concatenate(PRED_IS[label], 0)

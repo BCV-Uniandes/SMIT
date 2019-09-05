@@ -21,7 +21,7 @@ This repository provides a PyTorch implementation of [SMIT](https://arxiv.org/ab
 @article{romero2019smit,
   title={SMIT: Stochastic Multi-Label Image-to-Image Translation},
   author={Romero, Andr{\'e}s and Arbel{\'a}ez, Pablo and Van Gool, Luc and Timofte, Radu},
-  journal={arXiv preprint arXiv:1812.03704},
+  journal={ICCV Workshops},
   year={2019}
 }
 ```
