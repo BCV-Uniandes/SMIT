@@ -10,8 +10,8 @@ datos/
 no_github/
 DFace/
 
-DS_storeE*
-
+.DS_Store
+._.DS_Store
 *.gif
 samples/
 *.caffemodel
