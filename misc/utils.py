@@ -104,7 +104,7 @@ def color_frame(tensor, thick=5, color='green', first=False):
 # ==================================================================#
 def create_arrow(img_path, style, image_size=256, horizontal=False):
 
-    if style == 0:
+    if style == 0 or horizontal:
         text = 'Multimodality'
     elif style == 1:
         text = 'Multimodal Interp.'

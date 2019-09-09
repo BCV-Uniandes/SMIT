@@ -286,7 +286,7 @@ class Solver(object):
         if arrow or no_label:
             create_arrow(
                 save_path,
-                0,
+                arrow,
                 image_size=self.config.image_size,
                 horizontal=no_label)
         return save_path
