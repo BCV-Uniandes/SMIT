@@ -70,7 +70,7 @@ class Image2Edges(Dataset):
     def preprocess(self):
         if self.verbose:
             self.histogram()
-        if self.all_attr == 2: 
+        if self.all_attr == 2:
             self.selected_attrs = [
                 key for key, value in sorted(
                     self.attr2idx.items(), key=lambda kv: (kv[1], kv[0]))
