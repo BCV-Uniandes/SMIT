@@ -2,9 +2,8 @@ from solver import Solver
 import torch
 import os
 import warnings
-import imageio
 import numpy as np
-from misc.utils import color_frame, create_dir, denorm, get_torch_version
+from misc.utils import color_frame, create_dir, get_torch_version
 from misc.utils import slerp, single_source, TimeNow_str, to_data, to_var
 
 warnings.filterwarnings('ignore')
