@@ -194,11 +194,15 @@ class Test(Solver):
             if self.config.dataset_fake in ['Image2Edges', 'Yosemite']:
                 self.save_multimodal_output(real_x, 1 - org_c, name)
                 self.save_multimodal_output(
-                    real_x, 1 - org_c, name, interpolation=True)                
+                    real_x, 1 - org_c, name, interpolation=True)
 
             else:
                 self.generate_SMIT(
-                    real_x, name, label=label, fixed_style=style_all, TIME=not i)
+                    real_x,
+                    name,
+                    label=label,
+                    fixed_style=style_all,
+                    TIME=not i)
                 for k in _debug:
                     self.generate_SMIT(
                         real_x,

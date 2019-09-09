@@ -174,9 +174,7 @@ class Scores(Solver):
         }  # 0:[], 1:[], 2:[]}
         n_images = {i: 0 for i in range(len(data_loader.dataset.labels[0]))}
 
-        style0 = to_var(
-            self.G.random_style(1),
-            volatile=True)
+        style0 = to_var(self.G.random_style(1), volatile=True)
         print(file_name)
         for i, (real_x, org_c, files) in tqdm(
                 enumerate(data_loader),
