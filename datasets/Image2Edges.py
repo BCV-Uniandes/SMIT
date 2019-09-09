@@ -70,7 +70,7 @@ class Image2Edges(Dataset):
     def preprocess(self):
         if self.verbose:
             self.histogram()
-        if self.all_attr == 2:  # all_attr==0 means ALL BALANCED
+        if self.all_attr == 2:
             self.selected_attrs = [
                 key for key, value in sorted(
                     self.attr2idx.items(), key=lambda kv: (kv[1], kv[0]))
@@ -87,8 +87,6 @@ class Image2Edges(Dataset):
         balanced = {key: 0 for key in self.selected_attrs}
         for i, line in enumerate(self.lines):
             filename = os.path.abspath(line)
-            # if self.mode == 'test' and 'Image_' in filename:
-            #     continue  # Only test for edges->images
             key = self.key_fn(line)
             if key not in self.selected_attrs:
                 continue
