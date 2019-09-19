@@ -89,7 +89,7 @@ class Solver(object):
 
         submodel = []
         if name == 'Generator':
-            choices = ['generator', 'adain_net']
+            choices = ['generator', 'Domain_Embedding']
             for m in choices:
                 submodel.append((m, getattr(model, m)))
         else:

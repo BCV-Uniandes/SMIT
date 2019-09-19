@@ -70,7 +70,7 @@ class Yosemite(Dataset):
         self.selected_attrs = [
             key for key, value in sorted(
                 self.attr2idx.items(), key=lambda kv: (kv[1], kv[0]))
-        ]  # self.attr2idx.keys()
+        ]
         self.filenames = []
         self.labels = []
 
@@ -80,11 +80,6 @@ class Yosemite(Dataset):
         for i, line in enumerate(self.lines):
             filename = os.path.abspath(line)
             key = self.key_fn(line)
-            # if key not in self.selected_attrs:
-            #     continue
-            if self.mode == 'train' and self.all_attr == 0 and balanced[
-                    key] >= min(self.hist.values()):
-                continue  # Balancing all classes to the minimum
             balanced[key] += 1
             label = []
             for attr in self.selected_attrs:

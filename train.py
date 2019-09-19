@@ -91,7 +91,8 @@ class Train(Solver):
     def _GAN_LOSS(self, real_x, fake_x, label):
         cross_entropy = self.config.dataset_fake in [
             'painters_14', 'Animals', 'Image2Weather', 'Image2Season',
-            'Image2Edges', 'Yosemite', 'RafD', 'BP4D_idt'
+            'Image2Edges', 'RafD', 'BP4D_idt'
+            # 'Image2Edges', 'Yosemite', 'RafD', 'BP4D_idt'
         ]
         if cross_entropy:
             label = torch.max(label, dim=1)[1]
@@ -335,7 +336,6 @@ class Train(Solver):
                 fake_c = get_fake(real_c, seed=_iter)
                 fake_c0, fake_c1 = split(fake_c)
                 # files0, files1 = split(files)
-                # import ipdb; ipdb.set_trace()
 
                 # ============================================================#
                 # ======================== Train D ===========================#

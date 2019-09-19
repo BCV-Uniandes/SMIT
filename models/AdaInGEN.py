@@ -20,9 +20,9 @@ class AdaInGEN(nn.Module):
         self.generator = Generator(config, debug=False)
         in_dim = self.style_dim + self.c_dim
 
-        adain_params = self.get_num_adain_params(self.generator)
-        self.adain_net = DE(
-            config, in_dim, adain_params, train=False, debug=debug)
+        de_params = self.get_num_de_params(self.generator)
+        self.Domain_Embedding = DE(
+            config, in_dim, de_params, train=False, debug=debug)
         if debug:
             self.debug()
 
@@ -53,26 +53,26 @@ class AdaInGEN(nn.Module):
     def apply_style(self, image, label, style):
         label = label.view(label.size(0), -1)
         style = style.view(style.size(0), -1)
-        input_adain = torch.cat([style, label], dim=-1)
+        input_de = torch.cat([style, label], dim=-1)
 
-        adain_params = self.adain_net(input_adain)
-        self.assign_adain_params(adain_params, self.generator)
+        de_params = self.Domain_Embedding(input_de)
+        self.assign_de_params(de_params, self.generator)
 
-    def assign_adain_params(self, adain_params, model):
-        # assign the adain_params to the AdaIN layers in model
+    def assign_de_params(self, de_params, model):
+        # assign the de_params to the AdaIN layers in model
         for m in model.modules():
             if m.__class__.__name__ == "AdaptiveInstanceNorm2d":
-                mean = adain_params[:, :m.num_features]
-                std = adain_params[:, m.num_features:2 * m.num_features]
+                mean = de_params[:, :m.num_features]
+                std = de_params[:, m.num_features:2 * m.num_features]
                 m.bias = mean.contiguous().view(-1)
                 m.weight = std.contiguous().view(-1)
-                if adain_params.size(1) > 2 * m.num_features:
-                    adain_params = adain_params[:, 2 * m.num_features:]
+                if de_params.size(1) > 2 * m.num_features:
+                    de_params = de_params[:, 2 * m.num_features:]
 
-    def get_num_adain_params(self, model):
-        # return the number of AdaIN parameters needed by the model
-        num_adain_params = 0
+    def get_num_de_params(self, model):
+        # return the number of DE parameters needed by the model
+        num_de_params = 0
         for m in model.modules():
             if m.__class__.__name__ == "AdaptiveInstanceNorm2d":
-                num_adain_params += 2 * m.num_features
-        return num_adain_params
+                num_de_params += 2 * m.num_features
+        return num_de_params
