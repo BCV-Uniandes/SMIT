@@ -49,6 +49,7 @@ def base_parser():
     parser.add_argument('--d_conv_dim', type=int, default=32)
     parser.add_argument('--g_repeat_num', type=int, default=6)
     parser.add_argument('--d_repeat_num', type=int, default=6)
+    parser.add_argument('--g_downsampling', type=int, default=3)
     parser.add_argument('--g_lr', type=float, default=0.0002)
     parser.add_argument('--d_lr', type=float, default=0.0002)
     parser.add_argument('--lambda_cls', type=float, default=1.0)

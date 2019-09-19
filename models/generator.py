@@ -18,7 +18,7 @@ class Generator(nn.Module):
         self.color_dim = config.color_dim
         self.style_dim = config.style_dim
 
-        conv_repeat = 3
+        conv_repeat = self.config.g_downsampling
         conv_dim = config.g_conv_dim
         conv = nn.Conv2d(
             self.color_dim,

@@ -31,7 +31,7 @@ class DE(nn.Module):
     def debug(self):
         feed = to_var(
             torch.ones(1, self.input_dim), volatile=True, no_cuda=True)
-        PRINT(self.config.log, '-- DC [*{}]:'.format(self.comment))
+        PRINT(self.config.log, '-- DE [*{}]:'.format(self.comment))
         self.print_debug(feed, self.model)
 
     def print_debug(self, x, v):

@@ -531,15 +531,18 @@ def slerp(val, low, high):
 def split(data):
     # RaGAN uses different data for Dis and Gen
     try:
+        if data.size(0) == 1:
+            return data, data
+        else:
 
-        def split(x):
-            if isinstance(x, (list, tuple)):
-                _len = len(x)
-            else:
-                _len = x.size(0)
-            return x[:_len // 2], x[_len // 2:]
+            def split(x):
+                if isinstance(x, (list, tuple)):
+                    _len = len(x)
+                else:
+                    _len = x.size(0)
+                return x[:_len // 2], x[_len // 2:]
 
-        return split(data)
+            return split(data)
 
     except ValueError:
         return data, data
