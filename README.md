@@ -72,8 +72,15 @@ mpirun -n 4 ./main.py --dataset_fake=CelebA
 ```
 <br/>
 
-<p align="center"><img width="50%" src="Figures/interpolation.jpg" /><img width="50%" src="Figures/interpolation_attn.jpg" /></p>
-<p align="center"><img width="50%" src="Figures/interpolation2.jpg" /><img width="50%" src="Figures/interpolation2_attn.jpg" /></p>
+## Qualitative Results. Multi-Domain Continuous Interpolation.
+First column (original input) -> Last column (Opposite attributes: smile, age, genre, sunglasses, bangs, color hair). Left: Continuous interpolation for the fake image. Right: Continuous interpolation for the attention mechanism.
+
+<p align="center"><img width="100%" src="Figures/interpolation.jpg"/></p>
+<p align="center"><img width="100%" src="Figures/interpolation_attn.jpg"/></p>
+
+
+<p align="center"><img width="100%" src="Figures/interpolation2.jpg"/></p>
+<p align="center"><img width="100%" src="Figures/interpolation2_attn.jpg"/></p>
 
 ## Qualitative Results. Random sampling. 
 
