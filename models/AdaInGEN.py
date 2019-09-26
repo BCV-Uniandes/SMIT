@@ -36,9 +36,9 @@ class AdaInGEN(nn.Module):
         self.apply_style(feed, label, style)
         self.generator.debug()
 
-    def forward(self, x, c, stochastic):
-        self.apply_style(x, c, stochastic)
-        return self.generator(x)
+    def forward(self, image, domain, style, DE=None):
+        self.apply_style(image, domain, style, DE=DE)
+        return self.generator(image)
 
     def random_style(self, x, seed=None):
         if isinstance(x, int):
@@ -50,12 +50,18 @@ class AdaInGEN(nn.Module):
         z = torch.randn(number, self.style_dim)
         return z
 
-    def apply_style(self, image, label, style):
+    def preprocess(self, label, style):
         label = label.view(label.size(0), -1)
         style = style.view(style.size(0), -1)
         input_de = torch.cat([style, label], dim=-1)
+        return input_de
 
-        de_params = self.Domain_Embedding(input_de)
+    def apply_style(self, image, label, style, DE=None):
+        if DE is None:
+            input_de = self.preprocess(label, style)
+            de_params = self.Domain_Embedding(input_de)
+        else:
+            de_params = DE
         self.assign_de_params(de_params, self.generator)
 
     def assign_de_params(self, de_params, model):

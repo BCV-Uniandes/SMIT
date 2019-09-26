@@ -1,7 +1,7 @@
 from mpi4py import MPI
 import torch.utils.data.distributed
-from misc.utils import to_cuda, to_data, to_var
-from misc.utils import Modality, PRINT, single_source, target_debug_list
+from misc.utils import to_cuda, to_data, to_var, to_numpy, interpolation
+from misc.utils import PRINT, single_source, target_debug_list
 from misc.utils import create_arrow, create_circle, create_dir, denorm
 from misc.utils import color_frame, get_labels, get_torch_version
 from torchvision.utils import save_image
@@ -157,13 +157,21 @@ class Solver(object):
 
         self.name = comm.bcast(self.name, root=0)
 
-        def load(model, name='G'):
-            model.load_state_dict(
-                torch.load(
-                    self.name.format(name),
-                    map_location=lambda storage, loc: storage))
+        def load(model, name='G', replace=False):
+            weights = torch.load(
+                self.name.format(name),
+                map_location=lambda storage, loc: storage)
+            if replace:
+                weights = {
+                    key.replace('adain_net', 'Domain_Embedding'): item
+                    for key, item in weights.items()
+                }
+            model.load_state_dict(weights)
 
-        load(self.G, 'G')
+        try:
+            load(self.G, 'G')
+        except RuntimeError:
+            load(self.G, 'G', replace=True)
         load(self.D, 'D')
 
         print("Success!!")
@@ -283,7 +291,8 @@ class Solver(object):
         if not no_label:
             fake_images = torch.cat((self.get_labels(), fake_images), dim=0)
         save_image(fake_images, save_path, nrow=1, padding=0)
-        if arrow or no_label:
+        # if arrow or no_label:
+        if arrow:
             create_arrow(
                 save_path,
                 arrow,
@@ -316,17 +325,20 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
-    def Create_Visual_List(self, batch):
-        fake_image_list = single_source(to_data(batch))
-        fake_attn_list = single_source(denorm(to_data(batch)))
-
-        fake_image_list = color_frame(
-            fake_image_list, thick=5, color='green', first=True)
-        fake_attn_list = color_frame(
-            fake_attn_list, thick=5, color='green', first=True)
-
-        fake_image_list = [fake_image_list.cpu()]
-        fake_attn_list = [fake_attn_list.cpu()]
+    def Create_Visual_List(self, batch, Multimodal=False):
+        batch = to_data(batch)
+        if Multimodal:
+            fake_image_list = single_source(batch)
+            fake_attn_list = single_source(denorm(batch))
+            fake_image_list = color_frame(
+                fake_image_list, thick=5, color='green', first=True)
+            fake_attn_list = color_frame(
+                fake_attn_list, thick=5, color='green', first=True)
+            fake_image_list = [fake_image_list.cpu()]
+            fake_attn_list = [fake_attn_list.cpu()]
+        else:
+            fake_image_list = [batch.cpu()]
+            fake_attn_list = [denorm(batch).cpu()]
 
         return fake_image_list, fake_attn_list
 
@@ -344,16 +356,81 @@ class Solver(object):
 
     # ==================================================================#
     # ==================================================================#
-
     def get_batch_inference(self, batch, Multimodal):
         if Multimodal:
-            batch = [
-                img.unsqueeze(0).repeat(self.config.style_debug, 1, 1, 1)
-                for img in batch
-            ]
+            if Multimodal > 1:
+                n_rows = self.config.n_interpolation
+            else:
+                n_rows = self.config.style_debug
+            batch = [img.unsqueeze(0).repeat(n_rows, 1, 1, 1) for img in batch]
         else:
             batch = [batch]
         return batch
+
+    # ==================================================================#
+    # ==================================================================#
+    def label2embedding(self, target, style, _torch=False):
+        assert target.max() == 1 and target.min() == 0
+        in_de = self.G.preprocess(target, style)
+        in_de = self.G.Domain_Embedding(in_de)
+        if not _torch:
+            in_de = to_numpy(in_de, data=True, cpu=True)
+        return in_de
+
+    # ==================================================================#
+    # ==================================================================#
+    def MMInterpolation(self, targets, styles, n_interp=None):
+        assert len(targets) == 2 and len(styles) == 2
+        if n_interp is None:
+            n_interp = self.config.n_interpolation
+        in_de0 = self.label2embedding(targets[0], styles[0])
+        in_de1 = self.label2embedding(targets[1], styles[1])
+        domain_interp = torch.zeros((n_interp, targets[0].size(0),
+                                     in_de0.shape[-1]))
+        domain_interp = to_var(domain_interp, volatile=True)
+        for i in range(targets[0].size(0)):
+            domain_interp[:, i] = interpolation(in_de0[i], in_de1[i], n_interp)
+        return domain_interp
+
+    # ==================================================================#
+    # ==================================================================#
+    def Modality(self, target, style, Multimodality, idx=0):
+        _size = target.size(0)
+        if self.config.dataset_fake in self.MultiLabel_Datasets:
+            target = (self.org_label - target)**2  # Swap labels
+            target = self.target_multiAttr(target, idx)
+            target = to_var(target, volatile=True)
+
+        if Multimodality == 1:
+            # Random Styles
+            domain_embedding = self.label2embedding(target, style, _torch=True)
+
+        elif Multimodality == 2:
+            # Style interpolation | Fixed Labels
+            # The batch belongs to the same image
+            style0 = style[0].repeat(_size, 1)
+            style1 = style[1].repeat(_size, 1)
+            targets = [target, target]
+            styles = [style0, style1]
+            domain_embedding = self.MMInterpolation(targets, styles)[:, 0]
+
+        elif Multimodality == 3:
+            # Style constant | Progressive swap label
+            n_interp = self.config.n_interpolation + 5
+            target0 = self.org_label
+            target1 = target
+            style = style[0].repeat(_size, 1)
+            targets = [target0, target1]
+            styles = [style, style]
+            domain_embedding = self.MMInterpolation(targets, styles,
+                                                    n_interp)[5:, 0]
+
+        else:
+            # Unimodal
+            style = style[0].repeat(_size, 1)
+            domain_embedding = self.label2embedding(target, style, _torch=True)
+
+        return domain_embedding
 
     # ==================================================================#
     # ==================================================================#
@@ -389,15 +466,16 @@ class Solver(object):
 
                 # Start translations
                 fake_image_list, fake_attn_list = self.Create_Visual_List(
-                    real_x)
+                    real_x, Multimodal=Multimodal)
                 if self.config.dataset_fake in self.MultiLabel_Datasets \
                         and label is None:
-                    out_label = self._CLS(real_x)
+                    self.org_label = self._CLS(real_x)
                 elif label is not None:
-                    out_label = to_var(label.squeeze(), volatile=True)
+                    self.org_label = to_var(label.squeeze(), volatile=True)
                 else:
-                    out_label = torch.zeros(real_x.size(0), self.config.c_dim)
-                    out_label = to_var(out_label, volatile=True)
+                    self.org_label = torch.zeros(
+                        real_x.size(0), self.config.c_dim)
+                    self.org_label = to_var(self.org_label, volatile=True)
 
                 if fixed_style is None:
                     style = self.random_style(real_x.size(0))
@@ -406,12 +484,10 @@ class Solver(object):
                     style = to_var(fixed_style[:real_x.size(0)], volatile=True)
 
                 for k, target in enumerate(target_list):
-                    if self.config.dataset_fake in self.MultiLabel_Datasets:
-                        target = (out_label - target)**2  # Swap labels
-                        target = self.target_multiAttr(target, k)
                     start_time = time.time()
-                    target, style = Modality(target, style, Multimodal)
-                    fake_x = self.G(real_x, target, style)
+                    embeddings = self.Modality(
+                        target, style, Multimodal, idx=k)
+                    fake_x = self.G(real_x, target, style, DE=embeddings)
                     elapsed = time.time() - start_time
                     elapsed = str(datetime.timedelta(seconds=elapsed))
                     if TIME and flag_time:

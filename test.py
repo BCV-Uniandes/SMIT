@@ -2,9 +2,9 @@ from solver import Solver
 import torch
 import os
 import warnings
-import numpy as np
-from misc.utils import color_frame, create_dir, get_torch_version
-from misc.utils import slerp, single_source, TimeNow_str, to_data, to_var
+from misc.utils import create_dir, get_torch_version
+from misc.utils import TimeNow_str
+from misc.utils import to_data, to_var
 
 warnings.filterwarnings('ignore')
 
@@ -34,53 +34,51 @@ class Test(Solver):
 
             for idx, (real_x0, real_c0) in enumerate(zip(real_x, out_label)):
                 _name = 'multimodal'
-                if interpolation:
-                    _name = _name + '_interp'
+                if interpolation == 1:
+                    _name += '_interp'
+                elif interpolation == 2:
+                    _name = 'multidomain_interp'
+
                 _save_path = os.path.join(
                     save_path.replace('.jpg', ''), '{}_{}.jpg'.format(
                         _name,
                         str(idx).zfill(4)))
                 create_dir(_save_path)
                 real_x0 = real_x0.repeat(n_rep, 1, 1, 1)
-                real_c0 = real_c0.repeat(n_rep, 1, 1, 1)
+                real_c0 = real_c0.repeat(n_rep, 1)
 
-                fake_image_list = [
-                    to_data(
-                        color_frame(
-                            single_source(real_x0),
-                            thick=5,
-                            color='green',
-                            first=True),
-                        cpu=True)
-                ]
-                fake_attn_list = [
-                    to_data(
-                        color_frame(
-                            single_source(real_x0),
-                            thick=5,
-                            color='green',
-                            first=True),
-                        cpu=True)
-                ]
+                fake_image_list, fake_attn_list = self.Create_Visual_List(
+                    real_x0, Multimodal=True)
 
                 target_c_list = [real_c0] * 7
                 for _, target_c in enumerate(target_c_list):
-                    # target_c = _target_c#[0].repeat(n_rep, 1)
-                    if not interpolation:
-                        style_ = self.G.random_style(n_rep)
+                    if interpolation == 0:
+                        style_ = to_var(
+                            self.G.random_style(n_rep), volatile=True)
+                        embeddings = self.label2embedding(
+                            target_c, style_, _torch=True)
+                    elif interpolation == 1:
+                        style_ = to_var(self.G.random_style(1), volatile=True)
+                        style1 = to_var(self.G.random_style(1), volatile=True)
+                        _target_c = target_c[0].unsqueeze(0)
+                        styles = [style_, style1]
+                        targets = [_target_c, _target_c]
+                        embeddings = self.MMInterpolation(
+                            targets, styles, n_interp=n_rep)[:, 0]
+                    elif interpolation == 2:
+                        style_ = to_var(self.G.random_style(1), volatile=True)
+                        target0 = 1 - target_c[0].unsqueeze(0)
+                        target1 = target_c[0].unsqueeze(0)
+                        styles = [style_, style_]
+                        targets = [target0, target1]
+                        # import ipdb; ipdb.set_trace()
+                        embeddings = self.MMInterpolation(
+                            targets, styles, n_interp=n_rep)[:, 0]
                     else:
-                        z0 = to_data(
-                            self.G.random_style(1), cpu=True).numpy()[0]
-                        z1 = to_data(
-                            self.G.random_style(1), cpu=True).numpy()[0]
-                        style_ = self.G.random_style(n_rep)
-                        style_[:] = torch.FloatTensor(
-                            np.array([
-                                slerp(sz, z0, z1)
-                                for sz in np.linspace(0, 1, n_rep)
-                            ]))
-                    style = to_var(style_, volatile=True)
-                    fake_x = self.G(real_x0, target_c, stochastic=style)
+                        raise ValueError(
+                            "There are only 2 types of interpolation:\
+                            Multimodal and Multi-domain")
+                    fake_x = self.G(real_x0, target_c, style_, DE=embeddings)
                     fake_image_list.append(to_data(fake_x[0], cpu=True))
                     fake_attn_list.append(
                         to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
@@ -97,6 +95,61 @@ class Test(Solver):
                     Attention=True,
                     mode='style_' + chr(65 + idx),
                     arrow=interpolation,
+                    no_label=no_label,
+                    circle=False)
+        self.G.train()
+        self.D.train()
+
+    # ==================================================================#
+    # ==================================================================#
+    def save_multidomain_output(self, real_x, label, save_path, **kwargs):
+        self.G.eval()
+        self.D.eval()
+        no_grad = open('/var/tmp/null.txt',
+                       'w') if get_torch_version() < 1.0 else torch.no_grad()
+        with no_grad:
+            real_x = to_var(real_x, volatile=True)
+            n_style = self.config.style_debug
+            n_interp = self.config.n_interpolation + 10
+            _name = 'domain_interpolation'
+            no_label = True
+            for idx in range(n_style):
+                dirname = save_path.replace('.jpg', '')
+                filename = '{}_style{}.jpg'.format(_name,
+                                                   str(idx + 1).zfill(2))
+                _save_path = os.path.join(dirname, filename)
+                create_dir(_save_path)
+                fake_image_list, fake_attn_list = self.Create_Visual_List(
+                    real_x)
+                style = self.G.random_style(1).repeat(real_x.size(0), 1)
+                style = to_var(style, volatile=True)
+                label0 = to_var(label, volatile=True)
+                opposite_label = self.target_multiAttr(1 - label,
+                                                       2)  # 2: black hair
+                opposite_label[:, 7] = 0  # Pale skin
+                label1 = to_var(opposite_label, volatile=True)
+                labels = [label0, label1]
+                styles = [style, style]
+                domain_interp = self.MMInterpolation(
+                    labels, styles, n_interp=n_interp)
+                for target_de in domain_interp[5:]:
+                    # target_de = target_de.repeat(real_x.size(0), 1)
+                    target_de = to_var(target_de, volatile=True)
+                    fake_x = self.G(real_x, target_de, style, DE=target_de)
+                    fake_image_list.append(to_data(fake_x[0], cpu=True))
+                    fake_attn_list.append(
+                        to_data(fake_x[1].repeat(1, 3, 1, 1), cpu=True))
+                self._SAVE_IMAGE(
+                    _save_path,
+                    fake_image_list,
+                    no_label=no_label,
+                    arrow=False,
+                    circle=False)
+                self._SAVE_IMAGE(
+                    _save_path,
+                    fake_attn_list,
+                    Attention=True,
+                    arrow=False,
                     no_label=no_label,
                     circle=False)
         self.G.train()
@@ -191,11 +244,13 @@ class Test(Solver):
                 'Translated test images and saved into "{}"..!'.format(name))
 
             if self.config.dataset_fake in ['Image2Edges', 'Yosemite']:
-                self.save_multimodal_output(real_x, 1 - org_c, name)
-                self.save_multimodal_output(
-                    real_x, 1 - org_c, name, interpolation=True)
+                for k in range(self.config.style_label_debug):
+                    self.save_multimodal_output(
+                        real_x, 1 - org_c, name, interpolation=k)
 
             else:
+                if self.config.dataset_fake in ['CelebA']:
+                    self.save_multidomain_output(real_x, label, name)
                 self.generate_SMIT(
                     real_x,
                     name,

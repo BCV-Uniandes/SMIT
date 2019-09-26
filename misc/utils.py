@@ -104,7 +104,7 @@ def color_frame(tensor, thick=5, color='green', first=False):
 # ==================================================================#
 def create_arrow(img_path, style, image_size=256, horizontal=False):
 
-    if style == 0 or horizontal:
+    if style == 0:
         text = 'Multimodality'
     elif style == 1:
         text = 'Multimodal Interp.'
@@ -112,6 +112,9 @@ def create_arrow(img_path, style, image_size=256, horizontal=False):
         text = 'Multi-label Interp.'
     else:
         return
+
+    if horizontal:
+        text_h = 'Multimodality'
 
     import cv2 as cv
     import numpy as np
@@ -170,7 +173,7 @@ def create_arrow(img_path, style, image_size=256, horizontal=False):
             pointX_h[1] - pointX_h[0] - textsize[0]) // 2
         textY = img.size[1] - size // 2 - textsize[1] // 2
         draw = ImageDraw.Draw(img)
-        draw.text((textX, textY), text, font=font)
+        draw.text((textX, textY), text_h, font=font)
         img.save(img_path)
 
 
@@ -322,6 +325,16 @@ def imgShow(img):
 
 # ==================================================================#
 # ==================================================================#
+def interpolation(z1, z2, size):
+    import torch
+    import numpy as np
+    z_interp = torch.FloatTensor(
+        np.array([slerp(sz, z1, z2) for sz in np.linspace(0, 1, size)]))
+    return z_interp
+
+
+# ==================================================================#
+# ==================================================================#
 def load_inception(path='data/RafD/normal/inception_v3.pth'):
     from torchvision.models import inception_v3
     import torch
@@ -363,35 +376,6 @@ def make_gif(imgs, path, im_size=256, total_styles=5):
     for im in img_list:
         writer.append_data(im)
     writer.close()
-
-
-# ==================================================================#
-# ==================================================================#
-def Modality(target, style, Multimodality):
-    import numpy as np
-    import torch
-
-    # Style interpolation | Fixed Labels
-    if Multimodality == 2:
-        z0 = to_data(style[0], cpu=True).numpy()
-        z1 = to_data(style[1], cpu=True).numpy()
-        z_interp = style.clone()
-        z_interp[:] = torch.FloatTensor(
-            np.array([
-                slerp(sz, z0, z1) for sz in np.linspace(0, 1, style.size(0))
-            ]))
-        style = z_interp
-
-    # Style constant | Progressive swap label
-    elif Multimodality == 3:
-        label_space = np.linspace(0, 1, target.size(0))
-        for j, i in enumerate(range(target.size(0))):
-            style[i] = style[0].clone()
-            target[i].data.fill_(
-                (target[i] * label_space[j] +
-                 (1 - target[i]) * (1 - label_space[j])).data[0])
-
-    return target, style
 
 
 # ==================================================================#
@@ -621,6 +605,15 @@ def to_data(x, cpu=False):
     if cpu:
         x = to_cpu(x)
     return x
+
+
+# ==================================================================#
+# ==================================================================#
+def to_numpy(x, data=False, cpu=False):
+    if data:
+        return to_data(x, cpu=cpu).numpy()
+    else:
+        return to_cpu(x).numpy()
 
 
 # ==================================================================#

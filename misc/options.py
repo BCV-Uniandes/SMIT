@@ -78,9 +78,10 @@ def base_parser():
     parser.add_argument('--model_save_step', type=int, default=10000)
 
     # Debug options
+    parser.add_argument('--n_interpolation', type=int, default=5)
     parser.add_argument('--style_debug', type=int, default=4)
     parser.add_argument('--style_train_debug', type=int, default=9)
     parser.add_argument(
-        '--style_label_debug', type=int, default=2, choices=[0, 1, 2])
+        '--style_label_debug', type=int, default=3, choices=[0, 1, 2, 3])
     config = parser.parse_args()
     return config
