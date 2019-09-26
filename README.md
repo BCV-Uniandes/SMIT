@@ -72,6 +72,9 @@ mpirun -n 4 ./main.py --dataset_fake=CelebA
 ```
 <br/>
 
+<p align="center"><img width="50%" src="Figures/interpolation.jpg" /><img width="50%" src="Figures/interpolation_attn.jpg" /></p>
+<p align="center"><img width="50%" src="Figures/interpolation2.jpg" /><img width="50%" src="Figures/interpolation2_attn.jpg" /></p>
+
 ## Qualitative Results. Random sampling. 
 
 ### CelebA

@@ -327,7 +327,7 @@ class Train(Solver):
                 desc=desc_bar,
                 disable=not self.verbose or epoch_verbose,
                 ncols=5)
-            for _iter, (real_x, real_c, files) in self.progress_bar:
+            for _iter, (real_x, real_c, _) in self.progress_bar:
                 self.loss = self.reset_losses()
                 self.total_iter += 1 * hvd.size()
                 # RaGAN uses different data for Dis and Gen
@@ -335,7 +335,6 @@ class Train(Solver):
                 real_c0, real_c1 = split(real_c)
                 fake_c = get_fake(real_c, seed=_iter)
                 fake_c0, fake_c1 = split(fake_c)
-                # files0, files1 = split(files)
 
                 # ============================================================#
                 # ======================== Train D ===========================#
